@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Dishes - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-plate-wheat"></i> Dishes / Menu Items</h1>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Create New Dish</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/dishes/new">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Dish Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">Select Category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sale_price" class="form-label">Sale Price</label>
+                        <input type="number" class="form-control" id="sale_price" name="sale_price" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                    </div>
+                    
+                    <h6>Batch Portions:</h6>
+                    <div class="batch-list" style="max-height: 300px; overflow-y: auto;">
+                        {% for batch in batches %}
+                        <div class="mb-2">
+                            <label class="form-label">{{ batch.recipe.name }} (Yield: {{ batch.yield_amount }})</label>
+                            <input type="number" class="form-control form-control-sm" 
+                                   name="batch_{{ batch.id }}" step="0.01" placeholder="Portion size">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success mt-3">
+                        <i class="fas fa-plus"></i> Create Dish
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Dishes List</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {% for dish in dishes %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ dish.name }}</strong>
+                            <br><span class="text-success">${{ "%.2f"|format(dish.sale_price) }}</span>
+                            {% if dish.category %}
+                            <br><small class="text-muted">{{ dish.category.name }}</small>
+                            {% endif %}
+                            {% if dish.description %}
+                            <br><small class="text-muted">{{ dish.description }}</small>
+                            {% endif %}
+                        </div>
+                        <div>
+                            {% if current_user.is_admin %}
+                            <a href="/dishes/{{ dish.id }}/delete" class="btn btn-sm btn-danger" 
+                               onclick="return confirm('Are you sure?')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

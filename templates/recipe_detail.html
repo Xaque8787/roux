@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}{{ recipe.name }} - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-book"></i> {{ recipe.name }}</h1>
+        <a href="/recipes" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Recipes
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Ingredients</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Ingredient</th>
+                                <th>Quantity</th>
+                                <th>Unit</th>
+                                <th>Unit Cost</th>
+                                <th>Total Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set total_cost = 0 %}
+                            {% for ri in recipe_ingredients %}
+                            {% set ingredient_cost = ri.quantity * ri.ingredient.unit_cost %}
+                            {% set total_cost = total_cost + ingredient_cost %}
+                            <tr>
+                                <td>{{ ri.ingredient.name }}</td>
+                                <td>{{ ri.quantity }}</td>
+                                <td>{{ ri.ingredient.unit }}</td>
+                                <td>${{ "%.2f"|format(ri.ingredient.unit_cost) }}</td>
+                                <td>${{ "%.2f"|format(ingredient_cost) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-info">
+                                <th colspan="4">Total Recipe Cost:</th>
+                                <th>${{ "%.2f"|format(total_cost) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Recipe Details</h5>
+            </div>
+            <div class="card-body">
+                {% if recipe.category %}
+                <p><strong>Category:</strong> {{ recipe.category.name }}</p>
+                {% endif %}
+                
+                {% if recipe.instructions %}
+                <p><strong>Instructions:</strong></p>
+                <p class="text-muted">{{ recipe.instructions }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

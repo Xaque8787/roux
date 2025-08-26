@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Recipes - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-book"></i> Recipes</h1>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Create New Recipe</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/recipes/new">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Recipe Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="instructions" class="form-label">Instructions</label>
+                        <textarea class="form-control" id="instructions" name="instructions" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">Select Category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <h6>Ingredients:</h6>
+                    <div class="ingredient-list" style="max-height: 300px; overflow-y: auto;">
+                        {% for ing in ingredients %}
+                        <div class="mb-2">
+                            <label class="form-label">{{ ing.name }} ({{ ing.unit }})</label>
+                            <input type="number" class="form-control form-control-sm" 
+                                   name="ingredient_{{ ing.id }}" step="0.01" placeholder="Quantity">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success mt-3">
+                        <i class="fas fa-plus"></i> Create Recipe
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Recipes List</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {% for recipe in recipes %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ recipe.name }}</strong>
+                            {% if recipe.category %}
+                            <br><small class="text-muted">{{ recipe.category.name }}</small>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <a href="/recipes/{{ recipe.id }}" class="btn btn-sm btn-info">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                            {% if current_user.is_admin %}
+                            <a href="/recipes/{{ recipe.id }}/delete" class="btn btn-sm btn-danger" 
+                               onclick="return confirm('Are you sure?')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

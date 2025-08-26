@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Ingredients - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-carrot"></i> Ingredients</h1>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Add New Ingredient</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/ingredients/new">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="unit" class="form-label">Unit</label>
+                        <input type="text" class="form-control" id="unit" name="unit" placeholder="e.g. lb, oz, ea" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="unit_cost" class="form-label">Cost per Unit</label>
+                        <input type="number" class="form-control" id="unit_cost" name="unit_cost" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">Select Category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add Ingredient
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Ingredients List</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Unit</th>
+                                <th>Cost</th>
+                                <th>Category</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ing in ingredients %}
+                            <tr>
+                                <td>{{ ing.name }}</td>
+                                <td>{{ ing.unit }}</td>
+                                <td>${{ "%.2f"|format(ing.unit_cost) }}</td>
+                                <td>{{ ing.category.name if ing.category else '-' }}</td>
+                                <td>
+                                    {% if current_user.is_admin %}
+                                    <a href="/ingredients/{{ ing.id }}/delete" class="btn btn-sm btn-danger" 
+                                       onclick="return confirm('Are you sure?')">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

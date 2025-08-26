@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Batches - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-industry"></i> Batches</h1>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Create New Batch</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/batches/new">
+                    <div class="mb-3">
+                        <label for="recipe_id" class="form-label">Recipe</label>
+                        <select class="form-select" id="recipe_id" name="recipe_id" required>
+                            <option value="">Select Recipe</option>
+                            {% for recipe in recipes %}
+                            <option value="{{ recipe.id }}">{{ recipe.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="yield_amount" class="form-label">Yield Amount</label>
+                        <input type="number" class="form-control" id="yield_amount" name="yield_amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="labor_minutes" class="form-label">Labor Minutes</label>
+                        <input type="number" class="form-control" id="labor_minutes" name="labor_minutes" required>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="can_be_broken_down" name="can_be_broken_down">
+                        <label class="form-check-label" for="can_be_broken_down">
+                            Can be broken down into portions?
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="breakdown_sizes" class="form-label">Breakdown Sizes</label>
+                        <input type="text" class="form-control" id="breakdown_sizes" name="breakdown_sizes" 
+                               placeholder="e.g. 0.5,0.25 for half and quarter portions">
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Create Batch
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Batches List</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Recipe</th>
+                                <th>Yield</th>
+                                <th>Labor (min)</th>
+                                <th>Breakdown</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for batch in batches %}
+                            <tr>
+                                <td>{{ batch.recipe.name }}</td>
+                                <td>{{ batch.yield_amount }}</td>
+                                <td>{{ batch.labor_minutes }}</td>
+                                <td>
+                                    {% if batch.can_be_broken_down %}
+                                        <span class="badge bg-success">Yes</span>
+                                        {% if batch.breakdown_sizes %}
+                                        <br><small>{{ batch.breakdown_sizes }}</small>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">No</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if current_user.is_admin %}
+                                    <a href="/batches/{{ batch.id }}/delete" class="btn btn-sm btn-danger" 
+                                       onclick="return confirm('Are you sure?')">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

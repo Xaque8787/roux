@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Day {{ inventory_day.date }} - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-calendar-day"></i> Inventory Day: {{ inventory_day.date }}</h1>
+        <a href="/inventory" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Inventory
+        </a>
+        
+        {% if inventory_day.finalized %}
+        <div class="alert alert-info">
+            <i class="fas fa-lock"></i> This day is finalized and cannot be edited.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-clipboard-list"></i> Daily Inventory</h5>
+            </div>
+            <div class="card-body">
+                {% if not inventory_day.finalized %}
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update">
+                    <div class="row">
+                        {% for item in inventory_day_items %}
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                {{ item.inventory_item.name }} 
+                                <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                            </label>
+                            <input type="number" class="form-control" 
+                                   name="item_{{ item.inventory_item.id }}" 
+                                   value="{{ item.quantity }}" 
+                                   step="0.01"
+                                   {% if item.quantity <= item.inventory_item.par_level %}
+                                   style="background-color: #ffcccc;"
+                                   {% elif item.quantity <= item.inventory_item.par_level * 1.1 %}
+                                   style="background-color: #fff3cd;"
+                                   {% endif %}>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save"></i> Save Inventory
+                    </button>
+                </form>
+                {% else %}
+                <div class="row">
+                    {% for item in inventory_day_items %}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">
+                            {{ item.inventory_item.name }} 
+                            <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                        </label>
+                        <input type="number" class="form-control" 
+                               value="{{ item.quantity }}" 
+                               readonly
+                               {% if item.quantity <= item.inventory_item.par_level %}
+                               style="background-color: #ffcccc;"
+                               {% elif item.quantity <= item.inventory_item.par_level * 1.1 %}
+                               style="background-color: #fff3cd;"
+                               {% endif %}>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tasks"></i> Tasks</h5>
+            </div>
+            <div class="card-body">
+                {% if not inventory_day.finalized %}
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new" class="mb-3">
+                    <div class="mb-2">
+                        <select class="form-select form-select-sm" name="assigned_to_id" required>
+                            <option value="">Assign to...</option>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" name="description" placeholder="Task description" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fas fa-plus"></i> Add Task
+                    </button>
+                </form>
+                {% endif %}
+                
+                <div class="task-list">
+                    {% for task in tasks %}
+                    <div class="card mb-2">
+                        <div class="card-body p-2">
+                            <small><strong>{{ task.description }}</strong></small><br>
+                            <small class="text-muted">Assigned to: {{ task.assigned_to.username }}</small><br>
+                            
+                            {% if not task.started_at %}
+                                {% if not inventory_day.finalized %}
+                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
+                                    <button type="submit" class="btn btn-xs btn-primary">Start</button>
+                                </form>
+                                {% else %}
+                                <span class="badge bg-secondary">Not Started</span>
+                                {% endif %}
+                            {% elif not task.finished_at %}
+                                {% if not inventory_day.finalized %}
+                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
+                                    <button type="submit" class="btn btn-xs btn-warning">Finish</button>
+                                </form>
+                                {% else %}
+                                <span class="badge bg-warning">In Progress</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-success">Completed</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        {% if not inventory_day.finalized %}
+        <div class="card mt-3">
+            <div class="card-body text-center">
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
+                        <i class="fas fa-lock"></i> Finish / End Day
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

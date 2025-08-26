@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Utilities - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-bolt"></i> Utility Costs</h1>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Add/Update Utility Cost</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/utilities/new">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Utility Name</label>
+                        <input type="text" class="form-control" id="name" name="name" placeholder="e.g. Power, Gas, Water" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="monthly_cost" class="form-label">Monthly Cost</label>
+                        <input type="number" class="form-control" id="monthly_cost" name="monthly_cost" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add / Update Utility
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Current Utility Costs</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Monthly Cost</th>
+                                <th>Daily Cost</th>
+                                <th>Last Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for utility in utilities %}
+                            <tr>
+                                <td>{{ utility.name }}</td>
+                                <td>${{ "%.2f"|format(utility.monthly_cost) }}</td>
+                                <td>${{ "%.2f"|format(utility.monthly_cost / 30) }}</td>
+                                <td>{{ utility.last_updated.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <form method="post" action="/utilities/{{ utility.id }}/delete" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if utilities %}
+                <div class="mt-3">
+                    <h6>Summary:</h6>
+                    {% set total_monthly = utilities|sum(attribute='monthly_cost') %}
+                    <p><strong>Total Monthly:</strong> ${{ "%.2f"|format(total_monthly) }}</p>
+                    <p><strong>Total Daily:</strong> ${{ "%.2f"|format(total_monthly / 30) }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
