@@ -45,13 +45,21 @@ def verify_jwt(token: str):
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
     if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(
+            status_code=401, 
+            detail="Not authenticated",
+            headers={"Location": "/login"}
+        )
     
     payload = verify_jwt(token)
     username = payload.get("sub")
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(
+            status_code=401, 
+            detail="User not found",
+            headers={"Location": "/login"}
+        )
     return user
 
 def require_admin(current_user: User = Depends(get_current_user)):

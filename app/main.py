@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -22,10 +23,29 @@ if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+# Custom exception handler for authentication redirects
+@app.exception_handler(FastAPIHTTPException)
+async def http_exception_handler(request: Request, exc: FastAPIHTTPException):
+    if exc.status_code == 401:
+        # Check if we have any users in the database
+        from .database import SessionLocal
+        db = SessionLocal()
+        try:
+            if not db.query(User).first():
+                return RedirectResponse("/setup", status_code=302)
+            else:
+                return RedirectResponse("/login", status_code=302)
+        finally:
+            db.close()
+    return templates.TemplateResponse("error.html", {
+        "request": request, 
+        "status_code": exc.status_code,
+        "detail": exc.detail
+    }, status_code=exc.status_code)
 # Root redirect
 @app.get("/")
 async def root():
-    return RedirectResponse("/home")
+    return RedirectResponse("/setup")
 
 # Setup routes
 @app.get("/setup", response_class=HTMLResponse)

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Error {{ status_code }} - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="mb-0"><i class="fas fa-exclamation-triangle text-warning"></i> Error {{ status_code }}</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">{{ detail }}</p>
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-home"></i> Go Home
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
