@@ -54,6 +54,7 @@ class Ingredient(Base):
     
     category = relationship("Category")
     vendor = relationship("Vendor")
+    usage_units = relationship("IngredientUsageUnit", back_populates="ingredient")
     
     @property
     def item_cost(self):
@@ -68,7 +69,7 @@ class IngredientUsageUnit(Base):
     usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
     conversion_factor = Column(Float)  # how many usage units per item/case
     
-    ingredient = relationship("Ingredient")
+    ingredient = relationship("Ingredient", back_populates="usage_units")
     usage_unit = relationship("UsageUnit")
 
     @property
@@ -99,6 +100,20 @@ class RecipeIngredient(Base):
     
     ingredient = relationship("Ingredient")
     usage_unit = relationship("UsageUnit")
+    
+    @property
+    def cost(self):
+        """Calculate the cost of this recipe ingredient"""
+        # Find the ingredient usage unit for this combination
+        ingredient_usage = None
+        for iu in self.ingredient.usage_units:
+            if iu.usage_unit_id == self.usage_unit_id:
+                ingredient_usage = iu
+                break
+        
+        if ingredient_usage:
+            return self.quantity * ingredient_usage.price_per_usage_unit
+        return 0
 
 class Batch(Base):
     __tablename__ = "batches"

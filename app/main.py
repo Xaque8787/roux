@@ -537,12 +537,10 @@ async def list_recipes(
     db: Session = Depends(get_db)
 ):
     recipes = db.query(Recipe).all()
-    ingredients = db.query(Ingredient).all()
     categories = db.query(Category).filter(Category.type == "recipe").all()
     return templates.TemplateResponse("recipes.html", {
         "request": request,
         "recipes": recipes,
-        "ingredients": ingredients,
         "categories": categories,
         "current_user": current_user
     })
@@ -553,7 +551,7 @@ async def create_recipe(
     name: str = Form(...),
     instructions: str = Form(""),
     category_id: int = Form(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
     form = await request.form()
@@ -566,16 +564,20 @@ async def create_recipe(
     db.add(recipe)
     db.flush()
     
-    # Add ingredients
-    for key, value in form.items():
-        if key.startswith("ingredient_") and value and float(value) > 0:
-            ingredient_id = int(key.replace("ingredient_", ""))
-            recipe_ingredient = RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient_id,
-                quantity=float(value)
-            )
-            db.add(recipe_ingredient)
+    # Add ingredients from JSON data
+    ingredients_data = form.get("ingredients_data")
+    if ingredients_data:
+        import json
+        ingredients_list = json.loads(ingredients_data)
+        for ingredient_data in ingredients_list:
+            if ingredient_data.get('quantity') and float(ingredient_data['quantity']) > 0:
+                recipe_ingredient = RecipeIngredient(
+                    recipe_id=recipe.id,
+                    ingredient_id=int(ingredient_data['ingredient_id']),
+                    usage_unit_id=int(ingredient_data['usage_unit_id']),
+                    quantity=float(ingredient_data['quantity'])
+                )
+                db.add(recipe_ingredient)
     
     db.commit()
     return RedirectResponse("/recipes", status_code=302)
@@ -595,10 +597,14 @@ async def view_recipe(
         RecipeIngredient.recipe_id == recipe_id
     ).all()
     
+    # Calculate total recipe cost
+    total_cost = sum(ri.cost for ri in recipe_ingredients)
+    
     return templates.TemplateResponse("recipe_detail.html", {
         "request": request,
         "recipe": recipe,
         "recipe_ingredients": recipe_ingredients,
+        "total_cost": total_cost,
         "current_user": current_user
     })
 
