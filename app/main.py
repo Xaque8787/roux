@@ -807,12 +807,10 @@ async def list_dishes(
     db: Session = Depends(get_db)
 ):
     dishes = db.query(Dish).all()
-    batches = db.query(Batch).all()
     categories = db.query(Category).filter(Category.type == "dish").all()
     return templates.TemplateResponse("dishes.html", {
         "request": request,
         "dishes": dishes,
-        "batches": batches,
         "categories": categories,
         "current_user": current_user
     })
@@ -824,7 +822,7 @@ async def create_dish(
     sale_price: float = Form(...),
     description: str = Form(""),
     category_id: int = Form(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
     form = await request.form()
@@ -838,16 +836,20 @@ async def create_dish(
     db.add(dish)
     db.flush()
     
-    # Add batch portions
-    for key, value in form.items():
-        if key.startswith("batch_") and value and float(value) > 0:
-            batch_id = int(key.replace("batch_", ""))
-            dish_batch_portion = DishBatchPortion(
-                dish_id=dish.id,
-                batch_id=batch_id,
-                portion_size=float(value)
-            )
-            db.add(dish_batch_portion)
+    # Add batch portions from JSON data
+    batch_portions_data = form.get("batch_portions_data")
+    if batch_portions_data:
+        import json
+        batch_portions_list = json.loads(batch_portions_data)
+        for portion_data in batch_portions_list:
+            if portion_data.get('portion_size') and float(portion_data['portion_size']) > 0:
+                dish_batch_portion = DishBatchPortion(
+                    dish_id=dish.id,
+                    batch_id=int(portion_data['batch_id']),
+                    portion_size=float(portion_data['portion_size']),
+                    portion_unit_id=int(portion_data['portion_unit_id']) if portion_data.get('portion_unit_id') else None
+                )
+                db.add(dish_batch_portion)
     
     db.commit()
     return RedirectResponse("/dishes", status_code=302)
@@ -1086,6 +1088,139 @@ async def delete_utility(
         db.delete(utility)
         db.commit()
     return RedirectResponse("/utilities", status_code=302)
+
+# API endpoints for dishes
+@app.get("/api/batches/search")
+async def search_batches(
+    q: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Search batches for autocomplete"""
+    batches = db.query(Batch).join(Recipe).filter(
+        Recipe.name.ilike(f"%{q}%")
+    ).limit(10).all()
+    
+    result = []
+    for batch in batches:
+        # Calculate batch cost for display
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == batch.recipe_id
+        ).all()
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        labor_cost = (batch.labor_minutes / 60) * current_user.hourly_wage
+        total_batch_cost = total_recipe_cost + labor_cost
+        cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+        
+        result.append({
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
+            "cost_per_unit": cost_per_yield_unit,
+            "category": batch.recipe.category.name if batch.recipe.category else None
+        })
+    
+    return result
+
+@app.get("/dishes/{dish_id}")
+async def view_dish(
+    dish_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    dish_batch_portions = db.query(DishBatchPortion).filter(
+        DishBatchPortion.dish_id == dish_id
+    ).all()
+    
+    # Calculate total dish cost
+    total_cost = sum(portion.cost for portion in dish_batch_portions)
+    
+    # Calculate profit margin
+    profit = dish.sale_price - total_cost
+    profit_margin = (profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    return templates.TemplateResponse("dish_detail.html", {
+        "request": request,
+        "dish": dish,
+        "dish_batch_portions": dish_batch_portions,
+        "total_cost": total_cost,
+        "profit": profit,
+        "profit_margin": profit_margin,
+        "current_user": current_user
+    })
+
+@app.get("/dishes/{dish_id}/edit", response_class=HTMLResponse)
+async def edit_dish_form(
+    dish_id: int,
+    request: Request,
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    categories = db.query(Category).filter(Category.type == "dish").all()
+    dish_batch_portions = db.query(DishBatchPortion).filter(
+        DishBatchPortion.dish_id == dish_id
+    ).all()
+    
+    return templates.TemplateResponse("dish_edit.html", {
+        "request": request,
+        "dish": dish,
+        "categories": categories,
+        "dish_batch_portions": dish_batch_portions,
+        "current_user": current_user
+    })
+
+@app.post("/dishes/{dish_id}/edit")
+async def update_dish(
+    dish_id: int,
+    request: Request,
+    name: str = Form(...),
+    sale_price: float = Form(...),
+    description: str = Form(""),
+    category_id: int = Form(None),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    form = await request.form()
+    
+    # Update dish fields
+    dish.name = name
+    dish.sale_price = sale_price
+    dish.description = description
+    dish.category_id = category_id if category_id else None
+    
+    # Update batch portions - delete existing and recreate
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
+    
+    batch_portions_data = form.get("batch_portions_data")
+    if batch_portions_data:
+        import json
+        batch_portions_list = json.loads(batch_portions_data)
+        for portion_data in batch_portions_list:
+            if portion_data.get('portion_size') and float(portion_data['portion_size']) > 0:
+                dish_batch_portion = DishBatchPortion(
+                    dish_id=dish.id,
+                    batch_id=int(portion_data['batch_id']),
+                    portion_size=float(portion_data['portion_size']),
+                    portion_unit_id=int(portion_data['portion_unit_id']) if portion_data.get('portion_unit_id') else None
+                )
+                db.add(dish_batch_portion)
+    
+    db.commit()
+    return RedirectResponse(f"/dishes/{dish_id}", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn

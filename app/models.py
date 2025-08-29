@@ -149,10 +149,30 @@ class DishBatchPortion(Base):
     dish_id = Column(Integer, ForeignKey("dishes.id"))
     batch_id = Column(Integer, ForeignKey("batches.id"))
     portion_size = Column(Float)
-    portion_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    portion_unit_id = Column(Integer, ForeignKey("usage_units.id"), nullable=True)
     
     batch = relationship("Batch")
     portion_unit = relationship("UsageUnit")
+    
+    @property
+    def cost(self):
+        """Calculate the cost of this dish batch portion"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        # Get recipe ingredients for cost calculation
+        recipe_ingredients = self.batch.recipe.ingredients if hasattr(self.batch.recipe, 'ingredients') else []
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        
+        # Add labor cost (using a default wage if not available)
+        labor_cost = (self.batch.labor_minutes / 60) * 15.0  # Default $15/hour
+        total_batch_cost = total_recipe_cost + labor_cost
+        
+        # Calculate cost per yield unit
+        if self.batch.yield_amount > 0:
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            return self.portion_size * cost_per_yield_unit
+        return 0
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
