@@ -189,7 +189,7 @@ class InventoryDay(Base):
     date = Column(Date, default=date.today)
     finalized = Column(Boolean, default=False)
     employees_working = Column(String)
-    notes = Column(Text)  # Global notes for the day
+    global_notes = Column(Text)  # Global notes for the day
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class InventoryDayItem(Base):
@@ -198,7 +198,8 @@ class InventoryDayItem(Base):
     day_id = Column(Integer, ForeignKey("inventory_days.id"))
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"))
     quantity = Column(Float, default=0)
-    create_task = Column(Boolean, default=True)  # Override for task creation
+    override_create_task = Column(Boolean, default=False)  # Override to create task for above par items
+    override_no_task = Column(Boolean, default=False)  # Override to NOT create task for below par items
     
     inventory_item = relationship("InventoryItem")
     day = relationship("InventoryDay")
@@ -212,9 +213,10 @@ class Task(Base):
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     paused_at = Column(DateTime, nullable=True)
-    total_pause_time = Column(Integer, default=0)  # in minutes
+    total_pause_time = Column(Integer, default=0)  # in seconds
     notes = Column(Text)
     auto_generated = Column(Boolean, default=False)  # True if generated from below-par items
+    is_paused = Column(Boolean, default=False)
     
     assigned_to = relationship("User")
     day = relationship("InventoryDay")
@@ -222,9 +224,28 @@ class Task(Base):
     @property
     def total_time_minutes(self):
         if not self.started_at or not self.finished_at:
+            if self.started_at and not self.finished_at:
+                # Task is in progress
+                current_time = datetime.utcnow()
+                if self.is_paused and self.paused_at:
+                    total_seconds = (self.paused_at - self.started_at).total_seconds()
+                else:
+                    total_seconds = (current_time - self.started_at).total_seconds()
+                return int(total_seconds / 60) - int(self.total_pause_time / 60)
             return 0
         total_seconds = (self.finished_at - self.started_at).total_seconds()
-        return int(total_seconds / 60) - self.total_pause_time
+        return int(total_seconds / 60) - int(self.total_pause_time / 60)
+    
+    @property
+    def status(self):
+        if not self.started_at:
+            return "not_started"
+        elif self.finished_at:
+            return "completed"
+        elif self.is_paused:
+            return "paused"
+        else:
+            return "in_progress"
 
 class UtilityCost(Base):
     __tablename__ = "utility_costs"

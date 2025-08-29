@@ -883,12 +883,21 @@ async def view_inventory_master(
     today = date.today()
     current_day = db.query(InventoryDay).filter(InventoryDay.date == today).first()
     
+    # Get recent finalized days (last 30 days)
+    from datetime import timedelta
+    thirty_days_ago = today - timedelta(days=30)
+    finalized_days = db.query(InventoryDay).filter(
+        InventoryDay.finalized == True,
+        InventoryDay.date >= thirty_days_ago
+    ).order_by(InventoryDay.date.desc()).all()
+    
     return templates.TemplateResponse("inventory.html", {
         "request": request,
         "inventory_items": inventory_items,
         "categories": categories,
         "employees": employees,
         "current_day": current_day,
+        "finalized_days": finalized_days,
         "today_date": today.isoformat(),
         "current_user": current_user
     })
@@ -914,7 +923,8 @@ async def create_inventory_item(
 async def create_new_day(
     request: Request,
     date_input: str = Form(..., alias="date"),
-    current_user: User = Depends(get_current_user),
+    global_notes: str = Form(""),
+    current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
     form = await request.form()
@@ -922,7 +932,8 @@ async def create_new_day(
     
     inventory_day = InventoryDay(
         date=datetime.strptime(date_input, "%Y-%m-%d").date(),
-        employees_working=",".join(employees_working)
+        employees_working=",".join(employees_working),
+        global_notes=global_notes
     )
     db.add(inventory_day)
     db.flush()
@@ -974,8 +985,17 @@ async def update_inventory_day_items(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day or inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Cannot update finalized day")
+    
     form = await request.form()
     
+    # Update global notes if provided
+    if "global_notes" in form:
+        inventory_day.global_notes = form["global_notes"]
+    
+    # Update inventory quantities and task overrides
     for key, value in form.items():
         if key.startswith("item_"):
             item_id = int(key.replace("item_", ""))
@@ -985,6 +1005,25 @@ async def update_inventory_day_items(
             ).first()
             if day_item:
                 day_item.quantity = float(value) if value else 0
+        elif key.startswith("override_create_"):
+            item_id = int(key.replace("override_create_", ""))
+            day_item = db.query(InventoryDayItem).filter(
+                InventoryDayItem.day_id == day_id,
+                InventoryDayItem.inventory_item_id == item_id
+            ).first()
+            if day_item:
+                day_item.override_create_task = True
+        elif key.startswith("override_no_task_"):
+            item_id = int(key.replace("override_no_task_", ""))
+            day_item = db.query(InventoryDayItem).filter(
+                InventoryDayItem.day_id == day_id,
+                InventoryDayItem.inventory_item_id == item_id
+            ).first()
+            if day_item:
+                day_item.override_no_task = True
+    
+    # Auto-generate tasks for below par items (if not overridden)
+    _auto_generate_tasks(day_id, db)
     
     db.commit()
     return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
@@ -1014,8 +1053,9 @@ async def start_task(
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
-    if task:
+    if task and not task.started_at:
         task.started_at = datetime.utcnow()
+        task.is_paused = False
         db.commit()
     return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
 
@@ -1027,15 +1067,82 @@ async def finish_task(
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
-    if task:
+    if task and task.started_at and not task.finished_at:
         task.finished_at = datetime.utcnow()
+        task.is_paused = False
         db.commit()
     return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/pause")
+async def pause_task(
+    day_id: int,
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task and task.started_at and not task.finished_at and not task.is_paused:
+        task.paused_at = datetime.utcnow()
+        task.is_paused = True
+        db.commit()
+    return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/resume")
+async def resume_task(
+    day_id: int,
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task and task.is_paused and task.paused_at:
+        # Add paused time to total
+        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        task.total_pause_time += int(pause_duration)
+        task.is_paused = False
+        task.paused_at = None
+        db.commit()
+    return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
+
+@app.get("/inventory/day/{day_id}/tasks/{task_id}")
+async def view_task(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    
+    return templates.TemplateResponse("task_detail.html", {
+        "request": request,
+        "task": task,
+        "inventory_day": inventory_day,
+        "current_user": current_user
+    })
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/notes")
+async def update_task_notes(
+    day_id: int,
+    task_id: int,
+    notes: str = Form(""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task:
+        task.notes = notes
+        db.commit()
+    return RedirectResponse(f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
 
 @app.post("/inventory/day/{day_id}/finalize")
 async def finalize_day(
     day_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
