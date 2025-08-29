@@ -978,6 +978,46 @@ async def view_inventory_day(
         "current_user": current_user
     })
 
+def _auto_generate_tasks(day_id: int, db: Session):
+    """Auto-generate tasks for items below par level"""
+    # Get all day items for this day
+    day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    
+    # Delete existing auto-generated tasks to regenerate
+    db.query(Task).filter(Task.day_id == day_id, Task.auto_generated == True).delete()
+    
+    for day_item in day_items:
+        item = day_item.inventory_item
+        
+        # Check if item is below par and should generate a task
+        should_generate_task = False
+        
+        if day_item.quantity <= item.par_level:
+            # Below par - generate task unless overridden
+            if not day_item.override_no_task:
+                should_generate_task = True
+        else:
+            # Above par - only generate if override is set
+            if day_item.override_create_task:
+                should_generate_task = True
+        
+        if should_generate_task:
+            # Create auto-generated task
+            if day_item.quantity <= item.par_level:
+                description = f"Restock {item.name} (Below Par: {day_item.quantity}/{item.par_level})"
+            else:
+                description = f"Check {item.name} (Override requested)"
+            
+            task = Task(
+                day_id=day_id,
+                assigned_to_id=None,  # Will be assigned manually
+                description=description,
+                auto_generated=True
+            )
+            db.add(task)
+    
+    db.flush()
+
 @app.post("/inventory/day/{day_id}/update")
 async def update_inventory_day_items(
     day_id: int,
@@ -1073,76 +1113,10 @@ async def finish_task(
         db.commit()
     return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
 
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/pause")
-async def pause_task(
-    day_id: int,
-    task_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if task and task.started_at and not task.finished_at and not task.is_paused:
-        task.paused_at = datetime.utcnow()
-        task.is_paused = True
-        db.commit()
-    return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
-
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/resume")
-async def resume_task(
-    day_id: int,
-    task_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if task and task.is_paused and task.paused_at:
-        # Add paused time to total
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
-        task.total_pause_time += int(pause_duration)
-        task.is_paused = False
-        task.paused_at = None
-        db.commit()
-    return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
-
-@app.get("/inventory/day/{day_id}/tasks/{task_id}")
-async def view_task(
-    day_id: int,
-    task_id: int,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    
-    return templates.TemplateResponse("task_detail.html", {
-        "request": request,
-        "task": task,
-        "inventory_day": inventory_day,
-        "current_user": current_user
-    })
-
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/notes")
-async def update_task_notes(
-    day_id: int,
-    task_id: int,
-    notes: str = Form(""),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if task:
-        task.notes = notes
-        db.commit()
-    return RedirectResponse(f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
-
 @app.post("/inventory/day/{day_id}/finalize")
 async def finalize_day(
     day_id: int,
-    current_user: User = Depends(require_manager_or_admin),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
@@ -1150,6 +1124,42 @@ async def finalize_day(
         inventory_day.finalized = True
         db.commit()
     return RedirectResponse(f"/inventory/day/{day_id}", status_code=302)
+
+@app.get("/inventory/reports/{day_id}")
+async def view_day_report(
+    day_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    # Get all tasks for this day
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    
+    # Get inventory items with their quantities
+    inventory_day_items = db.query(InventoryDayItem).filter(
+        InventoryDayItem.day_id == day_id
+    ).all()
+    
+    # Calculate summary statistics
+    total_tasks = len(tasks)
+    completed_tasks = len([t for t in tasks if t.finished_at])
+    below_par_items = len([item for item in inventory_day_items 
+                          if item.quantity <= item.inventory_item.par_level])
+    
+    return templates.TemplateResponse("inventory_report.html", {
+        "request": request,
+        "inventory_day": inventory_day,
+        "tasks": tasks,
+        "inventory_day_items": inventory_day_items,
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "below_par_items": below_par_items,
+        "current_user": current_user
+    })
 
 # Utilities routes
 @app.get("/utilities", response_class=HTMLResponse)

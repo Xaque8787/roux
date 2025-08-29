@@ -13,6 +13,9 @@
         {% if inventory_day.finalized %}
         <div class="alert alert-info">
             <i class="fas fa-lock"></i> This day is finalized and cannot be edited.
+            <a href="/inventory/reports/{{ inventory_day.id }}" class="btn btn-sm btn-info ms-2">
+                <i class="fas fa-chart-bar"></i> View Report
+            </a>
         </div>
         {% endif %}
     </div>
@@ -27,45 +30,91 @@
             <div class="card-body">
                 {% if not inventory_day.finalized %}
                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/update">
+                    <div class="mb-3">
+                        <label for="global_notes" class="form-label">Day Notes</label>
+                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2" placeholder="General notes for the day...">{{ inventory_day.global_notes or '' }}</textarea>
+                    </div>
+                    
                     <div class="row">
                         {% for item in inventory_day_items %}
+                        {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
+                        {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">
-                                {{ item.inventory_item.name }} 
-                                <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
-                            </label>
-                            <input type="number" class="form-control" 
-                                   name="item_{{ item.inventory_item.id }}" 
-                                   value="{{ item.quantity }}" 
-                                   step="0.01"
-                                   {% if item.quantity <= item.inventory_item.par_level %}
-                                   style="background-color: #ffcccc;"
-                                   {% elif item.quantity <= item.inventory_item.par_level * 1.1 %}
-                                   style="background-color: #fff3cd;"
-                                   {% endif %}>
+                            <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
+                                <div class="card-body p-2">
+                                    <label class="form-label mb-1">
+                                        <strong>{{ item.inventory_item.name }}</strong>
+                                        <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                                    </label>
+                                    <input type="number" class="form-control form-control-sm mb-2" 
+                                           name="item_{{ item.inventory_item.id }}" 
+                                           value="{{ item.quantity }}" 
+                                           step="0.01"
+                                           {% if is_below_par %}
+                                           style="background-color: #ffebee;"
+                                           {% elif is_near_par %}
+                                           style="background-color: #fff8e1;"
+                                           {% endif %}>
+                                    
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" 
+                                               name="override_create_{{ item.inventory_item.id }}" 
+                                               id="override_create_{{ item.inventory_item.id }}"
+                                               {% if item.override_create_task %}checked{% endif %}>
+                                        <label class="form-check-label" for="override_create_{{ item.inventory_item.id }}">
+                                            <small>Force Task</small>
+                                        </label>
+                                    </div>
+                                    
+                                    {% if is_below_par %}
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" 
+                                               name="override_no_task_{{ item.inventory_item.id }}" 
+                                               id="override_no_task_{{ item.inventory_item.id }}"
+                                               {% if item.override_no_task %}checked{% endif %}>
+                                        <label class="form-check-label" for="override_no_task_{{ item.inventory_item.id }}">
+                                            <small>No Task</small>
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
                     <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save"></i> Save Inventory
+                        <i class="fas fa-save"></i> Save Inventory & Generate Tasks
                     </button>
                 </form>
                 {% else %}
+                <div class="mb-3">
+                    <label class="form-label">Day Notes</label>
+                    <div class="border p-2 bg-light">
+                        {{ inventory_day.global_notes or 'No notes for this day.' }}
+                    </div>
+                </div>
+                
                 <div class="row">
                     {% for item in inventory_day_items %}
+                    {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
+                    {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">
-                            {{ item.inventory_item.name }} 
-                            <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
-                        </label>
-                        <input type="number" class="form-control" 
-                               value="{{ item.quantity }}" 
-                               readonly
-                               {% if item.quantity <= item.inventory_item.par_level %}
-                               style="background-color: #ffcccc;"
-                               {% elif item.quantity <= item.inventory_item.par_level * 1.1 %}
-                               style="background-color: #fff3cd;"
-                               {% endif %}>
+                        <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
+                            <div class="card-body p-2">
+                                <label class="form-label mb-1">
+                                    <strong>{{ item.inventory_item.name }}</strong>
+                                    <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                                </label>
+                                <input type="number" class="form-control form-control-sm" 
+                                       value="{{ item.quantity }}" 
+                                       readonly
+                                       {% if is_below_par %}
+                                       style="background-color: #ffebee;"
+                                       {% elif is_near_par %}
+                                       style="background-color: #fff8e1;"
+                                       {% endif %}>
+                            </div>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -86,7 +135,7 @@
                         <select class="form-select form-select-sm" name="assigned_to_id" required>
                             <option value="">Assign to...</option>
                             {% for emp in employees %}
-                            <option value="{{ emp.id }}">{{ emp.username }}</option>
+                            <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -94,37 +143,65 @@
                         <input type="text" class="form-control form-control-sm" name="description" placeholder="Task description" required>
                     </div>
                     <button type="submit" class="btn btn-sm btn-success">
-                        <i class="fas fa-plus"></i> Add Task
+                        <i class="fas fa-plus"></i> Add Manual Task
                     </button>
                 </form>
                 {% endif %}
                 
                 <div class="task-list">
                     {% for task in tasks %}
-                    <div class="card mb-2">
+                    <div class="card mb-2 {% if task.auto_generated %}border-info{% endif %}">
                         <div class="card-body p-2">
-                            <small><strong>{{ task.description }}</strong></small><br>
-                            <small class="text-muted">Assigned to: {{ task.assigned_to.username }}</small><br>
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <small><strong>{{ task.description }}</strong></small>
+                                {% if task.auto_generated %}
+                                <span class="badge bg-info">Auto</span>
+                                {% endif %}
+                            </div>
                             
-                            {% if not task.started_at %}
-                                {% if not inventory_day.finalized %}
+                            {% if task.assigned_to %}
+                            <small class="text-muted">Assigned to: {{ task.assigned_to.full_name or task.assigned_to.username }}</small><br>
+                            {% else %}
+                            <small class="text-warning">Unassigned</small><br>
+                            {% endif %}
+                            
+                            {% if task.status == "not_started" %}
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
                                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
                                     <button type="submit" class="btn btn-xs btn-primary">Start</button>
                                 </form>
                                 {% else %}
                                 <span class="badge bg-secondary">Not Started</span>
                                 {% endif %}
-                            {% elif not task.finished_at %}
-                                {% if not inventory_day.finalized %}
-                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
-                                    <button type="submit" class="btn btn-xs btn-warning">Finish</button>
+                            {% elif task.status == "in_progress" %}
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
+                                    <button type="submit" class="btn btn-xs btn-warning">Pause</button>
                                 </form>
-                                {% else %}
-                                <span class="badge bg-warning">In Progress</span>
+                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
+                                    <button type="submit" class="btn btn-xs btn-success">Finish</button>
+                                </form>
                                 {% endif %}
-                            {% else %}
+                                <span class="badge bg-primary">In Progress</span>
+                                <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
+                            {% elif task.status == "paused" %}
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display:inline;">
+                                    <button type="submit" class="btn btn-xs btn-info">Resume</button>
+                                </form>
+                                {% endif %}
+                                <span class="badge bg-warning">Paused</span>
+                                <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
+                            {% elif task.status == "completed" %}
                                 <span class="badge bg-success">Completed</span>
+                                <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
                             {% endif %}
+                            
+                            <div class="mt-1">
+                                <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-xs btn-outline-info">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -132,12 +209,12 @@
             </div>
         </div>
         
-        {% if not inventory_day.finalized %}
+        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card mt-3">
             <div class="card-body text-center">
                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
-                        <i class="fas fa-lock"></i> Finish / End Day
+                        <i class="fas fa-lock"></i> Finalize Day
                     </button>
                 </form>
             </div>
@@ -145,4 +222,13 @@
         {% endif %}
     </div>
 </div>
+
+<style>
+.btn-xs {
+    padding: 0.125rem 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    border-radius: 0.2rem;
+}
+</style>
 {% endblock %}

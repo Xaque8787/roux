@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Task Details - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-tasks"></i> Task Details</h1>
+        <a href="/inventory/day/{{ inventory_day.id }}" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Inventory Day
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Task Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Description:</strong> {{ task.description }}</p>
+                        <p><strong>Assigned to:</strong> 
+                            {% if task.assigned_to %}
+                                {{ task.assigned_to.full_name or task.assigned_to.username }}
+                            {% else %}
+                                <span class="text-warning">Unassigned</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Type:</strong> 
+                            {% if task.auto_generated %}
+                                <span class="badge bg-info">Auto-generated</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Manual</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Status:</strong> 
+                            {% if task.status == "not_started" %}
+                                <span class="badge bg-secondary">Not Started</span>
+                            {% elif task.status == "in_progress" %}
+                                <span class="badge bg-primary">In Progress</span>
+                            {% elif task.status == "paused" %}
+                                <span class="badge bg-warning">Paused</span>
+                            {% elif task.status == "completed" %}
+                                <span class="badge bg-success">Completed</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        {% if task.started_at %}
+                        <p><strong>Started:</strong> {{ task.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                        {% endif %}
+                        
+                        {% if task.finished_at %}
+                        <p><strong>Finished:</strong> {{ task.finished_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                        {% endif %}
+                        
+                        {% if task.is_paused and task.paused_at %}
+                        <p><strong>Paused at:</strong> {{ task.paused_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                        {% endif %}
+                        
+                        {% if task.started_at %}
+                        <p><strong>Total Time:</strong> {{ task.total_time_minutes }} minutes</p>
+                        {% endif %}
+                        
+                        {% if task.total_pause_time > 0 %}
+                        <p><strong>Pause Time:</strong> {{ (task.total_pause_time / 60)|round(1) }} minutes</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-sticky-note"></i> Task Notes</h5>
+            </div>
+            <div class="card-body">
+                {% if not inventory_day.finalized %}
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/notes">
+                    <div class="mb-3">
+                        <textarea class="form-control" name="notes" rows="4" placeholder="Add notes about this task...">{{ task.notes or '' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Notes
+                    </button>
+                </form>
+                {% else %}
+                <div class="border p-3 bg-light">
+                    {{ task.notes or 'No notes for this task.' }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-cogs"></i> Task Actions</h5>
+            </div>
+            <div class="card-body">
+                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                <div class="d-grid gap-2">
+                    {% if task.status == "not_started" %}
+                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-play"></i> Start Task
+                        </button>
+                    </form>
+                    {% elif task.status == "in_progress" %}
+                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause">
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="fas fa-pause"></i> Pause Task
+                        </button>
+                    </form>
+                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-check"></i> Finish Task
+                        </button>
+                    </form>
+                    {% elif task.status == "paused" %}
+                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume">
+                        <button type="submit" class="btn btn-info w-100">
+                            <i class="fas fa-play"></i> Resume Task
+                        </button>
+                    </form>
+                    {% elif task.status == "completed" %}
+                    <div class="alert alert-success text-center">
+                        <i class="fas fa-check-circle"></i> Task Completed
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="alert alert-info text-center">
+                    {% if inventory_day.finalized %}
+                    <i class="fas fa-lock"></i> Day is finalized
+                    {% else %}
+                    <i class="fas fa-eye"></i> View only
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-calendar-day"></i> Day Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Date:</strong> {{ inventory_day.date }}</p>
+                <p><strong>Status:</strong> 
+                    {% if inventory_day.finalized %}
+                        <span class="badge bg-success">Finalized</span>
+                    {% else %}
+                        <span class="badge bg-warning">In Progress</span>
+                    {% endif %}
+                </p>
+                {% if inventory_day.employees_working %}
+                <p><strong>Employees Working:</strong></p>
+                <ul class="list-unstyled">
+                    {% set employee_ids = inventory_day.employees_working.split(',') %}
+                    {% for emp_id in employee_ids %}
+                        {% for emp in employees %}
+                            {% if emp.id|string == emp_id %}
+                            <li><i class="fas fa-user"></i> {{ emp.full_name or emp.username }}</li>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
