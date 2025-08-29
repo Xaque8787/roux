@@ -54,6 +54,12 @@ class Ingredient(Base):
     
     category = relationship("Category")
     vendor = relationship("Vendor")
+    
+    @property
+    def item_cost(self):
+        if self.purchase_type == 'case' and self.items_per_case:
+            return self.purchase_total_cost / self.items_per_case
+        return self.purchase_total_cost
 
 class IngredientUsageUnit(Base):
     __tablename__ = "ingredient_usage_units"

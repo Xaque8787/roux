@@ -307,22 +307,162 @@ async def list_ingredients(
 
 @app.post("/ingredients/new")
 async def create_ingredient(
+    request: Request,
     name: str = Form(...),
-    unit: str = Form(...),
-    unit_cost: float = Form(...),
     category_id: int = Form(None),
+    vendor_id: int = Form(None),
+    purchase_type: str = Form(...),
+    purchase_unit_name: str = Form(...),
+    purchase_quantity_description: str = Form(""),
+    purchase_total_cost: float = Form(...),
+    breakable_case: bool = Form(False),
+    items_per_case: int = Form(None),
+    item_unit_name: str = Form(""),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    form = await request.form()
+    
     ingredient = Ingredient(
         name=name,
-        unit=unit,
-        unit_cost=unit_cost,
-        category_id=category_id if category_id else None
+        category_id=category_id if category_id else None,
+        vendor_id=vendor_id if vendor_id else None,
+        purchase_type=purchase_type,
+        purchase_unit_name=purchase_unit_name,
+        purchase_quantity_description=purchase_quantity_description,
+        purchase_total_cost=purchase_total_cost,
+        breakable_case=breakable_case,
+        items_per_case=items_per_case if items_per_case else None,
+        item_unit_name=item_unit_name
     )
     db.add(ingredient)
+    db.flush()
+    
+    # Add usage units and conversion factors
+    usage_units = db.query(UsageUnit).all()
+    for unit in usage_units:
+        conversion_key = f"conversion_{unit.id}"
+        if conversion_key in form and form[conversion_key]:
+            conversion_factor = float(form[conversion_key])
+            if conversion_factor > 0:
+                ingredient_usage = IngredientUsageUnit(
+                    ingredient_id=ingredient.id,
+                    usage_unit_id=unit.id,
+                    conversion_factor=conversion_factor
+                )
+                db.add(ingredient_usage)
+    
     db.commit()
     return RedirectResponse("/ingredients", status_code=302)
+
+@app.get("/ingredients/{ingredient_id}", response_class=HTMLResponse)
+async def view_ingredient(
+    ingredient_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    usage_units = db.query(IngredientUsageUnit).filter(
+        IngredientUsageUnit.ingredient_id == ingredient_id
+    ).all()
+    
+    return templates.TemplateResponse("ingredient_detail.html", {
+        "request": request,
+        "ingredient": ingredient,
+        "usage_units": usage_units,
+        "current_user": current_user
+    })
+
+@app.get("/ingredients/{ingredient_id}/edit", response_class=HTMLResponse)
+async def edit_ingredient_form(
+    ingredient_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    categories = db.query(Category).filter(Category.type == "ingredient").all()
+    vendors = db.query(Vendor).all()
+    usage_units = db.query(UsageUnit).all()
+    ingredient_usage_units = db.query(IngredientUsageUnit).filter(
+        IngredientUsageUnit.ingredient_id == ingredient_id
+    ).all()
+    
+    # Create a dict for easy lookup of existing conversion factors
+    existing_conversions = {iu.usage_unit_id: iu.conversion_factor for iu in ingredient_usage_units}
+    
+    return templates.TemplateResponse("ingredient_edit.html", {
+        "request": request,
+        "ingredient": ingredient,
+        "categories": categories,
+        "vendors": vendors,
+        "usage_units": usage_units,
+        "existing_conversions": existing_conversions,
+        "current_user": current_user
+    })
+
+@app.post("/ingredients/{ingredient_id}/edit")
+async def update_ingredient(
+    ingredient_id: int,
+    request: Request,
+    name: str = Form(...),
+    category_id: int = Form(None),
+    vendor_id: int = Form(None),
+    purchase_type: str = Form(...),
+    purchase_unit_name: str = Form(...),
+    purchase_quantity_description: str = Form(""),
+    purchase_total_cost: float = Form(...),
+    breakable_case: bool = Form(False),
+    items_per_case: int = Form(None),
+    item_unit_name: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    form = await request.form()
+    
+    # Update ingredient fields
+    ingredient.name = name
+    ingredient.category_id = category_id if category_id else None
+    ingredient.vendor_id = vendor_id if vendor_id else None
+    ingredient.purchase_type = purchase_type
+    ingredient.purchase_unit_name = purchase_unit_name
+    ingredient.purchase_quantity_description = purchase_quantity_description
+    ingredient.purchase_total_cost = purchase_total_cost
+    ingredient.breakable_case = breakable_case
+    ingredient.items_per_case = items_per_case if items_per_case else None
+    ingredient.item_unit_name = item_unit_name
+    
+    # Update usage units - delete existing and recreate
+    db.query(IngredientUsageUnit).filter(
+        IngredientUsageUnit.ingredient_id == ingredient_id
+    ).delete()
+    
+    usage_units = db.query(UsageUnit).all()
+    for unit in usage_units:
+        conversion_key = f"conversion_{unit.id}"
+        if conversion_key in form and form[conversion_key]:
+            conversion_factor = float(form[conversion_key])
+            if conversion_factor > 0:
+                ingredient_usage = IngredientUsageUnit(
+                    ingredient_id=ingredient.id,
+                    usage_unit_id=unit.id,
+                    conversion_factor=conversion_factor
+                )
+                db.add(ingredient_usage)
+    
+    db.commit()
+    return RedirectResponse(f"/ingredients/{ingredient_id}", status_code=302)
 
 @app.get("/ingredients/{ingredient_id}/delete")
 async def delete_ingredient(
@@ -332,8 +472,61 @@ async def delete_ingredient(
 ):
     ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
     if ingredient:
+        # Delete related usage units first
+        db.query(IngredientUsageUnit).filter(
+            IngredientUsageUnit.ingredient_id == ingredient_id
+        ).delete()
         db.delete(ingredient)
         db.commit()
+    return RedirectResponse("/ingredients", status_code=302)
+
+# Category management routes
+@app.post("/categories/new")
+async def create_category(
+    name: str = Form(...),
+    type: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    category = Category(name=name, type=type)
+    db.add(category)
+    db.commit()
+    
+    # Redirect based on type
+    if type == "ingredient":
+        return RedirectResponse("/ingredients", status_code=302)
+    elif type == "recipe":
+        return RedirectResponse("/recipes", status_code=302)
+    elif type == "dish":
+        return RedirectResponse("/dishes", status_code=302)
+    elif type == "inventory":
+        return RedirectResponse("/inventory", status_code=302)
+    else:
+        return RedirectResponse("/", status_code=302)
+
+# Vendor management routes
+@app.post("/vendors/new")
+async def create_vendor(
+    name: str = Form(...),
+    contact_info: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    vendor = Vendor(name=name, contact_info=contact_info)
+    db.add(vendor)
+    db.commit()
+    return RedirectResponse("/ingredients", status_code=302)
+
+# Usage Unit management routes
+@app.post("/usage_units/new")
+async def create_usage_unit(
+    name: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    usage_unit = UsageUnit(name=name)
+    db.add(usage_unit)
+    db.commit()
     return RedirectResponse("/ingredients", status_code=302)
 
 # Recipes routes
