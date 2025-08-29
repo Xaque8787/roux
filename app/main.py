@@ -10,8 +10,8 @@ from typing import List
 import os
 
 from .database import get_db, engine
-from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost
-from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin
+from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, Vendor, UsageUnit, IngredientUsageUnit
+from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -67,14 +67,16 @@ async def setup_admin(
     hashed_password = hash_password(password)
     admin = User(
         username=username,
+        full_name=username,
         hashed_password=hashed_password,
+        role="admin",
         is_admin=True,
         is_user=True,
         hourly_wage=20.0
     )
     db.add(admin)
     
-    # Create default categories
+    # Create default categories and usage units
     categories = [
         Category(name="Produce", type="ingredient"),
         Category(name="Dairy", type="ingredient"),
@@ -92,6 +94,23 @@ async def setup_admin(
     
     for category in categories:
         db.add(category)
+    
+    # Create default usage units
+    usage_units = [
+        UsageUnit(name="lb"),
+        UsageUnit(name="oz"),
+        UsageUnit(name="tbsp"),
+        UsageUnit(name="tsp"),
+        UsageUnit(name="cup"),
+        UsageUnit(name="can"),
+        UsageUnit(name="ea"),
+        UsageUnit(name="pkg"),
+        UsageUnit(name="qt"),
+        UsageUnit(name="gal"),
+    ]
+    
+    for unit in usage_units:
+        db.add(unit)
     
     db.commit()
     return RedirectResponse("/login", status_code=302)
@@ -117,6 +136,7 @@ async def login(
     
     token = create_jwt({
         "sub": user.username,
+        "role": user.role,
         "is_admin": user.is_admin,
         "is_user": user.is_user
     })
@@ -138,19 +158,150 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
         "current_user": current_user
     })
 
+# Employees routes
+@app.get("/employees", response_class=HTMLResponse)
+async def list_employees(
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    employees = db.query(User).all()
+    return templates.TemplateResponse("employees.html", {
+        "request": request,
+        "employees": employees,
+        "current_user": current_user
+    })
+
+@app.post("/employees/new")
+async def create_employee(
+    full_name: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    hourly_wage: float = Form(...),
+    work_schedule: str = Form(""),
+    role: str = Form("user"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    # Check if username already exists
+    existing_user = db.query(User).filter(User.username == username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    hashed_password = hash_password(password)
+    employee = User(
+        full_name=full_name,
+        username=username,
+        hashed_password=hashed_password,
+        hourly_wage=hourly_wage,
+        work_schedule=work_schedule,
+        role=role,
+        is_admin=(role == "admin"),
+        is_user=True
+    )
+    db.add(employee)
+    db.commit()
+    return RedirectResponse("/employees", status_code=302)
+
+@app.get("/employees/{employee_id}", response_class=HTMLResponse)
+async def view_employee(
+    employee_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    return templates.TemplateResponse("employee_detail.html", {
+        "request": request,
+        "employee": employee,
+        "current_user": current_user
+    })
+
+@app.get("/employees/{employee_id}/edit", response_class=HTMLResponse)
+async def edit_employee_form(
+    employee_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    return templates.TemplateResponse("employee_edit.html", {
+        "request": request,
+        "employee": employee,
+        "current_user": current_user
+    })
+
+@app.post("/employees/{employee_id}/edit")
+async def update_employee(
+    employee_id: int,
+    full_name: str = Form(...),
+    username: str = Form(...),
+    hourly_wage: float = Form(...),
+    work_schedule: str = Form(""),
+    role: str = Form("user"),
+    is_active: bool = Form(False),
+    password: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Check if username is taken by another user
+    existing_user = db.query(User).filter(User.username == username, User.id != employee_id).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    employee.full_name = full_name
+    employee.username = username
+    employee.hourly_wage = hourly_wage
+    employee.work_schedule = work_schedule
+    employee.role = role
+    employee.is_admin = (role == "admin")
+    employee.is_active = is_active
+    
+    if password:
+        employee.hashed_password = hash_password(password)
+    
+    db.commit()
+    return RedirectResponse(f"/employees/{employee_id}", status_code=302)
+
+@app.get("/employees/{employee_id}/delete")
+async def delete_employee(
+    employee_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if employee and employee.id != current_user.id:  # Can't delete yourself
+        employee.is_active = False  # Soft delete
+        db.commit()
+    return RedirectResponse("/employees", status_code=302)
+
 # Ingredients routes
 @app.get("/ingredients", response_class=HTMLResponse)
 async def list_ingredients(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_user_or_above),
     db: Session = Depends(get_db)
 ):
     ingredients = db.query(Ingredient).all()
     categories = db.query(Category).filter(Category.type == "ingredient").all()
+    vendors = db.query(Vendor).all()
+    usage_units = db.query(UsageUnit).all()
     return templates.TemplateResponse("ingredients.html", {
         "request": request,
         "ingredients": ingredients,
         "categories": categories,
+        "vendors": vendors,
+        "usage_units": usage_units,
         "current_user": current_user
     })
 
