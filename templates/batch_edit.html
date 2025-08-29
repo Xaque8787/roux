@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ batch.recipe.name }} Batch - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-edit"></i> Edit Batch: {{ batch.recipe.name }}</h1>
+        <a href="/batches/{{ batch.id }}" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Batch
+        </a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-edit"></i> Batch Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/batches/{{ batch.id }}/edit" id="batchEditForm">
+                    <div class="mb-3">
+                        <label for="recipe_id" class="form-label">Recipe</label>
+                        <select class="form-select" id="recipe_id" name="recipe_id" required onchange="loadRecipeUsageUnits()">
+                            <option value="">Select Recipe</option>
+                            {% for recipe in recipes %}
+                            <option value="{{ recipe.id }}" {% if batch.recipe_id == recipe.id %}selected{% endif %}>
+                                {{ recipe.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="yield_amount" class="form-label">Yield Amount</label>
+                                <input type="number" class="form-control" id="yield_amount" name="yield_amount" 
+                                       step="0.01" value="{{ batch.yield_amount }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="yield_unit_id" class="form-label">Yield Unit</label>
+                                <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
+                                    <option value="">Select Unit</option>
+                                    {% for unit in usage_units %}
+                                    <option value="{{ unit.id }}" {% if batch.yield_unit_id == unit.id %}selected{% endif %}>
+                                        {{ unit.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="labor_minutes" class="form-label">Labor Minutes</label>
+                        <input type="number" class="form-control" id="labor_minutes" name="labor_minutes" 
+                               value="{{ batch.labor_minutes }}" required>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="can_be_scaled" name="can_be_scaled" 
+                               {% if batch.can_be_scaled %}checked{% endif %} onchange="toggleScalingOptions()">
+                        <label class="form-check-label" for="can_be_scaled">
+                            Can be scaled?
+                        </label>
+                    </div>
+                    
+                    <div id="scalingOptions" {% if not batch.can_be_scaled %}style="display: none;"{% endif %}>
+                        <h6>Scaling Options:</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_double" id="scale_double"
+                                           {% if batch.scale_double %}checked{% endif %}>
+                                    <label class="form-check-label" for="scale_double">Double Batch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_half" id="scale_half"
+                                           {% if batch.scale_half %}checked{% endif %}>
+                                    <label class="form-check-label" for="scale_half">Half Batch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_quarter" id="scale_quarter"
+                                           {% if batch.scale_quarter %}checked{% endif %}>
+                                    <label class="form-check-label" for="scale_quarter">Quarter Batch</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_eighth" id="scale_eighth"
+                                           {% if batch.scale_eighth %}checked{% endif %}>
+                                    <label class="form-check-label" for="scale_eighth">Eighth Batch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_sixteenth" id="scale_sixteenth"
+                                           {% if batch.scale_sixteenth %}checked{% endif %}>
+                                    <label class="form-check-label" for="scale_sixteenth">Sixteenth Batch</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="/batches/{{ batch.id }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleScalingOptions() {
+    const checkbox = document.getElementById('can_be_scaled');
+    const options = document.getElementById('scalingOptions');
+    
+    if (checkbox.checked) {
+        options.style.display = 'block';
+    } else {
+        options.style.display = 'none';
+        // Uncheck all scaling options
+        document.querySelectorAll('#scalingOptions input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+        });
+    }
+}
+
+async function loadRecipeUsageUnits() {
+    const recipeSelect = document.getElementById('recipe_id');
+    const yieldUnitSelect = document.getElementById('yield_unit_id');
+    const currentYieldUnitId = {{ batch.yield_unit_id if batch.yield_unit_id else 'null' }};
+    
+    if (!recipeSelect.value) {
+        yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/recipes/${recipeSelect.value}/usage_units`);
+        const usageUnits = await response.json();
+        
+        yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+        usageUnits.forEach(unit => {
+            const option = document.createElement('option');
+            option.value = unit.id;
+            option.textContent = unit.name;
+            if (unit.id === currentYieldUnitId) {
+                option.selected = true;
+            }
+            yieldUnitSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading usage units:', error);
+    }
+}
+
+// Load usage units on page load if recipe is already selected
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('recipe_id').value) {
+        loadRecipeUsageUnits();
+    }
+});
+</script>
+{% endblock %}

@@ -631,10 +631,12 @@ async def list_batches(
 ):
     batches = db.query(Batch).all()
     recipes = db.query(Recipe).all()
+    usage_units = db.query(UsageUnit).all()
     return templates.TemplateResponse("batches.html", {
         "request": request,
         "batches": batches,
         "recipes": recipes,
+        "usage_units": usage_units,
         "current_user": current_user
     })
 
@@ -642,18 +644,28 @@ async def list_batches(
 async def create_batch(
     recipe_id: int = Form(...),
     yield_amount: float = Form(...),
+    yield_unit_id: int = Form(...),
     labor_minutes: int = Form(...),
-    can_be_broken_down: bool = Form(False),
-    breakdown_sizes: str = Form(""),
-    current_user: User = Depends(get_current_user),
+    can_be_scaled: bool = Form(False),
+    scale_double: bool = Form(False),
+    scale_half: bool = Form(False),
+    scale_quarter: bool = Form(False),
+    scale_eighth: bool = Form(False),
+    scale_sixteenth: bool = Form(False),
+    current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
     batch = Batch(
         recipe_id=recipe_id,
         yield_amount=yield_amount,
+        yield_unit_id=yield_unit_id,
         labor_minutes=labor_minutes,
-        can_be_broken_down=can_be_broken_down,
-        breakdown_sizes=breakdown_sizes if breakdown_sizes else None
+        can_be_scaled=can_be_scaled,
+        scale_double=scale_double,
+        scale_half=scale_half,
+        scale_quarter=scale_quarter,
+        scale_eighth=scale_eighth,
+        scale_sixteenth=scale_sixteenth
     )
     db.add(batch)
     db.commit()
@@ -670,6 +682,122 @@ async def delete_batch(
         db.delete(batch)
         db.commit()
     return RedirectResponse("/batches", status_code=302)
+
+@app.get("/batches/{batch_id}", response_class=HTMLResponse)
+async def view_batch(
+    batch_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get recipe ingredients for cost calculation
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == batch.recipe_id
+    ).all()
+    
+    # Calculate total recipe cost
+    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    
+    # Calculate cost per yield unit
+    cost_per_yield_unit = total_recipe_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+    
+    # Calculate labor cost (assuming current user's wage for display)
+    labor_cost = (batch.labor_minutes / 60) * current_user.hourly_wage
+    
+    # Total batch cost including labor
+    total_batch_cost = total_recipe_cost + labor_cost
+    
+    return templates.TemplateResponse("batch_detail.html", {
+        "request": request,
+        "batch": batch,
+        "recipe_ingredients": recipe_ingredients,
+        "total_recipe_cost": total_recipe_cost,
+        "cost_per_yield_unit": cost_per_yield_unit,
+        "labor_cost": labor_cost,
+        "total_batch_cost": total_batch_cost,
+        "current_user": current_user
+    })
+
+@app.get("/batches/{batch_id}/edit", response_class=HTMLResponse)
+async def edit_batch_form(
+    batch_id: int,
+    request: Request,
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    recipes = db.query(Recipe).all()
+    usage_units = db.query(UsageUnit).all()
+    
+    return templates.TemplateResponse("batch_edit.html", {
+        "request": request,
+        "batch": batch,
+        "recipes": recipes,
+        "usage_units": usage_units,
+        "current_user": current_user
+    })
+
+@app.post("/batches/{batch_id}/edit")
+async def update_batch(
+    batch_id: int,
+    recipe_id: int = Form(...),
+    yield_amount: float = Form(...),
+    yield_unit_id: int = Form(...),
+    labor_minutes: int = Form(...),
+    can_be_scaled: bool = Form(False),
+    scale_double: bool = Form(False),
+    scale_half: bool = Form(False),
+    scale_quarter: bool = Form(False),
+    scale_eighth: bool = Form(False),
+    scale_sixteenth: bool = Form(False),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    batch.recipe_id = recipe_id
+    batch.yield_amount = yield_amount
+    batch.yield_unit_id = yield_unit_id
+    batch.labor_minutes = labor_minutes
+    batch.can_be_scaled = can_be_scaled
+    batch.scale_double = scale_double
+    batch.scale_half = scale_half
+    batch.scale_quarter = scale_quarter
+    batch.scale_eighth = scale_eighth
+    batch.scale_sixteenth = scale_sixteenth
+    
+    db.commit()
+    return RedirectResponse(f"/batches/{batch_id}", status_code=302)
+
+@app.get("/api/recipes/{recipe_id}/usage_units")
+async def get_recipe_usage_units(
+    recipe_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all usage units used in a recipe's ingredients"""
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == recipe_id
+    ).all()
+    
+    usage_unit_ids = set()
+    for ri in recipe_ingredients:
+        # Get all usage units from the ingredient's usage units
+        for iu in ri.ingredient.usage_units:
+            usage_unit_ids.add(iu.usage_unit_id)
+    
+    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
+    
+    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
 
 # Dishes routes
 @app.get("/dishes", response_class=HTMLResponse)

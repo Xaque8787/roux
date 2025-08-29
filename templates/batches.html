@@ -10,50 +10,94 @@
 </div>
 
 <div class="row mt-3">
+    {% if current_user.role in ["admin", "manager"] %}
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-plus"></i> Create New Batch</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/batches/new">
+                <form method="post" action="/batches/new" id="batchForm">
                     <div class="mb-3">
                         <label for="recipe_id" class="form-label">Recipe</label>
-                        <select class="form-select" id="recipe_id" name="recipe_id" required>
+                        <select class="form-select" id="recipe_id" name="recipe_id" required onchange="loadRecipeUsageUnits()">
                             <option value="">Select Recipe</option>
                             {% for recipe in recipes %}
                             <option value="{{ recipe.id }}">{{ recipe.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label for="yield_amount" class="form-label">Yield Amount</label>
-                        <input type="number" class="form-control" id="yield_amount" name="yield_amount" step="0.01" required>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="yield_amount" class="form-label">Yield Amount</label>
+                                <input type="number" class="form-control" id="yield_amount" name="yield_amount" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="yield_unit_id" class="form-label">Yield Unit</label>
+                                <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
+                                    <option value="">Select Unit</option>
+                                    <!-- Will be populated by JavaScript -->
+                                </select>
+                            </div>
+                        </div>
                     </div>
+                    
                     <div class="mb-3">
                         <label for="labor_minutes" class="form-label">Labor Minutes</label>
                         <input type="number" class="form-control" id="labor_minutes" name="labor_minutes" required>
                     </div>
+                    
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="can_be_broken_down" name="can_be_broken_down">
-                        <label class="form-check-label" for="can_be_broken_down">
-                            Can be broken down into portions?
+                        <input type="checkbox" class="form-check-input" id="can_be_scaled" name="can_be_scaled" onchange="toggleScalingOptions()">
+                        <label class="form-check-label" for="can_be_scaled">
+                            Can be scaled?
                         </label>
                     </div>
-                    <div class="mb-3">
-                        <label for="breakdown_sizes" class="form-label">Breakdown Sizes</label>
-                        <input type="text" class="form-control" id="breakdown_sizes" name="breakdown_sizes" 
-                               placeholder="e.g. 0.5,0.25 for half and quarter portions">
+                    
+                    <div id="scalingOptions" style="display: none;">
+                        <h6>Scaling Options:</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_double" id="scale_double">
+                                    <label class="form-check-label" for="scale_double">Double Batch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_half" id="scale_half">
+                                    <label class="form-check-label" for="scale_half">Half Batch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_quarter" id="scale_quarter">
+                                    <label class="form-check-label" for="scale_quarter">Quarter Batch</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_eighth" id="scale_eighth">
+                                    <label class="form-check-label" for="scale_eighth">Eighth Batch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_sixteenth" id="scale_sixteenth">
+                                    <label class="form-check-label" for="scale_sixteenth">Sixteenth Batch</label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-success">
+                    
+                    <button type="submit" class="btn btn-success mt-3">
                         <i class="fas fa-plus"></i> Create Batch
                     </button>
                 </form>
             </div>
         </div>
     </div>
+    {% endif %}
     
-    <div class="col-md-6">
+    <div class="{% if current_user.role in ['admin', 'manager'] %}col-md-6{% else %}col-12{% endif %}">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-list"></i> Batches List</h5>
@@ -66,28 +110,46 @@
                                 <th>Recipe</th>
                                 <th>Yield</th>
                                 <th>Labor (min)</th>
-                                <th>Breakdown</th>
+                                <th>Scaling</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for batch in batches %}
                             <tr>
-                                <td>{{ batch.recipe.name }}</td>
-                                <td>{{ batch.yield_amount }}</td>
-                                <td>{{ batch.labor_minutes }}</td>
                                 <td>
-                                    {% if batch.can_be_broken_down %}
-                                        <span class="badge bg-success">Yes</span>
-                                        {% if batch.breakdown_sizes %}
-                                        <br><small>{{ batch.breakdown_sizes }}</small>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="badge bg-secondary">No</span>
+                                    <strong>{{ batch.recipe.name }}</strong>
+                                    {% if batch.recipe.category %}
+                                    <br><small class="text-muted">{{ batch.recipe.category.name }}</small>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if current_user.is_admin %}
+                                    {{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }}
+                                </td>
+                                <td>{{ batch.labor_minutes }}</td>
+                                <td>
+                                    {% if batch.can_be_scaled %}
+                                        <span class="badge bg-success">Scalable</span>
+                                        <br>
+                                        {% if batch.scale_double %}<span class="badge bg-info">2x</span>{% endif %}
+                                        {% if batch.scale_half %}<span class="badge bg-info">1/2</span>{% endif %}
+                                        {% if batch.scale_quarter %}<span class="badge bg-info">1/4</span>{% endif %}
+                                        {% if batch.scale_eighth %}<span class="badge bg-info">1/8</span>{% endif %}
+                                        {% if batch.scale_sixteenth %}<span class="badge bg-info">1/16</span>{% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">Fixed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="/batches/{{ batch.id }}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    {% if current_user.role in ["admin", "manager"] %}
+                                    <a href="/batches/{{ batch.id }}/edit" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    {% endif %}
+                                    {% if current_user.role == "admin" %}
                                     <a href="/batches/{{ batch.id }}/delete" class="btn btn-sm btn-danger" 
                                        onclick="return confirm('Are you sure?')">
                                         <i class="fas fa-trash"></i>
@@ -103,4 +165,46 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleScalingOptions() {
+    const checkbox = document.getElementById('can_be_scaled');
+    const options = document.getElementById('scalingOptions');
+    
+    if (checkbox.checked) {
+        options.style.display = 'block';
+    } else {
+        options.style.display = 'none';
+        // Uncheck all scaling options
+        document.querySelectorAll('#scalingOptions input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+        });
+    }
+}
+
+async function loadRecipeUsageUnits() {
+    const recipeSelect = document.getElementById('recipe_id');
+    const yieldUnitSelect = document.getElementById('yield_unit_id');
+    
+    if (!recipeSelect.value) {
+        yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/recipes/${recipeSelect.value}/usage_units`);
+        const usageUnits = await response.json();
+        
+        yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+        usageUnits.forEach(unit => {
+            const option = document.createElement('option');
+            option.value = unit.id;
+            option.textContent = unit.name;
+            yieldUnitSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading usage units:', error);
+    }
+}
+</script>
 {% endblock %}
