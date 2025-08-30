@@ -3,6 +3,23 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from .database import Base
 
+class VendorUnit(Base):
+    __tablename__ = "vendor_units"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # lb, oz, gal, qt, etc.
+    description = Column(String)  # Optional description
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class VendorUnitConversion(Base):
+    __tablename__ = "vendor_unit_conversions"
+    id = Column(Integer, primary_key=True)
+    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
+    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    conversion_factor = Column(Float)  # how many usage units per vendor unit
+    
+    vendor_unit = relationship("VendorUnit")
+    usage_unit = relationship("UsageUnit")
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
@@ -40,20 +57,21 @@ class Ingredient(Base):
     name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
     vendor_id = Column(Integer, ForeignKey("vendors.id"))
+    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
     
     # Purchase Level
     purchase_type = Column(String)  # 'case' or 'single'
-    purchase_unit_name = Column(String)  # Case, Bag, Sack, Box
-    purchase_quantity_description = Column(String)  # "36 × 1 lb blocks"
+    purchase_unit_name = Column(String)  # Case, Bag, Sack, Box (container type)
+    purchase_weight_volume = Column(Float)  # Total weight/volume in vendor units
     purchase_total_cost = Column(Float)
     breakable_case = Column(Boolean, default=False)
     
     # Item Level (for cases)
     items_per_case = Column(Integer)
-    item_unit_name = Column(String)  # "1 lb block", "#10 can"
     
     category = relationship("Category")
     vendor = relationship("Vendor")
+    vendor_unit = relationship("VendorUnit")
     usage_units = relationship("IngredientUsageUnit", back_populates="ingredient")
     
     @property
@@ -61,6 +79,20 @@ class Ingredient(Base):
         if self.purchase_type == 'case' and self.items_per_case:
             return self.purchase_total_cost / self.items_per_case
         return self.purchase_total_cost
+    
+    @property
+    def item_weight_volume(self):
+        """Weight/volume per individual item"""
+        if self.purchase_type == 'case' and self.items_per_case and self.purchase_weight_volume:
+            return self.purchase_weight_volume / self.items_per_case
+        return self.purchase_weight_volume
+    
+    @property
+    def item_description(self):
+        """Generate description for individual items in cases"""
+        if self.purchase_type == 'case' and self.vendor_unit and self.item_weight_volume:
+            return f"{self.item_weight_volume} {self.vendor_unit.name}"
+        return ""
 
 class IngredientUsageUnit(Base):
     __tablename__ = "ingredient_usage_units"
@@ -74,11 +106,12 @@ class IngredientUsageUnit(Base):
 
     @property
     def price_per_usage_unit(self):
-        if self.ingredient.purchase_type == 'case' and self.ingredient.items_per_case:
-            item_cost = self.ingredient.purchase_total_cost / self.ingredient.items_per_case
+        # Get the base cost per vendor unit
+        if self.ingredient.purchase_type == 'case':
+            # For cases, use individual item cost and weight
+            base_cost = self.ingredient.item_cost
+            base_weight_volume = self.ingredient.item_weight_volume
         else:
-            item_cost = self.ingredient.purchase_total_cost
-        return item_cost / self.conversion_factor if self.conversion_factor else 0
 
 class Recipe(Base):
     __tablename__ = "recipes"

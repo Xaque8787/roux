@@ -99,18 +99,96 @@ async def setup_admin(
     usage_units = [
         UsageUnit(name="lb"),
         UsageUnit(name="oz"),
+        UsageUnit(name="g"),
+        UsageUnit(name="kg"),
         UsageUnit(name="tbsp"),
         UsageUnit(name="tsp"),
         UsageUnit(name="cup"),
+        UsageUnit(name="fl oz"),
+        UsageUnit(name="pt"),
+        UsageUnit(name="qt"),
+        UsageUnit(name="gal"),
         UsageUnit(name="can"),
         UsageUnit(name="ea"),
         UsageUnit(name="pkg"),
-        UsageUnit(name="qt"),
-        UsageUnit(name="gal"),
     ]
     
     for unit in usage_units:
         db.add(unit)
+    
+    # Create default vendor units with common conversions
+    vendor_units_data = [
+        ("lb", "Pound"),
+        ("oz", "Ounce"), 
+        ("kg", "Kilogram"),
+        ("g", "Gram"),
+        ("gal", "Gallon"),
+        ("qt", "Quart"),
+        ("pt", "Pint"),
+        ("fl oz", "Fluid Ounce"),
+        ("L", "Liter"),
+        ("mL", "Milliliter"),
+    ]
+    
+    vendor_units = []
+    for name, description in vendor_units_data:
+        vendor_unit = VendorUnit(name=name, description=description)
+        db.add(vendor_unit)
+        vendor_units.append(vendor_unit)
+    
+    db.flush()  # Get IDs for vendor units
+    
+    # Create common conversion factors
+    conversions = [
+        # Pound conversions
+        ("lb", "lb", 1),
+        ("lb", "oz", 16),
+        ("lb", "kg", 0.453592),
+        ("lb", "g", 453.592),
+        
+        # Ounce conversions
+        ("oz", "oz", 1),
+        ("oz", "lb", 1/16),
+        ("oz", "tbsp", 2),
+        ("oz", "tsp", 6),
+        ("oz", "g", 28.3495),
+        
+        # Gallon conversions
+        ("gal", "gal", 1),
+        ("gal", "qt", 4),
+        ("gal", "pt", 8),
+        ("gal", "cup", 16),
+        ("gal", "fl oz", 128),
+        ("gal", "tbsp", 256),
+        ("gal", "tsp", 768),
+        ("gal", "L", 3.78541),
+        
+        # Quart conversions
+        ("qt", "qt", 1),
+        ("qt", "pt", 2),
+        ("qt", "cup", 4),
+        ("qt", "fl oz", 32),
+        ("qt", "tbsp", 64),
+        ("qt", "gal", 0.25),
+        
+        # Kilogram conversions
+        ("kg", "kg", 1),
+        ("kg", "lb", 2.20462),
+        ("kg", "oz", 35.274),
+        ("kg", "g", 1000),
+    ]
+    
+    for vendor_unit_name, usage_unit_name, factor in conversions:
+        vendor_unit = next((vu for vu in vendor_units if vu.name == vendor_unit_name), None)
+        usage_unit = next((uu for uu in usage_units if uu.name == usage_unit_name), None)
+        
+        if vendor_unit and usage_unit:
+            conversion = VendorUnitConversion(
+                vendor_unit_id=vendor_unit.id,
+                usage_unit_id=usage_unit.id,
+                conversion_factor=factor
+            )
+            db.add(conversion)
     
     db.commit()
     return RedirectResponse("/login", status_code=302)
