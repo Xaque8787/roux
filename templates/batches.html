@@ -40,7 +40,9 @@
                                 <label for="yield_unit_id" class="form-label">Yield Unit</label>
                                 <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
                                     <option value="">Select Unit</option>
-                                    <!-- Will be populated by JavaScript -->
+                                    {% for unit in usage_units %}
+                                    <option value="{{ unit.id }}">{{ unit.name }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                         </div>

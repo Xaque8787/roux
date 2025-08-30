@@ -722,6 +722,71 @@ async def view_recipe(
         "current_user": current_user
     })
 
+@app.get("/recipes/{recipe_id}/edit", response_class=HTMLResponse)
+async def edit_recipe_form(
+    recipe_id: int,
+    request: Request,
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    categories = db.query(Category).filter(Category.type == "recipe").all()
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == recipe_id
+    ).all()
+    
+    return templates.TemplateResponse("recipe_edit.html", {
+        "request": request,
+        "recipe": recipe,
+        "categories": categories,
+        "recipe_ingredients": recipe_ingredients,
+        "current_user": current_user
+    })
+
+@app.post("/recipes/{recipe_id}/edit")
+async def update_recipe(
+    recipe_id: int,
+    request: Request,
+    name: str = Form(...),
+    instructions: str = Form(""),
+    category_id: int = Form(None),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    form = await request.form()
+    
+    # Update recipe fields
+    recipe.name = name
+    recipe.instructions = instructions
+    recipe.category_id = category_id if category_id else None
+    
+    # Update ingredients - delete existing and recreate
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
+    
+    ingredients_data = form.get("ingredients_data")
+    if ingredients_data:
+        import json
+        ingredients_list = json.loads(ingredients_data)
+        for ingredient_data in ingredients_list:
+            if ingredient_data.get('quantity') and float(ingredient_data['quantity']) > 0:
+                recipe_ingredient = RecipeIngredient(
+                    recipe_id=recipe.id,
+                    ingredient_id=int(ingredient_data['ingredient_id']),
+                    usage_unit_id=int(ingredient_data['usage_unit_id']),
+                    quantity=float(ingredient_data['quantity'])
+                )
+                db.add(recipe_ingredient)
+    
+    db.commit()
+    return RedirectResponse(f"/recipes/{recipe_id}", status_code=302)
+
 @app.get("/recipes/{recipe_id}/delete")
 async def delete_recipe(
     recipe_id: int,

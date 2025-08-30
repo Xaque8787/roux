@@ -49,14 +49,10 @@
                     
                     <h6>Ingredients:</h6>
                     <div class="mb-3">
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="ingredientSearch" 
-                                   placeholder="Search for ingredients..." autocomplete="off">
-                            <button type="button" class="btn btn-outline-secondary" id="addIngredientBtn">
-                                <i class="fas fa-plus"></i> Add
-                            </button>
-                        </div>
-                        <div id="ingredientSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
+                        <label for="ingredientSelect" class="form-label">Select Ingredient</label>
+                        <select class="form-select" id="ingredientSelect">
+                            <option value="">Choose an ingredient...</option>
+                        </select>
                     </div>
                     
                     <div id="selectedIngredients" class="mb-3">
@@ -79,7 +75,7 @@
 
 <script>
 let selectedIngredients = [];
-let currentIngredientData = null;
+let allIngredients = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     // Load existing ingredients
@@ -96,35 +92,17 @@ document.addEventListener('DOMContentLoaded', function() {
     
     updateSelectedIngredientsDisplay();
     
-    const ingredientSearch = document.getElementById('ingredientSearch');
-    const suggestions = document.getElementById('ingredientSuggestions');
+    // Load all ingredients for dropdown
+    loadAllIngredients();
     
-    let searchTimeout;
-    
-    // Search ingredients as user types
-    ingredientSearch.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        const query = this.value.trim();
-        
-        if (query.length < 2) {
-            suggestions.style.display = 'none';
-            return;
-        }
-        
-        searchTimeout = setTimeout(() => {
-            fetch(`/api/ingredients/search?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    displaySuggestions(data);
-                })
-                .catch(error => console.error('Error:', error));
-        }, 300);
-    });
-    
-    // Hide suggestions when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('#ingredientSearch') && !e.target.closest('#ingredientSuggestions')) {
-            suggestions.style.display = 'none';
+    const ingredientSelect = document.getElementById('ingredientSelect');
+    ingredientSelect.addEventListener('change', function() {
+        if (this.value) {
+            const ingredient = allIngredients.find(ing => ing.id == this.value);
+            if (ingredient) {
+                selectIngredient(ingredient);
+                this.value = ''; // Reset dropdown
+            }
         }
     });
     
@@ -134,33 +112,23 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function displaySuggestions(ingredients) {
-    const suggestions = document.getElementById('ingredientSuggestions');
-    
-    if (ingredients.length === 0) {
-        suggestions.style.display = 'none';
-        return;
-    }
-    
-    suggestions.innerHTML = '';
-    ingredients.forEach(ingredient => {
-        const item = document.createElement('a');
-        item.className = 'dropdown-item';
-        item.href = '#';
-        item.innerHTML = `
-            <strong>${ingredient.name}</strong>
-            ${ingredient.category ? `<br><small class="text-muted">${ingredient.category}</small>` : ''}
-        `;
+async function loadAllIngredients() {
+    try {
+        const response = await fetch('/api/ingredients/all');
+        allIngredients = await response.json();
         
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            selectIngredient(ingredient);
+        const select = document.getElementById('ingredientSelect');
+        select.innerHTML = '<option value="">Choose an ingredient...</option>';
+        
+        allIngredients.forEach(ingredient => {
+            const option = document.createElement('option');
+            option.value = ingredient.id;
+            option.textContent = `${ingredient.name}${ingredient.category ? ` (${ingredient.category})` : ''}`;
+            select.appendChild(option);
         });
-        
-        suggestions.appendChild(item);
-    });
-    
-    suggestions.style.display = 'block';
+    } catch (error) {
+        console.error('Error loading ingredients:', error);
+    }
 }
 
 function selectIngredient(ingredient) {
@@ -169,10 +137,6 @@ function selectIngredient(ingredient) {
         alert('This ingredient is already added to the recipe.');
         return;
     }
-    
-    currentIngredientData = ingredient;
-    document.getElementById('ingredientSearch').value = ingredient.name;
-    document.getElementById('ingredientSuggestions').style.display = 'none';
     
     // Show usage unit selection
     showUsageUnitSelection(ingredient);
@@ -229,6 +193,7 @@ function showUsageUnitSelection(ingredient) {
     const quantityInput = modal.querySelector('#quantityInput');
     const usageUnitSelect = modal.querySelector('#usageUnitSelect');
     const estimatedCost = modal.querySelector('#estimatedCost');
+    let currentIngredientData = ingredient;
     
     function updateCost() {
         const quantity = parseFloat(quantityInput.value) || 0;
@@ -263,8 +228,8 @@ function addIngredientToRecipe() {
     
     // Add to selected ingredients
     selectedIngredients.push({
-        ingredient_id: currentIngredientData.id,
-        ingredient_name: currentIngredientData.name,
+        ingredient_id: ingredient.id,
+        ingredient_name: ingredient.name,
         usage_unit_id: usageUnitId,
         usage_unit_name: usageUnitName,
         quantity: quantity,
@@ -273,9 +238,6 @@ function addIngredientToRecipe() {
     
     // Update display
     updateSelectedIngredientsDisplay();
-    
-    // Clear search
-    document.getElementById('ingredientSearch').value = '';
     
     // Close modal
     const modal = document.querySelector('.modal.show');
