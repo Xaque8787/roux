@@ -393,6 +393,7 @@ async def edit_ingredient_form(
     
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
+    vendor_units = db.query(VendorUnit).all()
     usage_units = db.query(UsageUnit).all()
     ingredient_usage_units = db.query(IngredientUsageUnit).filter(
         IngredientUsageUnit.ingredient_id == ingredient_id
@@ -406,6 +407,7 @@ async def edit_ingredient_form(
         "ingredient": ingredient,
         "categories": categories,
         "vendors": vendors,
+        "vendor_units": vendor_units,
         "usage_units": usage_units,
         "existing_conversions": existing_conversions,
         "current_user": current_user
