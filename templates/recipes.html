@@ -43,10 +43,14 @@
                     
                     <h6>Ingredients:</h6>
                     <div class="mb-3">
-                        <label for="ingredientSelect" class="form-label">Select Ingredient</label>
-                        <select class="form-select" id="ingredientSelect">
-                            <option value="">Choose an ingredient...</option>
-                        </select>
+                        <label for="ingredientSearch" class="form-label">Search & Select Ingredient</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="ingredientSearch" 
+                                   placeholder="Type to search ingredients..." autocomplete="off">
+                            <div id="ingredientDropdown" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;">
+                                <!-- Ingredient options will appear here -->
+                            </div>
+                        </div>
                     </div>
                     
                     <div id="selectedIngredients" class="mb-3">
@@ -131,19 +135,31 @@
 <script>
 let selectedIngredients = [];
 let allIngredients = [];
+let currentSelectedIngredient = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Load all ingredients for dropdown
     loadAllIngredients();
     
-    const ingredientSelect = document.getElementById('ingredientSelect');
-    ingredientSelect.addEventListener('change', function() {
-        if (this.value) {
-            const ingredient = allIngredients.find(ing => ing.id == this.value);
-            if (ingredient) {
-                selectIngredient(ingredient);
-                this.value = ''; // Reset dropdown
-            }
+    const ingredientSearch = document.getElementById('ingredientSearch');
+    const dropdown = document.getElementById('ingredientDropdown');
+    
+    // Search functionality
+    ingredientSearch.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        filterIngredients(query);
+    });
+    
+    // Show all ingredients when focused
+    ingredientSearch.addEventListener('focus', function() {
+        filterIngredients('');
+        dropdown.style.display = 'block';
+    });
+    
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#ingredientSearch') && !e.target.closest('#ingredientDropdown')) {
+            dropdown.style.display = 'none';
         }
     });
     
@@ -157,18 +173,47 @@ async function loadAllIngredients() {
     try {
         const response = await fetch('/api/ingredients/all');
         allIngredients = await response.json();
-        
-        const select = document.getElementById('ingredientSelect');
-        select.innerHTML = '<option value="">Choose an ingredient...</option>';
-        
-        allIngredients.forEach(ingredient => {
-            const option = document.createElement('option');
-            option.value = ingredient.id;
-            option.textContent = `${ingredient.name}${ingredient.category ? ` (${ingredient.category})` : ''}`;
-            select.appendChild(option);
-        });
+        filterIngredients(''); // Show all ingredients initially
     } catch (error) {
         console.error('Error loading ingredients:', error);
+    }
+}
+
+function filterIngredients(query) {
+    const dropdown = document.getElementById('ingredientDropdown');
+    
+    const filteredIngredients = allIngredients.filter(ingredient => 
+        ingredient.name.toLowerCase().includes(query) ||
+        (ingredient.category && ingredient.category.toLowerCase().includes(query))
+    );
+    
+    dropdown.innerHTML = '';
+    
+    if (filteredIngredients.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No ingredients found</div>';
+    } else {
+        filteredIngredients.forEach(ingredient => {
+            const item = document.createElement('a');
+            item.className = 'dropdown-item';
+            item.href = '#';
+            item.innerHTML = `
+                <strong>${ingredient.name}</strong>
+                ${ingredient.category ? `<br><small class="text-muted">${ingredient.category}</small>` : ''}
+            `;
+            
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectIngredient(ingredient);
+                document.getElementById('ingredientSearch').value = ingredient.name;
+                dropdown.style.display = 'none';
+            });
+            
+            dropdown.appendChild(item);
+        });
+    }
+    
+    if (query || document.getElementById('ingredientSearch') === document.activeElement) {
+        dropdown.style.display = 'block';
     }
 }
 
@@ -181,6 +226,7 @@ function selectIngredient(ingredient) {
     
     // Show usage unit selection
     showUsageUnitSelection(ingredient);
+    currentSelectedIngredient = ingredient;
 }
 
 function showUsageUnitSelection(ingredient) {
@@ -191,7 +237,7 @@ function showUsageUnitSelection(ingredient) {
     
     let usageUnitOptions = '';
     ingredient.usage_units.forEach(unit => {
-        usageUnitOptions += `<option value="${unit.id}" data-price="${unit.price_per_unit}">${unit.name} ($${unit.price_per_unit}/unit)</option>`;
+        usageUnitOptions += `<option value="${unit.id}" data-price="${unit.price_per_usage_unit}">${unit.name} ($${unit.price_per_usage_unit.toFixed(4)}/unit)</option>`;
     });
     
     const modal = document.createElement('div');
@@ -234,7 +280,6 @@ function showUsageUnitSelection(ingredient) {
     const quantityInput = modal.querySelector('#quantityInput');
     const usageUnitSelect = modal.querySelector('#usageUnitSelect');
     const estimatedCost = modal.querySelector('#estimatedCost');
-    let currentIngredientData = ingredient;
     
     function updateCost() {
         const quantity = parseFloat(quantityInput.value) || 0;
@@ -269,8 +314,8 @@ function addIngredientToRecipe() {
     
     // Add to selected ingredients
     selectedIngredients.push({
-        ingredient_id: ingredient.id,
-        ingredient_name: ingredient.name,
+        ingredient_id: currentSelectedIngredient.id,
+        ingredient_name: currentSelectedIngredient.name,
         usage_unit_id: usageUnitId,
         usage_unit_name: usageUnitName,
         quantity: quantity,
@@ -279,6 +324,9 @@ function addIngredientToRecipe() {
     
     // Update display
     updateSelectedIngredientsDisplay();
+    
+    // Clear search field
+    document.getElementById('ingredientSearch').value = '';
     
     // Close modal
     const modal = document.querySelector('.modal.show');

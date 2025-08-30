@@ -139,16 +139,7 @@ async function loadRecipeUsageUnits() {
     
     if (!recipeSelect.value) {
         // Show all usage units if no recipe selected
-        yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-        {% for unit in usage_units %}
-        const option{{ unit.id }} = document.createElement('option');
-        option{{ unit.id }}.value = {{ unit.id }};
-        option{{ unit.id }}.textContent = '{{ unit.name }}';
-        if ({{ unit.id }} === currentYieldUnitId) {
-            option{{ unit.id }}.selected = true;
-        }
-        yieldUnitSelect.appendChild(option{{ unit.id }});
-        {% endfor %}
+        showAllUnits(currentYieldUnitId);
         return;
     }
     
@@ -169,30 +160,27 @@ async function loadRecipeUsageUnits() {
         
         // If no units found from recipe, show all units
         if (usageUnits.length === 0) {
-            {% for unit in usage_units %}
-            const option{{ unit.id }} = document.createElement('option');
-            option{{ unit.id }}.value = {{ unit.id }};
-            option{{ unit.id }}.textContent = '{{ unit.name }}';
-            if ({{ unit.id }} === currentYieldUnitId) {
-                option{{ unit.id }}.selected = true;
-            }
-            yieldUnitSelect.appendChild(option{{ unit.id }});
-            {% endfor %}
+            showAllUnits(currentYieldUnitId);
         }
     } catch (error) {
         console.error('Error loading usage units:', error);
-        // Fallback to all units on error
-        yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-        {% for unit in usage_units %}
-        const optionFallback{{ unit.id }} = document.createElement('option');
-        optionFallback{{ unit.id }}.value = {{ unit.id }};
-        optionFallback{{ unit.id }}.textContent = '{{ unit.name }}';
-        if ({{ unit.id }} === currentYieldUnitId) {
-            optionFallback{{ unit.id }}.selected = true;
-        }
-        yieldUnitSelect.appendChild(optionFallback{{ unit.id }});
-        {% endfor %}
+        showAllUnits(currentYieldUnitId);
     }
+}
+
+function showAllUnits(currentYieldUnitId) {
+    const yieldUnitSelect = document.getElementById('yield_unit_id');
+    yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+    
+    {% for unit in usage_units %}
+    const option{{ unit.id }} = document.createElement('option');
+    option{{ unit.id }}.value = {{ unit.id }};
+    option{{ unit.id }}.textContent = '{{ unit.name }}';
+    if ({{ unit.id }} === currentYieldUnitId) {
+        option{{ unit.id }}.selected = true;
+    }
+    yieldUnitSelect.appendChild(option{{ unit.id }});
+    {% endfor %}
 }
 
 // Load usage units on page load if recipe is already selected
