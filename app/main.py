@@ -1414,13 +1414,72 @@ async def search_ingredients(
             "usage_units": usage_units
         })
     
-    return result
+    try:
+        ingredients = db.query(Ingredient).options(
+            joinedload(Ingredient.category),
+            joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
+        ).all()
+        
+        result = []
+        for ing in ingredients:
+            usage_units = []
+            for iu in ing.usage_units:
+                usage_units.append({
+                    "usage_unit_id": iu.usage_unit_id,
+                    "usage_unit_name": iu.usage_unit.name,
+                    "price_per_usage_unit": iu.price_per_usage_unit
+                })
+            
+            result.append({
+                "id": ing.id,
+                "name": ing.name,
+                "category": ing.category.name if ing.category else None,
+                "usage_units": usage_units
+            })
+        
+        return result
+    except Exception as e:
+        return {"error": str(e)}
 
-@app.get("/api/ingredients/all")
-async def get_all_ingredients(
-    current_user: User = Depends(get_current_user),
-    result = []
-    for ing in ingredients:
+# API endpoint to search ingredients
+@app.get("/api/ingredients/search")
+async def search_ingredients_api(q: str = "", db: Session = Depends(get_db)):
+    try:
+        query = db.query(Ingredient).options(
+            joinedload(Ingredient.category),
+            joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
+        )
+        
+        if q:
+            query = query.filter(
+                or_(
+                    Ingredient.name.ilike(f"%{q}%"),
+                    Ingredient.category.has(Category.name.ilike(f"%{q}%"))
+                )
+            )
+        
+        ingredients = query.all()
+        
+        result = []
+        for ing in ingredients:
+            usage_units = []
+            for iu in ing.usage_units:
+                usage_units.append({
+                    "usage_unit_id": iu.usage_unit_id,
+                    "usage_unit_name": iu.usage_unit.name,
+                    "price_per_usage_unit": iu.price_per_usage_unit
+                })
+            
+            result.append({
+                "id": ing.id,
+                "name": ing.name,
+                "category": ing.category.name if ing.category else None,
+                "usage_units": usage_units
+            })
+        
+        return result
+    except Exception as e:
+        return {"error": str(e)}
         usage_units = []
         for iu in ing.usage_units:
             usage_units.append({
