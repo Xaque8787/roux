@@ -11,6 +11,7 @@ import os
 
 from .database import get_db, engine
 from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, Vendor, UsageUnit, IngredientUsageUnit
+from .models import VendorUnit, VendorUnitConversion
 from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
 
 # Create tables
@@ -117,6 +118,8 @@ async def setup_admin(
         db.add(unit)
     
     # Create default vendor units with common conversions
+    from .models import VendorUnit, VendorUnitConversion
+    
     vendor_units_data = [
         ("lb", "Pound"),
         ("oz", "Ounce"), 
@@ -373,12 +376,14 @@ async def list_ingredients(
     ingredients = db.query(Ingredient).all()
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
+    vendor_units = db.query(VendorUnit).all()
     usage_units = db.query(UsageUnit).all()
     return templates.TemplateResponse("ingredients.html", {
         "request": request,
         "ingredients": ingredients,
         "categories": categories,
         "vendors": vendors,
+        "vendor_units": vendor_units,
         "usage_units": usage_units,
         "current_user": current_user
     })
@@ -389,13 +394,13 @@ async def create_ingredient(
     name: str = Form(...),
     category_id: int = Form(None),
     vendor_id: int = Form(None),
+    vendor_unit_id: int = Form(None),
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
-    purchase_quantity_description: str = Form(""),
+    purchase_weight_volume: float = Form(...),
     purchase_total_cost: float = Form(...),
     breakable_case: bool = Form(False),
     items_per_case: int = Form(None),
-    item_unit_name: str = Form(""),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -405,13 +410,13 @@ async def create_ingredient(
         name=name,
         category_id=category_id if category_id else None,
         vendor_id=vendor_id if vendor_id else None,
+        vendor_unit_id=vendor_unit_id if vendor_unit_id else None,
         purchase_type=purchase_type,
         purchase_unit_name=purchase_unit_name,
-        purchase_quantity_description=purchase_quantity_description,
+        purchase_weight_volume=purchase_weight_volume,
         purchase_total_cost=purchase_total_cost,
         breakable_case=breakable_case,
         items_per_case=items_per_case if items_per_case else None,
-        item_unit_name=item_unit_name
     )
     db.add(ingredient)
     db.flush()
@@ -468,6 +473,7 @@ async def edit_ingredient_form(
     
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
+    vendor_units = db.query(VendorUnit).all()
     usage_units = db.query(UsageUnit).all()
     ingredient_usage_units = db.query(IngredientUsageUnit).filter(
         IngredientUsageUnit.ingredient_id == ingredient_id
@@ -481,6 +487,7 @@ async def edit_ingredient_form(
         "ingredient": ingredient,
         "categories": categories,
         "vendors": vendors,
+        "vendor_units": vendor_units,
         "usage_units": usage_units,
         "existing_conversions": existing_conversions,
         "current_user": current_user
@@ -493,13 +500,13 @@ async def update_ingredient(
     name: str = Form(...),
     category_id: int = Form(None),
     vendor_id: int = Form(None),
+    vendor_unit_id: int = Form(None),
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
-    purchase_quantity_description: str = Form(""),
+    purchase_weight_volume: float = Form(...),
     purchase_total_cost: float = Form(...),
     breakable_case: bool = Form(False),
     items_per_case: int = Form(None),
-    item_unit_name: str = Form(""),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -513,13 +520,13 @@ async def update_ingredient(
     ingredient.name = name
     ingredient.category_id = category_id if category_id else None
     ingredient.vendor_id = vendor_id if vendor_id else None
+    ingredient.vendor_unit_id = vendor_unit_id if vendor_unit_id else None
     ingredient.purchase_type = purchase_type
     ingredient.purchase_unit_name = purchase_unit_name
-    ingredient.purchase_quantity_description = purchase_quantity_description
+    ingredient.purchase_weight_volume = purchase_weight_volume
     ingredient.purchase_total_cost = purchase_total_cost
     ingredient.breakable_case = breakable_case
     ingredient.items_per_case = items_per_case if items_per_case else None
-    ingredient.item_unit_name = item_unit_name
     
     # Update usage units - delete existing and recreate
     db.query(IngredientUsageUnit).filter(

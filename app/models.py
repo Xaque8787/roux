@@ -40,6 +40,7 @@ class Vendor(Base):
     name = Column(String, nullable=False)
     contact_info = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)
@@ -51,6 +52,7 @@ class UsageUnit(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)  # lb, oz, tbsp, cup, can, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
+
 class Ingredient(Base):
     __tablename__ = "ingredients"
     id = Column(Integer, primary_key=True)
@@ -112,6 +114,16 @@ class IngredientUsageUnit(Base):
             base_cost = self.ingredient.item_cost
             base_weight_volume = self.ingredient.item_weight_volume
         else:
+            # For single items, use total cost and weight
+            base_cost = self.ingredient.purchase_total_cost
+            base_weight_volume = self.ingredient.purchase_weight_volume
+        
+        if not base_weight_volume or not self.conversion_factor:
+            return 0
+            
+        # Calculate cost per vendor unit, then convert to usage unit
+        cost_per_vendor_unit = base_cost / base_weight_volume
+        return cost_per_vendor_unit / self.conversion_factor
 
 class Recipe(Base):
     __tablename__ = "recipes"
@@ -121,7 +133,6 @@ class Recipe(Base):
     category = relationship("Category")
     instructions = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-
 
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
