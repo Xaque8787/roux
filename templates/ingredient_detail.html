@@ -25,6 +25,7 @@
                         <p><strong>Name:</strong> {{ ingredient.name }}</p>
                         <p><strong>Category:</strong> {{ ingredient.category.name if ingredient.category else 'None' }}</p>
                         <p><strong>Vendor:</strong> {{ ingredient.vendor.name if ingredient.vendor else 'None' }}</p>
+                        <p><strong>Vendor Unit:</strong> {{ ingredient.vendor_unit.name if ingredient.vendor_unit else 'None' }}</p>
                     </div>
                     <div class="col-md-6">
                         <h6>Purchase Information</h6>

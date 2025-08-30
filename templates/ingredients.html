@@ -58,6 +58,26 @@
                         </div>
                     </div>
                     
+                    <!-- Vendor Unit Selection -->
+                    <div class="mb-3">
+                        <label for="vendor_unit_id" class="form-label">Vendor Unit</label>
+                        <div class="input-group">
+                            <select class="form-select" id="vendor_unit_id" name="vendor_unit_id" onchange="loadVendorUnitConversions()">
+                                <option value="">Select Vendor Unit</option>
+                                {% for vu in vendor_units %}
+                                <option value="{{ vu.id }}">{{ vu.name }}{% if vu.description %} - {{ vu.description }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vendorUnitModal">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="manageVendorUnitConversions()">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">Select a vendor unit to auto-populate conversion factors</small>
+                    </div>
+                    
                     <!-- Purchase Level -->
                     <h6 class="mt-3">Purchase Information</h6>
                     <div class="mb-3">
@@ -127,7 +147,7 @@
                     <!-- Usage Level -->
                     <h6 class="mt-3">Usage Units</h6>
                     <div class="mb-3">
-                        <small class="text-muted">Select usage units and enter conversion factors</small>
+                        <small class="text-muted">Select usage units and enter conversion factors. Vendor unit selections will auto-populate factors.</small>
                         <div class="input-group mb-2">
                             <input type="text" class="form-control form-control-sm" id="newUsageUnit" placeholder="Add new usage unit">
                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addUsageUnit()">
@@ -147,6 +167,9 @@
                                 <span class="input-group-text">{{ unit.name }}</span>
                                 <input type="number" class="form-control" name="conversion_{{ unit.id }}" 
                                        step="0.01" placeholder="Conversion factor" disabled>
+                                <span class="input-group-text text-muted" id="factor_help_{{ unit.id }}" style="display: none;">
+                                    <i class="fas fa-info-circle" title="Auto-populated from vendor unit"></i>
+                                </span>
                             </div>
                         </div>
                         {% endfor %}
@@ -173,6 +196,7 @@
                                 <th>Name</th>
                                 <th>Purchase Type</th>
                                 <th>Total Cost</th>
+                                <th>Vendor Unit</th>
                                 <th>Category</th>
                                 <th>Actions</th>
                             </tr>
@@ -187,6 +211,7 @@
                                     </span>
                                 </td>
                                 <td>${{ "%.2f"|format(ing.purchase_total_cost) }}</td>
+                                <td>{{ ing.vendor_unit.name if ing.vendor_unit else '-' }}</td>
                                 <td>{{ ing.category.name if ing.category else '-' }}</td>
                                 <td>
                                     <a href="/ingredients/{{ ing.id }}" class="btn btn-sm btn-info">
@@ -265,6 +290,83 @@
     </div>
 </div>
 
+<!-- Vendor Unit Modal -->
+<div class="modal fade" id="vendorUnitModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Vendor Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/vendor_units/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="vendorUnitName" class="form-label">Vendor Unit Name</label>
+                        <input type="text" class="form-control" id="vendorUnitName" name="name" 
+                               placeholder="e.g. 1 lb block, 5 lb bag, #10 can" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="vendorUnitDescription" class="form-label">Description (Optional)</label>
+                        <input type="text" class="form-control" id="vendorUnitDescription" name="description" 
+                               placeholder="Additional details about this unit">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Vendor Unit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Vendor Unit Conversions Modal -->
+<div class="modal fade" id="vendorUnitConversionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Manage Vendor Unit Conversions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="vendorUnitSelect" class="form-label">Select Vendor Unit</label>
+                    <select class="form-select" id="vendorUnitSelect" onchange="loadConversionsForManagement()">
+                        <option value="">Select Vendor Unit</option>
+                        {% for vu in vendor_units %}
+                        <option value="{{ vu.id }}">{{ vu.name }}{% if vu.description %} - {{ vu.description }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div id="conversionManagement" style="display: none;">
+                    <h6>Conversion Factors</h6>
+                    <small class="text-muted mb-3 d-block">Define how many of each usage unit equals one vendor unit</small>
+                    
+                    <div id="conversionInputs">
+                        {% for unit in usage_units %}
+                        <div class="mb-2">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">{{ unit.name }}</span>
+                                <input type="number" class="form-control" id="mgmt_conversion_{{ unit.id }}" 
+                                       step="0.01" placeholder="Conversion factor">
+                                <span class="input-group-text text-muted">per vendor unit</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveVendorUnitConversions()">
+                    <i class="fas fa-save"></i> Save Conversions
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // Toggle case fields based on purchase type
 document.addEventListener('DOMContentLoaded', function() {
@@ -296,6 +398,117 @@ function toggleConversion(unitId) {
         input.disabled = true;
         input.required = false;
         input.value = '';
+    }
+}
+
+// Load vendor unit conversions and pre-populate
+async function loadVendorUnitConversions() {
+    const vendorUnitSelect = document.getElementById('vendor_unit_id');
+    const vendorUnitId = vendorUnitSelect.value;
+    
+    if (!vendorUnitId) {
+        // Clear all conversion factors
+        document.querySelectorAll('[name^="conversion_"]').forEach(input => {
+            input.value = '';
+            document.getElementById(input.name.replace('conversion_', 'factor_help_')).style.display = 'none';
+        });
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/vendor_units/${vendorUnitId}/conversions`);
+        const conversions = await response.json();
+        
+        // Pre-populate conversion factors
+        Object.entries(conversions).forEach(([usageUnitId, conversionFactor]) => {
+            const checkbox = document.getElementById(`unit_${usageUnitId}`);
+            const input = document.querySelector(`input[name="conversion_${usageUnitId}"]`);
+            const helpIcon = document.getElementById(`factor_help_${usageUnitId}`);
+            
+            if (checkbox && input) {
+                checkbox.checked = true;
+                input.disabled = false;
+                input.required = true;
+                input.value = conversionFactor;
+                if (helpIcon) {
+                    helpIcon.style.display = 'inline-block';
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading vendor unit conversions:', error);
+    }
+}
+
+// Manage vendor unit conversions
+function manageVendorUnitConversions() {
+    const modal = new bootstrap.Modal(document.getElementById('vendorUnitConversionsModal'));
+    modal.show();
+}
+
+// Load conversions for management modal
+async function loadConversionsForManagement() {
+    const vendorUnitSelect = document.getElementById('vendorUnitSelect');
+    const vendorUnitId = vendorUnitSelect.value;
+    const managementDiv = document.getElementById('conversionManagement');
+    
+    if (!vendorUnitId) {
+        managementDiv.style.display = 'none';
+        return;
+    }
+    
+    managementDiv.style.display = 'block';
+    
+    try {
+        const response = await fetch(`/api/vendor_units/${vendorUnitId}/conversions`);
+        const conversions = await response.json();
+        
+        // Populate existing conversion factors
+        Object.entries(conversions).forEach(([usageUnitId, conversionFactor]) => {
+            const input = document.getElementById(`mgmt_conversion_${usageUnitId}`);
+            if (input) {
+                input.value = conversionFactor;
+            }
+        });
+    } catch (error) {
+        console.error('Error loading conversions for management:', error);
+    }
+}
+
+// Save vendor unit conversions
+async function saveVendorUnitConversions() {
+    const vendorUnitSelect = document.getElementById('vendorUnitSelect');
+    const vendorUnitId = vendorUnitSelect.value;
+    
+    if (!vendorUnitId) {
+        alert('Please select a vendor unit first.');
+        return;
+    }
+    
+    // Collect conversion data
+    const formData = new FormData();
+    document.querySelectorAll('[id^="mgmt_conversion_"]').forEach(input => {
+        if (input.value && parseFloat(input.value) > 0) {
+            const unitId = input.id.replace('mgmt_conversion_', '');
+            formData.append(`conversion_${unitId}`, input.value);
+        }
+    });
+    
+    try {
+        const response = await fetch(`/vendor_units/${vendorUnitId}/conversions`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            alert('Conversion factors saved successfully!');
+            bootstrap.Modal.getInstance(document.getElementById('vendorUnitConversionsModal')).hide();
+        } else {
+            alert('Error saving conversion factors.');
+        }
+    } catch (error) {
+        console.error('Error saving conversions:', error);
+        alert('Error saving conversion factors.');
     }
 }
 
