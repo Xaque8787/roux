@@ -25,87 +25,77 @@ def needs_setup(db: Session):
 
 # Helper function to create default categories
 def create_default_categories(db: Session):
+    """Create default categories if they don't exist"""
     default_categories = [
+        ("Proteins", "ingredient"),
+        ("Vegetables", "ingredient"),
+        ("Dairy", "ingredient"),
+        ("Grains", "ingredient"),
+        ("Spices", "ingredient"),
+        ("Oils", "ingredient"),
+        ("Appetizers", "dish"),
+        ("Entrees", "dish"),
+        ("Desserts", "dish"),
+        ("Beverages", "dish"),
+        ("Prep Items", "recipe"),
+        ("Sauces", "recipe"),
+        ("Sides", "recipe"),
+        ("Dry Storage", "inventory"),
+        ("Cold Storage", "inventory"),
+        ("Freezer", "inventory"),
+        ("Cleaning", "inventory")
+    ]
+    
+    for name, cat_type in default_categories:
+        existing = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
+        if not existing:
+            category = Category(name=name, type=cat_type)
+            db.add(category)
+    
     try:
-        default_categories = [
-            ("Proteins", "ingredient"),
-            ("Vegetables", "ingredient"),
-            ("Dairy", "ingredient"),
-            ("Grains", "ingredient"),
-            ("Spices", "ingredient"),
-            ("Oils", "ingredient"),
-            ("Appetizers", "dish"),
-            ("Entrees", "dish"),
-            ("Desserts", "dish"),
-            ("Beverages", "dish"),
-            ("Prep Items", "recipe"),
-            ("Sauces", "recipe"),
-            ("Sides", "recipe"),
-            ("Dry Storage", "inventory"),
-            ("Cold Storage", "inventory"),
-            ("Freezer", "inventory"),
-            ("Cleaning", "inventory")
-        ]
-        
-        for name, cat_type in default_categories:
-            # Check if category already exists
-            existing = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
-            if not existing:
-                category = Category(name=name, type=cat_type)
-                db.add(category)
-        
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"Error creating default categories: {e}")
-        # Continue anyway - categories might already exist
-    db.commit()
+        print(f"Error creating categories: {e}")
 
-# Helper function to create default units
 def create_default_units(db: Session):
-    # Create default vendor units
+    """Create default vendor and usage units if they don't exist"""
+    default_vendor_units = [
+        ("lb", "Pound"),
+        ("oz", "Ounce"),
+        ("gal", "Gallon"),
+        ("qt", "Quart"),
+        ("pt", "Pint"),
+        ("fl oz", "Fluid Ounce"),
+        ("kg", "Kilogram"),
+        ("g", "Gram"),
+        ("L", "Liter"),
+        ("mL", "Milliliter")
+    ]
+    
+    for name, description in default_vendor_units:
+        existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
+        if not existing:
+            unit = VendorUnit(name=name, description=description)
+            db.add(unit)
+    
+    default_usage_units = [
+        "lb", "oz", "kg", "g",
+        "gal", "qt", "pt", "cup", "fl oz", "tbsp", "tsp", "mL", "L",
+        "each", "piece", "slice", "clove", "head", "bunch", "can", "jar", "bottle", "bag", "box"
+    ]
+    
+    for name in default_usage_units:
+        existing = db.query(UsageUnit).filter(UsageUnit.name == name).first()
+        if not existing:
+            unit = UsageUnit(name=name)
+            db.add(unit)
+    
     try:
-        # Default vendor units
-        vendor_units = [
-            ("lb", "Pound"),
-            ("oz", "Ounce"),
-            ("gal", "Gallon"),
-            ("qt", "Quart"),
-            ("pt", "Pint"),
-            ("fl oz", "Fluid Ounce"),
-            ("kg", "Kilogram"),
-            ("g", "Gram"),
-            ("L", "Liter"),
-            ("mL", "Milliliter")
-        ]
-        
-        for name, description in vendor_units:
-            # Check if vendor unit already exists
-            existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
-            if not existing:
-                unit = VendorUnit(name=name, description=description)
-                db.add(unit)
-        
-        # Default usage units
-        usage_units = [
-            "lb", "oz", "g", "kg",  # Weight
-            "cup", "tbsp", "tsp", "fl oz", "gal", "qt", "pt", "mL", "L",  # Volume
-            "each", "piece", "slice", "can", "bottle", "bag", "box"  # Count
-        ]
-        
-        for name in usage_units:
-            # Check if usage unit already exists
-            existing = db.query(UsageUnit).filter(UsageUnit.name == name).first()
-            if not existing:
-                unit = UsageUnit(name=name)
-                db.add(unit)
-        
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"Error creating default units: {e}")
-        # Continue anyway - units might already exist
-    db.commit()
+        print(f"Error creating units: {e}")
     
     # Create default conversions
     conversions = [
