@@ -11,7 +11,6 @@ import os
 
 from .database import get_db, engine
 from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, Vendor, UsageUnit, IngredientUsageUnit
-from .models import VendorUnit, VendorUnitConversion
 from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
 
 # Create tables
@@ -296,14 +295,12 @@ async def list_ingredients(
     ingredients = db.query(Ingredient).all()
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
-    vendor_units = db.query(VendorUnit).all()
     usage_units = db.query(UsageUnit).all()
     return templates.TemplateResponse("ingredients.html", {
         "request": request,
         "ingredients": ingredients,
         "categories": categories,
         "vendors": vendors,
-        "vendor_units": vendor_units,
         "usage_units": usage_units,
         "current_user": current_user
     })
@@ -393,7 +390,6 @@ async def edit_ingredient_form(
     
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
-    vendor_units = db.query(VendorUnit).all()
     usage_units = db.query(UsageUnit).all()
     ingredient_usage_units = db.query(IngredientUsageUnit).filter(
         IngredientUsageUnit.ingredient_id == ingredient_id
@@ -407,7 +403,6 @@ async def edit_ingredient_form(
         "ingredient": ingredient,
         "categories": categories,
         "vendors": vendors,
-        "vendor_units": vendor_units,
         "usage_units": usage_units,
         "existing_conversions": existing_conversions,
         "current_user": current_user

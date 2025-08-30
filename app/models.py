@@ -23,23 +23,6 @@ class Vendor(Base):
     name = Column(String, nullable=False)
     contact_info = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-class VendorUnit(Base):
-    __tablename__ = "vendor_units"
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)  # "1 lb block", "5 lb bag", "#10 can", etc.
-    description = Column(String)  # Optional description
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-class VendorUnitConversion(Base):
-    __tablename__ = "vendor_unit_conversions"
-    id = Column(Integer, primary_key=True)
-    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
-    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    conversion_factor = Column(Float, nullable=False)
-    
-    vendor_unit = relationship("VendorUnit")
-    usage_unit = relationship("UsageUnit")
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)
@@ -57,7 +40,6 @@ class Ingredient(Base):
     name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
     vendor_id = Column(Integer, ForeignKey("vendors.id"))
-    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
     
     # Purchase Level
     purchase_type = Column(String)  # 'case' or 'single'
@@ -72,7 +54,6 @@ class Ingredient(Base):
     
     category = relationship("Category")
     vendor = relationship("Vendor")
-    vendor_unit = relationship("VendorUnit")
     usage_units = relationship("IngredientUsageUnit", back_populates="ingredient")
     
     @property

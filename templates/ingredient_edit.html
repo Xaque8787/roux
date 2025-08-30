@@ -196,39 +196,5 @@ function toggleConversion(unitId) {
         input.value = '';
     }
 }
-
-// Load vendor unit conversions and pre-populate
-async function loadVendorUnitConversions() {
-    const vendorUnitSelect = document.getElementById('vendor_unit_id');
-    const vendorUnitId = vendorUnitSelect.value;
-    
-    if (!vendorUnitId) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/vendor_units/${vendorUnitId}/conversions`);
-        const conversions = await response.json();
-        
-        // Pre-populate conversion factors that aren't already set
-        Object.entries(conversions).forEach(([usageUnitId, conversionFactor]) => {
-            const checkbox = document.getElementById(`unit_${usageUnitId}`);
-            const input = document.querySelector(`input[name="conversion_${usageUnitId}"]`);
-            const helpIcon = document.getElementById(`factor_help_${usageUnitId}`);
-            
-            if (checkbox && input && !input.value) {
-                checkbox.checked = true;
-                input.disabled = false;
-                input.required = true;
-                input.value = conversionFactor;
-                if (helpIcon) {
-                    helpIcon.style.display = 'inline-block';
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Error loading vendor unit conversions:', error);
-    }
-}
 </script>
 {% endblock %}
