@@ -1321,6 +1321,63 @@ async def delete_utility(
     return RedirectResponse("/utilities", status_code=302)
 
 # API endpoints for dishes
+@app.get("/api/ingredients/search")
+async def search_ingredients(
+    q: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Search ingredients for autocomplete"""
+    ingredients = db.query(Ingredient).filter(
+        Ingredient.name.ilike(f"%{q}%")
+    ).limit(10).all()
+    
+    result = []
+    for ingredient in ingredients:
+        usage_units = []
+        for iu in ingredient.usage_units:
+            usage_units.append({
+                "id": iu.usage_unit_id,
+                "name": iu.usage_unit.name,
+                "price_per_unit": iu.price_per_usage_unit
+            })
+        
+        result.append({
+            "id": ingredient.id,
+            "name": ingredient.name,
+            "category": ingredient.category.name if ingredient.category else None,
+            "usage_units": usage_units
+        })
+    
+    return result
+
+@app.get("/api/ingredients/all")
+async def get_all_ingredients(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all ingredients for dropdown"""
+    ingredients = db.query(Ingredient).all()
+    
+    result = []
+    for ingredient in ingredients:
+        usage_units = []
+        for iu in ingredient.usage_units:
+            usage_units.append({
+                "id": iu.usage_unit_id,
+                "name": iu.usage_unit.name,
+                "price_per_unit": iu.price_per_usage_unit
+            })
+        
+        result.append({
+            "id": ingredient.id,
+            "name": ingredient.name,
+            "category": ingredient.category.name if ingredient.category else None,
+            "usage_units": usage_units
+        })
+    
+    return result
+
 @app.get("/api/batches/search")
 async def search_batches(
     q: str,
