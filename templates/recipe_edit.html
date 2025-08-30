@@ -196,7 +196,7 @@ function showUsageUnitSelection(ingredient) {
     
     let usageUnitOptions = '';
     ingredient.usage_units.forEach(unit => {
-        usageUnitOptions += `<option value="${unit.id}" data-price="${unit.price_per_usage_unit}">${unit.name} ($${unit.price_per_usage_unit.toFixed(4)}/unit)</option>`;
+        usageUnitOptions += `<option value="${unit.usage_unit_id}" data-price="${unit.price_per_usage_unit}">${unit.usage_unit_name} ($${unit.price_per_usage_unit.toFixed(4)}/unit)</option>`;
     });
     
     const modal = document.createElement('div');
