@@ -194,7 +194,26 @@ function toggleConversion(unitId) {
         input.disabled = true;
         input.required = false;
         input.value = '';
+        if (autoIcon) {
+            autoIcon.style.display = 'none';
+        }
     }
 }
+
+// Add event listeners for weight calculation
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('purchase_weight_volume').addEventListener('input', calculateItemWeight);
+    document.getElementById('items_per_case').addEventListener('input', calculateItemWeight);
+});
+
+// Add to existing DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing code ...
+    
+    // Load conversions if vendor unit is already selected
+    if (document.getElementById('vendor_unit_id').value) {
+        loadVendorUnitConversions();
+    }
+});
 </script>
 {% endblock %}

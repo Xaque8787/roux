@@ -35,8 +35,11 @@
                         </p>
                         <p><strong>Purchase Unit:</strong> {{ ingredient.purchase_unit_name }}</p>
                         <p><strong>Total Cost:</strong> ${{ "%.2f"|format(ingredient.purchase_total_cost) }}</p>
-                        {% if ingredient.purchase_quantity_description %}
-                        <p><strong>Description:</strong> {{ ingredient.purchase_quantity_description }}</p>
+                        {% if ingredient.vendor_unit %}
+                        <p><strong>Vendor Unit:</strong> {{ ingredient.vendor_unit.name }} ({{ ingredient.vendor_unit.description }})</p>
+                        {% endif %}
+                        {% if ingredient.purchase_weight_volume %}
+                        <p><strong>Total Weight/Volume:</strong> {{ ingredient.purchase_weight_volume }} {{ ingredient.vendor_unit.name if ingredient.vendor_unit else '' }}</p>
                         {% endif %}
                         {% if ingredient.breakable_case %}
                         <p><span class="badge bg-success">Breakable Case</span></p>
@@ -50,7 +53,9 @@
                     <div class="col-md-6">
                         <h6>Item Information</h6>
                         <p><strong>Items per Case:</strong> {{ ingredient.items_per_case }}</p>
-                        <p><strong>Item Unit Name:</strong> {{ ingredient.item_unit_name }}</p>
+                        {% if ingredient.item_weight_volume and ingredient.vendor_unit %}
+                        <p><strong>Weight/Volume per Item:</strong> {{ "%.3f"|format(ingredient.item_weight_volume) }} {{ ingredient.vendor_unit.name }}</p>
+                        {% endif %}
                         <p><strong>Cost per Item:</strong> ${{ "%.2f"|format(ingredient.item_cost) }}</p>
                     </div>
                 </div>

@@ -595,6 +595,35 @@ async def create_vendor(
     db.commit()
     return RedirectResponse("/ingredients", status_code=302)
 
+# Vendor Unit management routes
+@app.post("/vendor_units/new")
+async def create_vendor_unit(
+    name: str = Form(...),
+    description: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    vendor_unit = VendorUnit(name=name, description=description)
+    db.add(vendor_unit)
+    db.commit()
+    return RedirectResponse("/ingredients", status_code=302)
+
+@app.get("/api/vendor_units/{vendor_unit_id}/conversions")
+async def get_vendor_unit_conversions(
+    vendor_unit_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get conversion factors for a vendor unit"""
+    conversions = db.query(VendorUnitConversion).filter(
+        VendorUnitConversion.vendor_unit_id == vendor_unit_id
+    ).all()
+    
+    return {
+        conversion.usage_unit_id: conversion.conversion_factor 
+        for conversion in conversions
+    }
+
 # Usage Unit management routes
 @app.post("/usage_units/new")
 async def create_usage_unit(

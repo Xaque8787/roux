@@ -77,9 +77,36 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="purchase_unit_name" class="form-label">Purchase Unit Name</label>
+                                <label for="purchase_unit_name" class="form-label">Container Type</label>
                                 <input type="text" class="form-control" id="purchase_unit_name" name="purchase_unit_name" 
-                                       placeholder="e.g. Case, Bag, Sack, Box" required>
+                                       placeholder="e.g. Case, Bag, Sack, Box, Jug" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="vendor_unit_id" class="form-label">Vendor Unit</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="vendor_unit_id" name="vendor_unit_id" onchange="loadVendorUnitConversions()">
+                                        <option value="">Select Unit</option>
+                                        {% for unit in vendor_units %}
+                                        <option value="{{ unit.id }}">{{ unit.name }} ({{ unit.description }})</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vendorUnitModal">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="purchase_weight_volume" class="form-label">Total Weight/Volume</label>
+                                <input type="number" class="form-control" id="purchase_weight_volume" name="purchase_weight_volume" 
+                                       step="0.01" placeholder="e.g. 25, 72, 5" required>
+                                <small class="text-muted">Total weight/volume in vendor units</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -91,12 +118,6 @@
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="purchase_quantity_description" class="form-label">Purchase Quantity Description</label>
-                        <input type="text" class="form-control" id="purchase_quantity_description" name="purchase_quantity_description" 
-                               placeholder="e.g. 36 × 1 lb blocks, 50 lb bag">
-                    </div>
-                    
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="breakable_case" name="breakable_case">
                         <label class="form-check-label" for="breakable_case">
@@ -106,19 +127,20 @@
                     
                     <!-- Item Level (for cases) -->
                     <div id="caseFields" style="display: none;">
-                        <h6 class="mt-3">Item Information (Case Details)</h6>
+                        <h6 class="mt-3">Case Information</h6>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="items_per_case" class="form-label">Items per Case</label>
-                                    <input type="number" class="form-control" id="items_per_case" name="items_per_case">
+                                    <input type="number" class="form-control" id="items_per_case" name="items_per_case" onchange="calculateItemWeight()">
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="item_unit_name" class="form-label">Item Unit Name</label>
-                                    <input type="text" class="form-control" id="item_unit_name" name="item_unit_name" 
-                                           placeholder="e.g. 1 lb block, #10 can">
+                                    <label class="form-label">Weight/Volume per Item</label>
+                                    <div class="form-control-plaintext" id="itemWeightDisplay">
+                                        <span class="text-muted">Enter items per case</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -127,7 +149,9 @@
                     <!-- Usage Level -->
                     <h6 class="mt-3">Usage Units</h6>
                     <div class="mb-3">
-                        <small class="text-muted">Select usage units and enter conversion factors</small>
+                        <small class="text-muted">Select usage units and enter conversion factors. 
+                        <i class="fas fa-info-circle text-info" title="Conversion factors may be pre-populated based on vendor unit selection"></i>
+                        </small>
                         <div class="input-group mb-2">
                             <input type="text" class="form-control form-control-sm" id="newUsageUnit" placeholder="Add new usage unit">
                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addUsageUnit()">
@@ -147,6 +171,9 @@
                                 <span class="input-group-text">{{ unit.name }}</span>
                                 <input type="number" class="form-control" name="conversion_{{ unit.id }}" 
                                        step="0.01" placeholder="Conversion factor" disabled>
+                                <span class="input-group-text" id="auto_{{ unit.id }}" style="display: none;">
+                                    <i class="fas fa-magic text-info" title="Auto-populated from vendor unit"></i>
+                                </span>
                             </div>
                         </div>
                         {% endfor %}
@@ -171,7 +198,7 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Purchase Type</th>
+                                <th>Purchase Info</th>
                                 <th>Total Cost</th>
                                 <th>Category</th>
                                 <th>Actions</th>
@@ -185,6 +212,13 @@
                                     <span class="badge {% if ing.purchase_type == 'case' %}bg-info{% else %}bg-secondary{% endif %}">
                                         {{ ing.purchase_type.title() }}
                                     </span>
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ ing.purchase_weight_volume }} {{ ing.vendor_unit.name if ing.vendor_unit else '' }}
+                                        {% if ing.purchase_type == 'case' and ing.items_per_case %}
+                                        <br>{{ ing.items_per_case }} items
+                                        {% endif %}
+                                    </small>
                                 </td>
                                 <td>${{ "%.2f"|format(ing.purchase_total_cost) }}</td>
                                 <td>{{ ing.category.name if ing.category else '-' }}</td>
@@ -265,6 +299,34 @@
     </div>
 </div>
 
+<!-- Vendor Unit Modal -->
+<div class="modal fade" id="vendorUnitModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Vendor Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/vendor_units/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="vendorUnitName" class="form-label">Unit Name</label>
+                        <input type="text" class="form-control" id="vendorUnitName" name="name" placeholder="e.g. lb, oz, gal" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="vendorUnitDescription" class="form-label">Description</label>
+                        <input type="text" class="form-control" id="vendorUnitDescription" name="description" placeholder="e.g. Pound, Ounce, Gallon">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Vendor Unit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 // Toggle case fields based on purchase type
 document.addEventListener('DOMContentLoaded', function() {
@@ -278,16 +340,71 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             caseFields.style.display = 'none';
         }
+        calculateItemWeight();
     }
     
     singleRadio.addEventListener('change', toggleCaseFields);
     caseRadio.addEventListener('change', toggleCaseFields);
 });
 
+// Calculate item weight for cases
+function calculateItemWeight() {
+    const caseRadio = document.getElementById('case');
+    const totalWeight = parseFloat(document.getElementById('purchase_weight_volume').value) || 0;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    const vendorUnitSelect = document.getElementById('vendor_unit_id');
+    const itemWeightDisplay = document.getElementById('itemWeightDisplay');
+    
+    if (caseRadio.checked && totalWeight > 0 && itemsPerCase > 0) {
+        const itemWeight = totalWeight / itemsPerCase;
+        const vendorUnitName = vendorUnitSelect.selectedOptions[0]?.text.split(' (')[0] || '';
+        itemWeightDisplay.innerHTML = `<strong>${itemWeight.toFixed(3)} ${vendorUnitName} per item</strong>`;
+    } else {
+        itemWeightDisplay.innerHTML = '<span class="text-muted">Enter total weight and items per case</span>';
+    }
+}
+
+// Load vendor unit conversions and pre-populate
+async function loadVendorUnitConversions() {
+    const vendorUnitSelect = document.getElementById('vendor_unit_id');
+    const vendorUnitId = vendorUnitSelect.value;
+    
+    calculateItemWeight(); // Update item weight display
+    
+    if (!vendorUnitId) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/vendor_units/${vendorUnitId}/conversions`);
+        const conversions = await response.json();
+        
+        // Pre-populate conversion factors
+        Object.entries(conversions).forEach(([usageUnitId, conversionFactor]) => {
+            const checkbox = document.getElementById(`unit_${usageUnitId}`);
+            const input = document.querySelector(`input[name="conversion_${usageUnitId}"]`);
+            const autoIcon = document.getElementById(`auto_${usageUnitId}`);
+            
+            if (checkbox && input && !input.value) { // Only populate if empty
+                checkbox.checked = true;
+                input.disabled = false;
+                input.required = true;
+                input.value = conversionFactor;
+                if (autoIcon) {
+                    autoIcon.style.display = 'block';
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading vendor unit conversions:', error);
+    }
+}
+
 // Toggle conversion factor input
 function toggleConversion(unitId) {
     const checkbox = document.getElementById(`unit_${unitId}`);
     const input = document.querySelector(`input[name="conversion_${unitId}"]`);
+    const autoIcon = document.getElementById(`auto_${unitId}`);
     
     if (checkbox.checked) {
         input.disabled = false;
@@ -296,6 +413,9 @@ function toggleConversion(unitId) {
         input.disabled = true;
         input.required = false;
         input.value = '';
+        if (autoIcon) {
+            autoIcon.style.display = 'none';
+        }
     }
 }
 
@@ -320,5 +440,11 @@ function addUsageUnit() {
         form.submit();
     }
 }
+
+// Add event listeners for weight calculation
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('purchase_weight_volume').addEventListener('input', calculateItemWeight);
+    document.getElementById('items_per_case').addEventListener('input', calculateItemWeight);
+});
 </script>
 {% endblock %}
