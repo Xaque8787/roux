@@ -131,10 +131,15 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadAllIngredients() {
     try {
         const response = await fetch('/api/ingredients/all');
+        if (!response.ok) {
+            throw new Error('Failed to load ingredients');
+        }
         allIngredients = await response.json();
+        console.log('Loaded ingredients:', allIngredients);
         filterIngredients(''); // Show all ingredients initially
     } catch (error) {
         console.error('Error loading ingredients:', error);
+        document.getElementById('ingredientDropdown').innerHTML = '<div class="dropdown-item-text text-danger">Error loading ingredients</div>';
     }
 }
 
@@ -177,22 +182,27 @@ function filterIngredients(query) {
 }
 
 function selectIngredient(ingredient) {
+    console.log('Selected ingredient:', ingredient);
+    
     // Check if ingredient already selected
     if (selectedIngredients.find(si => si.ingredient_id === ingredient.id)) {
         alert('This ingredient is already added to the recipe.');
         return;
     }
     
-    // Show usage unit selection
-    showUsageUnitSelection(ingredient);
-    currentSelectedIngredient = ingredient;
-}
-
-function showUsageUnitSelection(ingredient) {
-    if (ingredient.usage_units.length === 0) {
+    // Check if ingredient has usage units
+    if (!ingredient.usage_units || ingredient.usage_units.length === 0) {
         alert('This ingredient has no usage units defined. Please edit the ingredient first.');
         return;
     }
+    
+    // Store current ingredient and show usage unit selection
+    currentSelectedIngredient = ingredient;
+    showUsageUnitSelection(ingredient);
+}
+
+function showUsageUnitSelection(ingredient) {
+    console.log('Showing usage unit selection for:', ingredient);
     
     let usageUnitOptions = '';
     ingredient.usage_units.forEach(unit => {
@@ -201,6 +211,7 @@ function showUsageUnitSelection(ingredient) {
     
     const modal = document.createElement('div');
     modal.className = 'modal fade';
+    modal.id = 'ingredientModal';
     modal.innerHTML = `
         <div class="modal-dialog">
             <div class="modal-content">
@@ -249,6 +260,7 @@ function showUsageUnitSelection(ingredient) {
     
     quantityInput.addEventListener('input', updateCost);
     usageUnitSelect.addEventListener('change', updateCost);
+    updateCost(); // Initial calculation
     
     // Clean up modal when closed
     modal.addEventListener('hidden.bs.modal', function() {
@@ -257,6 +269,9 @@ function showUsageUnitSelection(ingredient) {
 }
 
 function addIngredientToRecipe() {
+    console.log('Adding ingredient to recipe...');
+    
+    const modal = document.getElementById('ingredientModal');
     const usageUnitSelect = document.querySelector('#usageUnitSelect');
     const quantityInput = document.querySelector('#quantityInput');
     
@@ -270,6 +285,15 @@ function addIngredientToRecipe() {
     const usageUnitId = parseInt(selectedOption.value);
     const usageUnitName = selectedOption.text.split(' (')[0]; // Remove price part
     const price = parseFloat(selectedOption.dataset.price);
+    
+    console.log('Adding ingredient:', {
+        ingredient_id: currentSelectedIngredient.id,
+        ingredient_name: currentSelectedIngredient.name,
+        usage_unit_id: usageUnitId,
+        usage_unit_name: usageUnitName,
+        quantity: quantity,
+        estimated_cost: quantity * price
+    });
     
     // Add to selected ingredients
     selectedIngredients.push({
@@ -288,14 +312,13 @@ function addIngredientToRecipe() {
     document.getElementById('ingredientSearch').value = '';
     
     // Close modal
-    const modal = document.querySelector('.modal.show');
-    if (modal) {
-        bootstrap.Modal.getInstance(modal).hide();
-    }
+    bootstrap.Modal.getInstance(modal).hide();
 }
 
 function updateSelectedIngredientsDisplay() {
     const container = document.getElementById('selectedIngredients');
+    
+    console.log('Updating display with ingredients:', selectedIngredients);
     
     if (selectedIngredients.length === 0) {
         container.innerHTML = '<p class="text-muted">No ingredients added yet.</p>';

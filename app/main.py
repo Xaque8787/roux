@@ -1419,7 +1419,23 @@ async def search_ingredients(
 @app.get("/api/ingredients/all")
 async def get_all_ingredients(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    result = []
+    for ing in ingredients:
+        usage_units = []
+        for iu in ing.usage_units:
+            usage_units.append({
+                "usage_unit_id": iu.usage_unit_id,
+                "usage_unit_name": iu.usage_unit.name,
+                "price_per_usage_unit": iu.price_per_usage_unit
+            })
+        
+        result.append({
+            "id": ing.id,
+            "name": ing.name,
+            "category": ing.category.name if ing.category else None,
+            "usage_units": usage_units
+        })
+    return result
 ):
     """Get all ingredients for dropdown"""
     ingredients = db.query(Ingredient).all()
