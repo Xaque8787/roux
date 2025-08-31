@@ -59,15 +59,10 @@
                     
                     <h6>Batch Portions:</h6>
                     <div class="mb-3">
-                        <div class="input-group">
-                            <div class="position-relative w-100">
-                                <input type="text" class="form-control" id="batchSearch" 
-                                       placeholder="Search for batches..." autocomplete="off">
-                                <div id="batchSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
-                            </div>
-                            <button type="button" class="btn btn-outline-secondary" id="addBatchBtn">
-                                <i class="fas fa-plus"></i> Add
-                            </button>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="batchSearch" 
+                                   placeholder="Search for batches..." autocomplete="off">
+                            <div id="batchSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
                         </div>
                     </div>
                     
@@ -118,19 +113,32 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(searchTimeout);
         const query = this.value.trim();
         
-        if (query.length < 2) {
+        if (query.length < 1) {
             suggestions.style.display = 'none';
             return;
         }
         
         searchTimeout = setTimeout(() => {
-            fetch(`/api/batches/search?q=${encodeURIComponent(query)}`)
+            const url = query.length === 0 ? '/api/batches/all' : `/api/batches/search?q=${encodeURIComponent(query)}`;
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     displayBatchSuggestions(data);
                 })
                 .catch(error => console.error('Error:', error));
-        }, 300);
+        }, query.length === 0 ? 0 : 300);
+    });
+    
+    // Show all batches when focused
+    batchSearch.addEventListener('focus', function() {
+        if (this.value.trim().length === 0) {
+            fetch('/api/batches/all')
+                .then(response => response.json())
+                .then(data => {
+                    displayBatchSuggestions(data);
+                })
+                .catch(error => console.error('Error:', error));
+        }
     });
     
     // Hide suggestions when clicking outside

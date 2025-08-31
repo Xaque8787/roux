@@ -43,14 +43,13 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="yield_unit_id" class="form-label">Yield Unit</label>
-                                <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
-                                    <option value="">Select Unit</option>
-                                    {% for unit in usage_units %}
-                                    <option value="{{ unit.id }}" {% if batch.yield_unit_id == unit.id %}selected{% endif %}>
-                                        {{ unit.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
+                                <div class="position-relative">
+                                    <input type="text" class="form-control" id="yieldUnitSearch" 
+                                           placeholder="Search for yield unit..." autocomplete="off" required>
+                                    <div id="yieldUnitDropdown" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                                <input type="hidden" id="yield_unit_id" name="yield_unit_id" required>
+                                <small class="text-muted">Select from all available usage units</small>
                             </div>
                         </div>
                     </div>

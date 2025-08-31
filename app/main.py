@@ -1086,6 +1086,34 @@ async def dish_detail(
         else:
             # Different unit - need conversion
             conversion_factor = get_unit_conversion_factor(
+# API endpoint to get all batches
+@app.get("/api/batches/all")
+async def get_all_batches(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    print("DEBUG: Getting all batches")
+    
+    batches = db.query(Batch).join(Recipe).all()
+    
+    print(f"DEBUG: Found {len(batches)} total batches")
+    
+    result = []
+    for batch in batches:
+        # Calculate recipe cost
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_cost = recipe_cost + batch.estimated_labor_cost
+        cost_per_unit = total_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+        
+        result.append({
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "category": batch.recipe.category.name if batch.recipe.category else None,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
+            "yield_unit_id": batch.yield_unit_id,
+            "cost_per_unit": cost_per_unit
+        })
+    
+    return result
                 portion.batch.yield_unit_id, 
                 portion.portion_unit_id, 
                 portion.batch_id, 
