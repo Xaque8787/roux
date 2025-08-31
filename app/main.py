@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 from datetime import datetime, date, timedelta
 from typing import Optional, List
@@ -1752,24 +1752,45 @@ async def api_ingredients_all(db: Session = Depends(get_db)):
     return result
 
 @app.get("/api/recipes/{recipe_id}/usage_units")
-async def api_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db)):
-    """Get all usage units used in a recipe"""
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == recipe_id
-    ).all()
-    
-    usage_units = []
-    seen_units = set()
-    
-    for ri in recipe_ingredients:
-        if ri.usage_unit_id not in seen_units:
-            usage_units.append({
-                "id": ri.usage_unit_id,
-                "name": ri.usage_unit.name
-            })
-            seen_units.add(ri.usage_unit_id)
-    
-    return usage_units
+async def api_recipes_usage_units(recipe_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get all usage units from ingredients used in a recipe"""
+    try:
+        logger.debug(f"Loading usage units for recipe {recipe_id}")
+        
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == recipe_id
+        ).options(
+            joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
+        ).all()
+        
+        logger.debug(f"Found {len(recipe_ingredients)} recipe ingredients")
+        
+        usage_units = []
+        seen_unit_ids = set()
+        
+        for recipe_ingredient in recipe_ingredients:
+            logger.debug(f"Processing ingredient: {recipe_ingredient.ingredient.name}")
+            logger.debug(f"Ingredient has {len(recipe_ingredient.ingredient.usage_units)} usage units")
+            
+            for ingredient_usage in recipe_ingredient.ingredient.usage_units:
+                logger.debug(f"  - Usage unit: {ingredient_usage.usage_unit.name}")
+                
+                if ingredient_usage.usage_unit.id not in seen_unit_ids:
+                    logger.debug(f"    Adding to available units")
+                    usage_units.append({
+                        "id": ingredient_usage.usage_unit.id,
+                        "name": ingredient_usage.usage_unit.name
+                    })
+                    seen_unit_ids.add(ingredient_usage.usage_unit.id)
+                else:
+                    logger.debug(f"    Already in available units")
+        
+        logger.debug(f"Final usage units: {[u['name'] for u in usage_units]}")
+        return JSONResponse(usage_units)
+        
+    except Exception as e:
+        logger.error(f"Error loading recipe usage units: {str(e)}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/api/batches/search")
 async def api_batches_search(q: str = "", db: Session = Depends(get_db)):
