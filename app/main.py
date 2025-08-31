@@ -1183,19 +1183,16 @@ def get_all_batches(db: Session = Depends(get_db)):
 @app.get("/api/batches/{batch_id}/labor_stats")
 async def get_batch_labor_stats(
     batch_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     from datetime import datetime, timedelta
-    from sqlalchemy import and_
     
-    # Get all completed tasks for inventory items linked to this batch
+    # Find all completed tasks for this batch through inventory items
     completed_tasks = db.query(Task).join(InventoryItem).filter(
-        and_(
-            InventoryItem.batch_id == batch_id,
-            Task.finished_at.isnot(None),
-            Task.assigned_to_id.isnot(None)
-        )
+        InventoryItem.batch_id == batch_id,
+        Task.finished_at.isnot(None),
+        Task.assigned_to_id.isnot(None)
     ).all()
     
     if not completed_tasks:
@@ -1205,11 +1202,12 @@ async def get_batch_labor_stats(
             "most_recent_date": None,
             "average_week": 0,
             "average_month": 0,
-            "average_year": 0,
-            "average_all_time": 0
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
         }
     
-    # Calculate costs for each task
+    # Calculate costs for all tasks
     task_costs = []
     for task in completed_tasks:
         if task.assigned_to and task.total_time_minutes > 0:
@@ -1227,8 +1225,9 @@ async def get_batch_labor_stats(
             "most_recent_date": None,
             "average_week": 0,
             "average_month": 0,
-            "average_year": 0,
-            "average_all_time": 0
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
         }
     
     # Sort by date (most recent first)
@@ -1237,28 +1236,28 @@ async def get_batch_labor_stats(
     # Most recent
     most_recent = task_costs[0]
     
-    # Calculate averages for different time periods
+    # Calculate time-based averages
     now = datetime.utcnow()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
-    year_ago = now - timedelta(days=365)
     
-    week_costs = [tc["cost"] for tc in task_costs if tc["date"] >= week_ago]
-    month_costs = [tc["cost"] for tc in task_costs if tc["date"] >= month_ago]
-    year_costs = [tc["cost"] for tc in task_costs if tc["date"] >= year_ago]
-    all_costs = [tc["cost"] for tc in task_costs]
+    week_tasks = [tc for tc in task_costs if tc["date"] >= week_ago]
+    month_tasks = [tc for tc in task_costs if tc["date"] >= month_ago]
+    
+    # Calculate averages
+    average_week = sum(tc["cost"] for tc in week_tasks) / len(week_tasks) if week_tasks else 0
+    average_month = sum(tc["cost"] for tc in month_tasks) / len(month_tasks) if month_tasks else 0
+    average_all_time = sum(tc["cost"] for tc in task_costs) / len(task_costs)
     
     return {
-        "task_count": len(completed_tasks),
+        "task_count": len(task_costs),
         "most_recent_cost": most_recent["cost"],
         "most_recent_date": most_recent["date"].strftime('%Y-%m-%d'),
-        "average_week": sum(week_costs) / len(week_costs) if week_costs else 0,
-        "average_month": sum(month_costs) / len(month_costs) if month_costs else 0,
-        "average_year": sum(year_costs) / len(year_costs) if year_costs else 0,
-        "average_all_time": sum(all_costs) / len(all_costs) if all_costs else 0,
-        "week_task_count": len(week_costs),
-        "month_task_count": len(month_costs),
-        "year_task_count": len(year_costs)
+        "average_week": average_week,
+        "average_month": average_month,
+        "average_all_time": average_all_time,
+        "week_task_count": len(week_tasks),
+        "month_task_count": len(month_tasks)
     }
 
 # Dishes
