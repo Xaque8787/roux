@@ -237,6 +237,74 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
         "current_user": current_user
     })
 
+# Add API endpoint to get available portion units for a batch
+@app.get("/api/batches/{batch_id}/portion_units")
+async def get_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
+    """Get all available portion units for a batch (yield unit + ingredient usage units)"""
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get recipe ingredients and their usage units
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == batch.recipe_id
+    ).all()
+    
+    # Collect all unique usage units from ingredients
+    usage_unit_ids = set()
+    
+    # Add batch yield unit
+    if batch.yield_unit_id:
+        usage_unit_ids.add(batch.yield_unit_id)
+    
+    # Add usage units from recipe ingredients
+    for ri in recipe_ingredients:
+        usage_unit_ids.add(ri.usage_unit_id)
+    
+    # Get usage unit details
+    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
+    
+    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+
+@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
+async def get_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Depends(get_db)):
+    """Calculate cost per unit for a specific usage unit in a batch"""
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get recipe ingredients for cost calculation
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == batch.recipe_id
+    ).all()
+    
+    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+    
+    # If requesting yield unit, return cost per yield unit
+    if unit_id == batch.yield_unit_id:
+        if batch.yield_amount > 0:
+            return {"cost_per_unit": total_batch_cost / batch.yield_amount}
+        return {"cost_per_unit": 0}
+    
+    # For other units, need to find conversion from yield unit to requested unit
+    # This is complex - for now, we'll estimate based on ingredient ratios
+    # Find if this unit is used by any ingredient in the recipe
+    for ri in recipe_ingredients:
+        if ri.usage_unit_id == unit_id:
+            # Calculate what portion of the batch this ingredient represents
+            ingredient_cost_ratio = ri.cost / total_recipe_cost if total_recipe_cost > 0 else 0
+            # Estimate cost per unit based on ingredient usage in recipe
+            if ri.quantity > 0:
+                cost_per_recipe_unit = (total_batch_cost * ingredient_cost_ratio) / ri.quantity
+                return {"cost_per_unit": cost_per_recipe_unit}
+    
+    # Fallback: assume 1:1 ratio with yield unit
+    if batch.yield_amount > 0:
+        return {"cost_per_unit": total_batch_cost / batch.yield_amount}
+    
+    return {"cost_per_unit": 0}
+
 @app.get("/dishes/{dish_id}", response_class=HTMLResponse)
 async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     dish = db.query(Dish).filter(Dish.id == dish_id).first()
@@ -334,7 +402,7 @@ async def update_dish(dish_id: int, request: Request, db: Session = Depends(get_
                 dish_id=dish.id,
                 batch_id=portion_data["batch_id"],
                 portion_size=portion_data["portion_size"],
-                portion_unit_id=None  # Using batch yield unit
+                portion_unit_id=portion_data.get("portion_unit_id")
             )
             db.add(portion)
     
@@ -355,6 +423,59 @@ async def delete_dish(dish_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
     
     return RedirectResponse(url="/dishes", status_code=303)
+
+def calculate_portion_cost(portion, db, use_actual_labor=False):
+    """Calculate the cost of a dish batch portion with flexible units"""
+    if not portion.batch or not portion.portion_size:
+        return 0
+    
+    # Get recipe ingredients for cost calculation
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == portion.batch.recipe_id
+    ).all()
+    
+    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    
+    # Get labor cost
+    if use_actual_labor:
+        labor_cost = get_batch_actual_labor_cost(portion.batch.id, db)
+        if labor_cost is None:
+            labor_cost = portion.batch.estimated_labor_cost
+    else:
+        labor_cost = portion.batch.estimated_labor_cost
+    
+    total_batch_cost = total_recipe_cost + labor_cost
+    
+    # If no portion unit specified, use yield unit
+    if not portion.portion_unit_id:
+        if portion.batch.yield_amount > 0:
+            cost_per_yield_unit = total_batch_cost / portion.batch.yield_amount
+            return portion.portion_size * cost_per_yield_unit
+        return 0
+    
+    # If portion unit is same as yield unit
+    if portion.portion_unit_id == portion.batch.yield_unit_id:
+        if portion.batch.yield_amount > 0:
+            cost_per_yield_unit = total_batch_cost / portion.batch.yield_amount
+            return portion.portion_size * cost_per_yield_unit
+        return 0
+    
+    # For different units, find conversion through recipe ingredients
+    for ri in recipe_ingredients:
+        if ri.usage_unit_id == portion.portion_unit_id:
+            # Calculate what portion of the batch this ingredient represents
+            ingredient_cost_ratio = ri.cost / total_recipe_cost if total_recipe_cost > 0 else 0
+            # Calculate cost per unit based on ingredient usage in recipe
+            if ri.quantity > 0:
+                cost_per_recipe_unit = (total_batch_cost * ingredient_cost_ratio) / ri.quantity
+                return portion.portion_size * cost_per_recipe_unit
+    
+    # Fallback: assume 1:1 ratio with yield unit
+    if portion.batch.yield_amount > 0:
+        cost_per_yield_unit = total_batch_cost / portion.batch.yield_amount
+        return portion.portion_size * cost_per_yield_unit
+    
+    return 0
 
 def get_batch_actual_labor_cost(db: Session, batch_id: int) -> float:
     """Get the most recent actual labor cost for a batch from completed tasks"""
@@ -1195,13 +1316,14 @@ async def create_dish(
     # Process batch portions
     try:
         batch_portions = json.loads(batch_portions_data)
-        for portion_data in batch_portions:
-            dish_batch_portion = DishBatchPortion(
+        for batch_data in batch_portions:
+            portion = DishBatchPortion(
                 dish_id=dish.id,
-                batch_id=portion_data["batch_id"],
-                portion_size=portion_data["portion_size"]
+                batch_id=batch_data["batch_id"],
+                portion_size=batch_data["portion_size"],
+                portion_unit_id=batch_data.get("portion_unit_id")
             )
-            db.add(dish_batch_portion)
+            db.add(portion)
     except (json.JSONDecodeError, KeyError):
         pass
     
@@ -1224,18 +1346,36 @@ async def dish_detail(
         joinedload(DishBatchPortion.batch).joinedload(Batch.yield_unit)
     ).filter(DishBatchPortion.dish_id == dish_id).all()
     
-    total_cost = sum(portion.cost for portion in dish_batch_portions)
-    profit = dish.sale_price - total_cost
-    profit_margin = (profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    # Calculate expected costs (using estimated labor)
+    expected_total_cost = 0
+    for portion in dish_batch_portions:
+        portion.expected_cost = calculate_portion_cost(portion, db, use_actual_labor=False)
+        expected_total_cost += portion.expected_cost
+    
+    # Calculate actual costs (using actual labor from completed tasks)
+    actual_total_cost = 0
+    for portion in dish_batch_portions:
+        portion.actual_cost = calculate_portion_cost(portion, db, use_actual_labor=True)
+        actual_total_cost += portion.actual_cost
+    
+    # Calculate profit margins
+    expected_profit = dish.sale_price - expected_total_cost
+    expected_profit_margin = (expected_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    actual_profit = dish.sale_price - actual_total_cost
+    actual_profit_margin = (actual_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
     
     return templates.TemplateResponse("dish_detail.html", {
         "request": request,
         "current_user": current_user,
         "dish": dish,
         "dish_batch_portions": dish_batch_portions,
-        "total_cost": total_cost,
-        "profit": profit,
-        "profit_margin": profit_margin
+        "expected_total_cost": expected_total_cost,
+        "actual_total_cost": actual_total_cost,
+        "expected_profit": expected_profit,
+        "expected_profit_margin": expected_profit_margin,
+        "actual_profit": actual_profit,
+        "actual_profit_margin": actual_profit_margin
     })
 
 @app.get("/dishes/{dish_id}/edit", response_class=HTMLResponse)
@@ -1295,13 +1435,14 @@ async def dish_edit(
     # Process new batch portions
     try:
         batch_portions = json.loads(batch_portions_data)
-        for portion_data in batch_portions:
-            dish_batch_portion = DishBatchPortion(
+        for batch_data in batch_portions:
+            portion = DishBatchPortion(
                 dish_id=dish.id,
-                batch_id=portion_data["batch_id"],
-                portion_size=portion_data["portion_size"]
+                batch_id=batch_data["batch_id"],
+                portion_size=batch_data["portion_size"],
+                portion_unit_id=batch_data.get("portion_unit_id")
             )
-            db.add(dish_batch_portion)
+            db.add(portion)
     except (json.JSONDecodeError, KeyError):
         pass
     
