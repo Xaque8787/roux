@@ -1680,8 +1680,16 @@ async def create_task(
         day_id=day_id,
         assigned_to_id=assigned_to_id if assigned_to_id else None,
         description=description,
+        inventory_item_id=inventory_item_id if inventory_item_id else None,
+        batch_id=None,  # Will be set below if inventory item has batch
         auto_generated=False
     )
+    
+    # If linked to inventory item, inherit batch from it
+    if inventory_item_id:
+        inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+        if inventory_item and inventory_item.batch_id:
+            task.batch_id = inventory_item.batch_id
     db.add(task)
     db.commit()
     

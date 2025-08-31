@@ -202,12 +202,17 @@
                             {% endif %}
                             
                             {% if task.inventory_item and task.inventory_item.batch %}
-                            <small class="text-info">Batch: {{ task.inventory_item.batch.recipe.name }}</small><br>
+                            <small class="text-info">
+                                <i class="fas fa-industry"></i> Batch: 
+                                <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
+                                    {{ task.inventory_item.batch.recipe.name }}
+                                </a>
+                            </small><br>
                             {% endif %}
                             
                             {% if task.batch %}
                             <small class="text-success">
-                                <i class="fas fa-link"></i> Linked to: 
+                                <i class="fas fa-link"></i> Direct Batch Link: 
                                 <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a>
                             </small><br>
                             {% endif %}

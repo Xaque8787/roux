@@ -252,7 +252,6 @@
                                 <td><small>{{ task.started_at.strftime('%H:%M') if task.started_at else '-' }}</small></td>
                                 <td><small>{{ task.finished_at.strftime('%H:%M') if task.finished_at else '-' }}</small></td>
                                 <td><small>{{ task.total_time_minutes }} min</small></td>
-                                <td><small>${{ "%.2f"|format(task.labor_cost) }}</small></td>
                                 <td>
                                     {% if task.batch %}
                                         <small><a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a></small>
@@ -260,6 +259,7 @@
                                         <small class="text-muted">None</small>
                                     {% endif %}
                                 </td>
+                                <td><small>${{ "%.2f"|format(task.labor_cost) }}</small></td>
                             </tr>
                             {% endfor %}
                         </tbody>
