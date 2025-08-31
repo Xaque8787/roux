@@ -1757,6 +1757,12 @@ async def api_ingredients_all(db: Session = Depends(get_db)):
     
     return result
 
+@app.get("/api/usage_units/all")
+async def get_all_usage_units(db: Session = Depends(get_db)):
+    """Get all usage units"""
+    usage_units = db.query(UsageUnit).all()
+    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+
 @app.get("/api/recipes/{recipe_id}/usage_units")
 async def api_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db)):
     """Get all usage units used in a recipe"""

@@ -255,18 +255,25 @@ async function loadVendorUnitConversions() {
     calculateItemWeight(); // Update item weight display
     
     if (!vendorUnitId) {
+        console.log('DEBUG: No vendor unit selected');
         return;
     }
+    
+    console.log(`DEBUG: Loading conversions for vendor unit ${vendorUnitId}`);
     
     try {
         const response = await fetch(`/api/vendor_units/${vendorUnitId}/conversions`);
         const conversions = await response.json();
+        
+        console.log('DEBUG: Received conversions:', conversions);
         
         // Pre-populate conversion factors
         Object.entries(conversions).forEach(([usageUnitId, conversionFactor]) => {
             const checkbox = document.getElementById(`unit_${usageUnitId}`);
             const input = document.querySelector(`input[name="conversion_${usageUnitId}"]`);
             const autoIcon = document.getElementById(`auto_${usageUnitId}`);
+            
+            console.log(`DEBUG: Processing conversion for unit ${usageUnitId}: ${conversionFactor}`);
             
             if (checkbox && input && !input.value) { // Only populate if empty
                 checkbox.checked = true;
@@ -276,6 +283,7 @@ async function loadVendorUnitConversions() {
                 if (autoIcon) {
                     autoIcon.style.display = 'block';
                 }
+                console.log(`DEBUG: Auto-populated ${usageUnitId} with factor ${conversionFactor}`);
             }
         });
     } catch (error) {
