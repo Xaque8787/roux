@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from datetime import datetime, date, timedelta
 from typing import Optional, List
@@ -847,9 +847,6 @@ async def batches(request: Request, current_user: User = Depends(get_current_use
     recipes = db.query(Recipe).all()
     usage_units = db.query(UsageUnit).all()
     
-    # Get all usage units that are used by ingredients
-    usage_units = db.query(UsageUnit).join(IngredientUsageUnit).distinct().all()
-    
     return templates.TemplateResponse("batches.html", {
         "request": request,
         "current_user": current_user,
@@ -933,10 +930,7 @@ async def batch_edit_form(
         raise HTTPException(status_code=404, detail="Batch not found")
     
     recipes = db.query(Recipe).all()
-    
-    # Get all usage units that are used by ingredients
-    usage_units = db.query(UsageUnit).join(IngredientUsageUnit).distinct().all()
-    
+    usage_units = db.query(UsageUnit).all()
     
     return templates.TemplateResponse("batch_edit.html", {
         "request": request,
@@ -1086,34 +1080,6 @@ async def dish_detail(
         else:
             # Different unit - need conversion
             conversion_factor = get_unit_conversion_factor(
-# API endpoint to get all batches
-@app.get("/api/batches/all")
-async def get_all_batches(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    print("DEBUG: Getting all batches")
-    
-    batches = db.query(Batch).join(Recipe).all()
-    
-    print(f"DEBUG: Found {len(batches)} total batches")
-    
-    result = []
-    for batch in batches:
-        # Calculate recipe cost
-        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-        total_cost = recipe_cost + batch.estimated_labor_cost
-        cost_per_unit = total_cost / batch.yield_amount if batch.yield_amount > 0 else 0
-        
-        result.append({
-            "id": batch.id,
-            "recipe_name": batch.recipe.name,
-            "category": batch.recipe.category.name if batch.recipe.category else None,
-            "yield_amount": batch.yield_amount,
-            "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
-            "yield_unit_id": batch.yield_unit_id,
-            "cost_per_unit": cost_per_unit
-        })
-    
-    return result
                 portion.batch.yield_unit_id, 
                 portion.portion_unit_id, 
                 portion.batch_id, 
@@ -1785,12 +1751,6 @@ async def api_ingredients_all(db: Session = Depends(get_db)):
     
     return result
 
-@app.get("/api/usage_units/all")
-async def get_all_usage_units(db: Session = Depends(get_db)):
-    """Get all usage units"""
-    usage_units = db.query(UsageUnit).all()
-    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
-
 @app.get("/api/recipes/{recipe_id}/usage_units")
 async def api_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db)):
     """Get all usage units used in a recipe"""
@@ -1816,10 +1776,9 @@ async def api_batches_search(q: str = "", db: Session = Depends(get_db)):
     """Search batches for dish creation"""
     query = db.query(Batch).join(Recipe)
     
-    batches = db.query(Batch).options(
-        joinedload(Batch.recipe).joinedload(Recipe.category),
-        joinedload(Batch.yield_unit)
-    ).join(Recipe).filter(Recipe.name.ilike(f"%{q}%")).all()
+    if q:
+        query = query.filter(Recipe.name.ilike(f"%{q}%"))
+    
     batches = query.limit(10).all()
     result = []
     
@@ -1866,29 +1825,36 @@ async def api_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
         seen_unit_ids.add(batch.yield_unit_id)
         logger.debug(f"Added yield unit: {batch.yield_unit.name}")
     
-    # Get all usage units from recipe ingredients with proper joins
-    recipe_ingredients = db.query(RecipeIngredient).options(
-        joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
-    ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+    # Get all usage units from recipe ingredients
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == batch.recipe_id
+    ).all()
     
     logger.debug(f"Processing {len(recipe_ingredients)} recipe ingredients")
     
     for ri in recipe_ingredients:
         logger.debug(f"Processing ingredient: {ri.ingredient.name}")
         
-        # Get all usage units for this ingredient (already loaded via joinedload)
-        for iu in ri.ingredient.usage_units:
-            if iu.usage_unit and iu.usage_unit.id not in unit_ids_seen:
+        # Get all usage units for this ingredient
+        ingredient_usage_units = db.query(IngredientUsageUnit).filter(
+            IngredientUsageUnit.ingredient_id == ri.ingredient_id
+        ).all()
+        
+        logger.debug(f"Found {len(ingredient_usage_units)} usage units for {ri.ingredient.name}")
+        
+        for iu in ingredient_usage_units:
+            if iu.usage_unit_id not in seen_unit_ids:
+                # Check if this unit is compatible with batch yield unit
                 if batch.yield_unit and are_units_compatible(batch.yield_unit.name, iu.usage_unit.name):
                     available_units.append({
-                        "id": iu.usage_unit.id,
+                        "id": iu.usage_unit_id,
                         "name": iu.usage_unit.name,
                         "type": "ingredient"
                     })
-                    unit_ids_seen.add(iu.usage_unit.id)
-                    print(f"DEBUG: Added convertible unit {iu.usage_unit.name}")
+                    seen_unit_ids.add(iu.usage_unit_id)
+                    logger.debug(f"Added convertible unit: {iu.usage_unit.name}")
                 else:
-                    print(f"DEBUG: Skipped incompatible unit {iu.usage_unit.name}")
+                    logger.debug(f"Skipped incompatible unit: {iu.usage_unit.name} (not compatible with {batch.yield_unit.name})")
     
     logger.debug(f"Returning {len(available_units)} available units: {[u['name'] for u in available_units]}")
     return available_units

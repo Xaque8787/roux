@@ -38,13 +38,12 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="yield_unit_id" class="form-label">Yield Unit</label>
-                                <div class="position-relative">
-                                    <input type="text" class="form-control" id="yieldUnitSearch" 
-                                           placeholder="Search for yield unit..." autocomplete="off" required>
-                                    <div id="yieldUnitDropdown" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
-                                </div>
-                                <input type="hidden" id="yield_unit_id" name="yield_unit_id" required>
-                                <small class="text-muted">Select from all available usage units</small>
+                                <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
+                                    <option value="">Select Unit</option>
+                                    {% for unit in usage_units %}
+                                    <option value="{{ unit.id }}">{{ unit.name }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -166,13 +165,13 @@
                                     {% if current_user.role == "admin" %}
                                     <a href="/batches/{{ batch.id }}/delete" class="btn btn-sm btn-danger" 
                                        onclick="return confirm('Are you sure?')">
-                        <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
-                            <option value="">Select Unit</option>
-                            {% for unit in usage_units %}
-                            <option value="{{ unit.id }}">{{ unit.name }}</option>
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
                             {% endfor %}
-                        </select>
-                        <small class="text-muted">Select yield unit for this batch</small>
+                        </tbody>
                     </table>
                 </div>
             </div>
