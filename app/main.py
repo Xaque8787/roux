@@ -1349,13 +1349,16 @@ async def create_inventory_item(
     name: str = Form(...),
     par_level: float = Form(...),
     category_id: Optional[int] = Form(None),
-    current_user: User = Depends(require_manager_or_admin),
+    batch_id: str = Form(""),
     db: Session = Depends(get_db)
 ):
+    # Convert empty string to None for batch_id
+    batch_id_value = int(batch_id) if batch_id and batch_id.strip() else None
+    
     item = InventoryItem(
         name=name,
         par_level=par_level,
-        category_id=category_id if category_id else None
+        batch_id=batch_id_value,
     )
     db.add(item)
     db.commit()
