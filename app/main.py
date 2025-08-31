@@ -1450,7 +1450,6 @@ async def create_inventory_item(
     name: str = Form(...),
     par_level: float = Form(...),
     category_id: Optional[int] = Form(None),
-    batch_id: str = Form(""),
     category_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
