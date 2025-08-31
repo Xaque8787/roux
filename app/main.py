@@ -237,6 +237,168 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
         "current_user": current_user
     })
 
+@app.get("/dishes/{dish_id}", response_class=HTMLResponse)
+async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    # Get dish batch portions
+    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
+    
+    # Calculate expected costs (based on estimated labor)
+    expected_total_cost = 0
+    actual_total_cost = 0
+    
+    for portion in dish_batch_portions:
+        # Get recipe ingredients cost
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == portion.batch.recipe_id).all()
+        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        
+        # Expected cost (estimated labor)
+        expected_labor_cost = portion.batch.estimated_labor_cost
+        expected_batch_cost = recipe_cost + expected_labor_cost
+        expected_cost_per_unit = expected_batch_cost / portion.batch.yield_amount if portion.batch.yield_amount > 0 else 0
+        portion.expected_cost = portion.portion_size * expected_cost_per_unit
+        expected_total_cost += portion.expected_cost
+        
+        # Actual cost (from completed tasks)
+        actual_labor_cost = get_batch_actual_labor_cost(db, portion.batch_id)
+        actual_batch_cost = recipe_cost + actual_labor_cost
+        actual_cost_per_unit = actual_batch_cost / portion.batch.yield_amount if portion.batch.yield_amount > 0 else 0
+        portion.actual_cost = portion.portion_size * actual_cost_per_unit
+        actual_total_cost += portion.actual_cost
+    
+    # Calculate profits
+    expected_profit = dish.sale_price - expected_total_cost
+    expected_profit_margin = (expected_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    actual_profit = dish.sale_price - actual_total_cost
+    actual_profit_margin = (actual_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    return templates.TemplateResponse("dish_detail.html", {
+        "request": request,
+        "dish": dish,
+        "dish_batch_portions": dish_batch_portions,
+        "expected_total_cost": expected_total_cost,
+        "actual_total_cost": actual_total_cost,
+        "expected_profit": expected_profit,
+        "expected_profit_margin": expected_profit_margin,
+        "actual_profit": actual_profit,
+        "actual_profit_margin": actual_profit_margin,
+        "current_user": current_user
+    })
+
+@app.get("/dishes/{dish_id}/edit", response_class=HTMLResponse)
+async def dish_edit_page(dish_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_manager_or_admin)):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    categories = db.query(Category).filter(Category.type == "dish").all()
+    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
+    
+    return templates.TemplateResponse("dish_edit.html", {
+        "request": request,
+        "dish": dish,
+        "dish_batch_portions": dish_batch_portions,
+        "categories": categories,
+        "current_user": current_user
+    })
+
+@app.post("/dishes/{dish_id}/edit")
+async def update_dish(dish_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_manager_or_admin)):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    form = await request.form()
+    
+    # Update dish details
+    dish.name = form.get("name")
+    dish.category_id = int(form.get("category_id")) if form.get("category_id") else None
+    dish.sale_price = float(form.get("sale_price"))
+    dish.description = form.get("description")
+    
+    # Remove existing batch portions
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
+    
+    # Add new batch portions
+    batch_portions_data = form.get("batch_portions_data")
+    if batch_portions_data:
+        import json
+        batch_portions = json.loads(batch_portions_data)
+        
+        for portion_data in batch_portions:
+            portion = DishBatchPortion(
+                dish_id=dish.id,
+                batch_id=portion_data["batch_id"],
+                portion_size=portion_data["portion_size"],
+                portion_unit_id=None  # Using batch yield unit
+            )
+            db.add(portion)
+    
+    db.commit()
+    return RedirectResponse(url=f"/dishes/{dish.id}", status_code=303)
+
+@app.get("/dishes/{dish_id}/delete")
+async def delete_dish(dish_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    # Delete associated batch portions first
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
+    
+    # Delete the dish
+    db.delete(dish)
+    db.commit()
+    
+    return RedirectResponse(url="/dishes", status_code=303)
+
+def get_batch_actual_labor_cost(db: Session, batch_id: int) -> float:
+    """Get the most recent actual labor cost for a batch from completed tasks"""
+    from datetime import datetime, timedelta
+    
+    # Get the most recent completed task for this batch
+    recent_task = db.query(Task).filter(
+        Task.batch_id == batch_id,
+        Task.finished_at.isnot(None)
+    ).order_by(Task.finished_at.desc()).first()
+    
+    if recent_task:
+        return recent_task.labor_cost
+    
+    # If no completed tasks, fall back to estimated cost
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if batch:
+        return batch.estimated_labor_cost
+    
+    return 0
+
+def get_batch_average_labor_cost(db: Session, batch_id: int, days: int = 30) -> float:
+    """Get average actual labor cost for a batch over specified days"""
+    from datetime import datetime, timedelta
+    
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    
+    tasks = db.query(Task).filter(
+        Task.batch_id == batch_id,
+        Task.finished_at.isnot(None),
+        Task.finished_at >= cutoff_date
+    ).all()
+    
+    if tasks:
+        total_cost = sum(task.labor_cost for task in tasks)
+        return total_cost / len(tasks)
+    
+    # If no completed tasks, fall back to estimated cost
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if batch:
+        return batch.estimated_labor_cost
+    
+    return 0
+
 # Employees routes
 @app.get("/employees", response_class=HTMLResponse)
 async def employees_list(request: Request, current_user: User = Depends(require_admin)):

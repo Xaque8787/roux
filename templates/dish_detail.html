@@ -27,8 +27,8 @@
                                 <th>Batch Recipe</th>
                                 <th>Portion Size</th>
                                 <th>Unit</th>
-                                <th>Cost per Unit</th>
-                                <th>Total Cost</th>
+                                <th>Expected Cost</th>
+                                <th>Actual Cost</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -42,18 +42,21 @@
                                 </td>
                                 <td>{{ portion.portion_size }}</td>
                                 <td>{{ portion.batch.yield_unit.name if portion.batch.yield_unit else '-' }}</td>
-                                <td>
-                                    {% set cost_per_unit = (portion.cost / portion.portion_size) if portion.portion_size > 0 else 0 %}
-                                    ${{ "%.4f"|format(cost_per_unit) }}
-                                </td>
-                                <td>${{ "%.2f"|format(portion.cost) }}</td>
+                                <td>${{ "%.2f"|format(portion.expected_cost) }}</td>
+                                <td>${{ "%.2f"|format(portion.actual_cost) }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                         <tfoot>
+                            <tr class="table-warning">
+                                <th colspan="3">Expected Total:</th>
+                                <th>${{ "%.2f"|format(expected_total_cost) }}</th>
+                                <th>-</th>
+                            </tr>
                             <tr class="table-info">
-                                <th colspan="4">Total Dish Cost:</th>
-                                <th>${{ "%.2f"|format(total_cost) }}</th>
+                                <th colspan="3">Actual Total:</th>
+                                <th>-</th>
+                                <th>${{ "%.2f"|format(actual_total_cost) }}</th>
                             </tr>
                         </tfoot>
                     </table>
@@ -85,25 +88,44 @@
                 <hr>
                 
                 <p><strong>Sale Price:</strong> <span class="text-success">${{ "%.2f"|format(dish.sale_price) }}</span></p>
-                <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(total_cost) }}</span></p>
+                
+                <hr>
+                <h6>Expected Costs (Estimated Labor)</h6>
+                <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(expected_total_cost) }}</span></p>
                 <p><strong>Profit:</strong> 
-                   <span class="{% if profit >= 0 %}text-success{% else %}text-danger{% endif %}">
-                       ${{ "%.2f"|format(profit) }}
+                   <span class="{% if expected_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                       ${{ "%.2f"|format(expected_profit) }}
                    </span>
                 </p>
                 <p><strong>Profit Margin:</strong> 
-                   <span class="{% if profit_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
-                       {{ "%.1f"|format(profit_margin) }}%
+                   <span class="{% if expected_profit_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
+                       {{ "%.1f"|format(expected_profit_margin) }}%
+                   </span>
+                </p>
+                <p><strong>Food Cost %:</strong> 
+                   <span class="{% if (expected_total_cost/dish.sale_price*100) <= 30 %}text-success{% elif (expected_total_cost/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
+                       {{ "%.1f"|format(expected_total_cost/dish.sale_price*100) }}%
                    </span>
                 </p>
                 
-                {% if total_cost > 0 %}
-                <p><strong>Food Cost %:</strong> 
-                   <span class="{% if (total_cost/dish.sale_price*100) <= 30 %}text-success{% elif (total_cost/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
-                       {{ "%.1f"|format(total_cost/dish.sale_price*100) }}%
+                <hr>
+                <h6>Actual Costs (Real Labor Data)</h6>
+                <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost) }}</span></p>
+                <p><strong>Profit:</strong> 
+                   <span class="{% if actual_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                       ${{ "%.2f"|format(actual_profit) }}
                    </span>
                 </p>
-                {% endif %}
+                <p><strong>Profit Margin:</strong> 
+                   <span class="{% if actual_profit_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
+                       {{ "%.1f"|format(actual_profit_margin) }}%
+                   </span>
+                </p>
+                <p><strong>Food Cost %:</strong> 
+                   <span class="{% if (actual_total_cost/dish.sale_price*100) <= 30 %}text-success{% elif (actual_total_cost/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
+                       {{ "%.1f"|format(actual_total_cost/dish.sale_price*100) }}%
+                   </span>
+                </p>
             </div>
         </div>
         
@@ -137,9 +159,21 @@
                 {% for portion in dish_batch_portions %}
                 <div class="d-flex justify-content-between mb-1">
                     <small>{{ portion.batch.recipe.name }}</small>
-                    <small>${{ "%.2f"|format(portion.cost) }} ({{ "%.1f"|format((portion.cost / total_cost * 100) if total_cost > 0 else 0) }}%)</small>
+                    <small>
+                        Expected: ${{ "%.2f"|format(portion.expected_cost) }}<br>
+                        Actual: ${{ "%.2f"|format(portion.actual_cost) }}
+                    </small>
                 </div>
                 {% endfor %}
+                <hr>
+                <div class="d-flex justify-content-between">
+                    <small><strong>Variance</strong></small>
+                    <small>
+                        <strong class="{% if actual_total_cost > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
+                            {% if actual_total_cost > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost - expected_total_cost) }}
+                        </strong>
+                    </small>
+                </div>
             </div>
         </div>
         {% endif %}
