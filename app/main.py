@@ -896,7 +896,8 @@ async def create_batch(
     recipe_id: int = Form(...),
     yield_amount: float = Form(...),
     yield_unit_id: int = Form(...),
-    labor_minutes: int = Form(...),
+    estimated_labor_minutes: int = Form(...),
+    hourly_labor_rate: float = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
     scale_half: bool = Form(False),
@@ -910,7 +911,8 @@ async def create_batch(
         recipe_id=recipe_id,
         yield_amount=yield_amount,
         yield_unit_id=yield_unit_id,
-        labor_minutes=labor_minutes,
+        estimated_labor_minutes=estimated_labor_minutes,
+        hourly_labor_rate=hourly_labor_rate,
         can_be_scaled=can_be_scaled,
         scale_double=scale_double if can_be_scaled else False,
         scale_half=scale_half if can_be_scaled else False,
@@ -941,7 +943,7 @@ async def batch_detail(request: Request, batch_id: int, current_user: User = Dep
     ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    labor_cost = (batch.labor_minutes / 60) * 15.0  # Default wage
+    labor_cost = batch.estimated_labor_cost
     total_batch_cost = total_recipe_cost + labor_cost
     cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
     
@@ -983,7 +985,8 @@ async def batch_edit_post(
     recipe_id: int = Form(...),
     yield_amount: float = Form(...),
     yield_unit_id: int = Form(...),
-    labor_minutes: int = Form(...),
+    estimated_labor_minutes: int = Form(...),
+    hourly_labor_rate: float = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
     scale_half: bool = Form(False),
@@ -1000,7 +1003,8 @@ async def batch_edit_post(
     batch.recipe_id = recipe_id
     batch.yield_amount = yield_amount
     batch.yield_unit_id = yield_unit_id
-    batch.labor_minutes = labor_minutes
+    batch.estimated_labor_minutes = estimated_labor_minutes
+    batch.hourly_labor_rate = hourly_labor_rate
     batch.can_be_scaled = can_be_scaled
     batch.scale_double = scale_double if can_be_scaled else False
     batch.scale_half = scale_half if can_be_scaled else False
@@ -1046,7 +1050,7 @@ async def search_batches(q: str = "", db: Session = Depends(get_db)):
             # Calculate cost per unit
             recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            labor_cost = (batch.labor_minutes / 60) * 15.0
+            labor_cost = batch.estimated_labor_cost
             total_batch_cost = total_recipe_cost + labor_cost
             cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
             
