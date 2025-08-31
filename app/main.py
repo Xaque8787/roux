@@ -1452,16 +1452,27 @@ async def create_inventory_item(
     category_id: Optional[int] = Form(None),
     batch_id: str = Form(""),
     category_id: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     # Convert empty string to None for batch_id
     batch_id_value = int(batch_id) if batch_id and batch_id.strip() else None
+    
+    # Convert category_id properly
+    category_id_int = None
+    if category_id and category_id.strip():
+        try:
+            category_id_int = int(category_id)
+        except ValueError:
+            pass
     
     item = InventoryItem(
         name=name,
         par_level=par_level,
         batch_id=batch_id_value,
-    )
         category_id=category_id_int
+    )
+    db.add(item)
     db.commit()
     
     return RedirectResponse(url="/inventory", status_code=302)
@@ -1673,6 +1684,7 @@ async def create_task(
     day_id: int,
     assigned_to_id: Optional[int] = Form(None),
     description: str = Form(...),
+    inventory_item_id: Optional[int] = Form(None),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
@@ -1690,6 +1702,7 @@ async def create_task(
         inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
         if inventory_item and inventory_item.batch_id:
             task.batch_id = inventory_item.batch_id
+    
     db.add(task)
     db.commit()
     
@@ -1720,14 +1733,6 @@ async def assign_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_manager_or_admin)
 ):
-    # Convert category_id properly
-    category_id_int = None
-    if category_id and category_id.strip():
-        try:
-            category_id_int = int(category_id)
-        except ValueError:
-            pass
-    
     form = await request.form()
     assigned_to_id = form.get("assigned_to_id")
     
