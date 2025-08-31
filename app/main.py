@@ -240,31 +240,78 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
 # Add API endpoint to get available portion units for a batch
 @app.get("/api/batches/{batch_id}/portion_units")
 async def get_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
-    """Get all available portion units for a batch (yield unit + ingredient usage units)"""
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    """Get available portion units for a batch (yield unit + ingredient usage units)"""
+    batch = db.query(Batch).options(
+        joinedload(Batch.recipe).joinedload(Recipe.ingredients).joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit),
+        joinedload(Batch.yield_unit)
+    ).filter(Batch.id == batch_id).first()
+    
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    # Get recipe ingredients and their usage units
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == batch.recipe_id
-    ).all()
-    
-    # Collect all unique usage units from ingredients
-    usage_unit_ids = set()
+    available_units = []
+    unit_ids_seen = set()
     
     # Add batch yield unit
-    if batch.yield_unit_id:
-        usage_unit_ids.add(batch.yield_unit_id)
+    if batch.yield_unit:
+        available_units.append({
+            "id": batch.yield_unit.id,
+            "name": batch.yield_unit.name
+        })
+        unit_ids_seen.add(batch.yield_unit.id)
     
-    # Add usage units from recipe ingredients
-    for ri in recipe_ingredients:
-        usage_unit_ids.add(ri.usage_unit_id)
+    # Get all usage units from recipe ingredients
+    recipe_ingredients = db.query(RecipeIngredient).options(
+        joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
+    ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     
-    # Get usage unit details
-    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
+    for recipe_ingredient in recipe_ingredients:
+        for ingredient_usage_unit in recipe_ingredient.ingredient.usage_units:
+            usage_unit = ingredient_usage_unit.usage_unit
+            if usage_unit.id not in unit_ids_seen:
+                # Check if we can convert from batch yield unit to this usage unit
+                can_convert = can_convert_units(batch.yield_unit_id, usage_unit.id, db)
+                if can_convert:
+                    available_units.append({
+                        "id": usage_unit.id,
+                        "name": usage_unit.name
+                    })
+                    unit_ids_seen.add(usage_unit.id)
     
-    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+    return available_units
+
+def can_convert_units(from_unit_id: int, to_unit_id: int, db: Session) -> bool:
+    """Check if we can convert between two units"""
+    if from_unit_id == to_unit_id:
+        return True
+    
+    # Check if there's a direct vendor unit conversion path
+    # This is a simplified check - in a real system you might have more complex conversion logic
+    
+    # For now, we'll allow conversions between units that share the same "type"
+    # This is a basic implementation - you could enhance this with a proper unit conversion system
+    
+    from_unit = db.query(UsageUnit).filter(UsageUnit.id == from_unit_id).first()
+    to_unit = db.query(UsageUnit).filter(UsageUnit.id == to_unit_id).first()
+    
+    if not from_unit or not to_unit:
+        return False
+    
+    # Define unit type groups for conversion compatibility
+    weight_units = ['lb', 'lbs', 'pound', 'pounds', 'oz', 'ounce', 'ounces', 'gram', 'grams', 'kg', 'kilogram', 'kilograms']
+    volume_units = ['gal', 'gallon', 'gallons', 'qt', 'quart', 'quarts', 'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons', 'ml', 'milliliter', 'milliliters', 'liter', 'liters']
+    count_units = ['each', 'piece', 'pieces', 'item', 'items', 'can', 'cans', 'bottle', 'bottles', 'bag', 'bags']
+    
+    from_name = from_unit.name.lower()
+    to_name = to_unit.name.lower()
+    
+    # Check if both units are in the same category
+    if ((from_name in weight_units and to_name in weight_units) or
+        (from_name in volume_units and to_name in volume_units) or
+        (from_name in count_units and to_name in count_units)):
+        return True
+    
+    return False
 
 @app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
 async def get_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Depends(get_db)):
