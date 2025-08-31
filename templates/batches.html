@@ -166,13 +166,13 @@
                                     {% if current_user.role == "admin" %}
                                     <a href="/batches/{{ batch.id }}/delete" class="btn btn-sm btn-danger" 
                                        onclick="return confirm('Are you sure?')">
-                                        <i class="fas fa-trash"></i>
-                                    </a>
-                                    {% endif %}
-                                </td>
-                            </tr>
+                        <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
+                            <option value="">Select Unit</option>
+                            {% for unit in usage_units %}
+                            <option value="{{ unit.id }}">{{ unit.name }}</option>
                             {% endfor %}
-                        </tbody>
+                        </select>
+                        <small class="text-muted">Select yield unit for this batch</small>
                     </table>
                 </div>
             </div>
@@ -181,82 +181,6 @@
 </div>
 
 <script>
-let allUsageUnits = [];
-let selectedYieldUnit = null;
-
-document.addEventListener('DOMContentLoaded', function() {
-    loadAllUsageUnits();
-    setupYieldUnitSearch();
-});
-
-async function loadAllUsageUnits() {
-    try {
-        const response = await fetch('/api/usage_units/all');
-        allUsageUnits = await response.json();
-        console.log('Loaded usage units:', allUsageUnits);
-    } catch (error) {
-        console.error('Error loading usage units:', error);
-    }
-}
-
-function setupYieldUnitSearch() {
-    const yieldUnitSearch = document.getElementById('yieldUnitSearch');
-    const dropdown = document.getElementById('yieldUnitDropdown');
-    
-    yieldUnitSearch.addEventListener('input', function() {
-        const query = this.value.toLowerCase().trim();
-        filterYieldUnits(query);
-    });
-    
-    yieldUnitSearch.addEventListener('focus', function() {
-        filterYieldUnits('');
-        dropdown.style.display = 'block';
-    });
-    
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('#yieldUnitSearch') && !e.target.closest('#yieldUnitDropdown')) {
-            dropdown.style.display = 'none';
-        }
-    });
-}
-
-function filterYieldUnits(query) {
-    const dropdown = document.getElementById('yieldUnitDropdown');
-    
-    const filteredUnits = allUsageUnits.filter(unit => 
-        unit.name.toLowerCase().includes(query)
-    );
-    
-    dropdown.innerHTML = '';
-    
-    if (filteredUnits.length === 0) {
-        dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No units found</div>';
-    } else {
-        filteredUnits.forEach(unit => {
-            const item = document.createElement('a');
-            item.className = 'dropdown-item';
-            item.href = '#';
-            item.textContent = unit.name;
-            
-            item.addEventListener('click', function(e) {
-                e.preventDefault();
-                selectYieldUnit(unit);
-            });
-            
-            dropdown.appendChild(item);
-        });
-    }
-    
-    dropdown.style.display = 'block';
-}
-
-function selectYieldUnit(unit) {
-    selectedYieldUnit = unit;
-    document.getElementById('yieldUnitSearch').value = unit.name;
-    document.getElementById('yield_unit_id').value = unit.id;
-    document.getElementById('yieldUnitDropdown').style.display = 'none';
-}
-
 function toggleScalingOptions() {
     const checkbox = document.getElementById('can_be_scaled');
     const options = document.getElementById('scalingOptions');
