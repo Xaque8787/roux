@@ -83,7 +83,7 @@
                                 <h6>Double Batch (2x)</h6>
                                 <p class="mb-1">Yield: {{ batch.yield_amount * 2 }} {{ batch.yield_unit.name if batch.yield_unit else '' }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost * 2) }}</p>
-                                <small>Labor: {{ batch.labor_minutes * 2 }} min</small>
+                                <small>Labor: {{ batch.estimated_labor_minutes * 2 }} min</small>
                             </div>
                         </div>
                     </div>
@@ -96,7 +96,7 @@
                                 <h6>Half Batch (1/2)</h6>
                                 <p class="mb-1">Yield: {{ batch.yield_amount / 2 }} {{ batch.yield_unit.name if batch.yield_unit else '' }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 2) }}</p>
-                                <small>Labor: {{ batch.labor_minutes / 2 }} min</small>
+                                <small>Labor: {{ batch.estimated_labor_minutes / 2 }} min</small>
                             </div>
                         </div>
                     </div>
@@ -109,7 +109,7 @@
                                 <h6>Quarter Batch (1/4)</h6>
                                 <p class="mb-1">Yield: {{ batch.yield_amount / 4 }} {{ batch.yield_unit.name if batch.yield_unit else '' }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 4) }}</p>
-                                <small>Labor: {{ batch.labor_minutes / 4 }} min</small>
+                                <small>Labor: {{ batch.estimated_labor_minutes / 4 }} min</small>
                             </div>
                         </div>
                     </div>
@@ -122,7 +122,7 @@
                                 <h6>Eighth Batch (1/8)</h6>
                                 <p class="mb-1">Yield: {{ batch.yield_amount / 8 }} {{ batch.yield_unit.name if batch.yield_unit else '' }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 8) }}</p>
-                                <small>Labor: {{ batch.labor_minutes / 8 }} min</small>
+                                <small>Labor: {{ batch.estimated_labor_minutes / 8 }} min</small>
                             </div>
                         </div>
                     </div>
@@ -135,7 +135,7 @@
                                 <h6>Sixteenth Batch (1/16)</h6>
                                 <p class="mb-1">Yield: {{ batch.yield_amount / 16 }} {{ batch.yield_unit.name if batch.yield_unit else '' }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 16) }}</p>
-                                <small>Labor: {{ batch.labor_minutes / 16 }} min</small>
+                                <small>Labor: {{ batch.estimated_labor_minutes / 16 }} min</small>
                             </div>
                         </div>
                     </div>
