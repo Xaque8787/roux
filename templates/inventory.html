@@ -20,11 +20,23 @@
                 <form method="post" action="/inventory/new_item">
                     <div class="mb-3">
                         <label for="name" class="form-label">Item Name</label>
-                        <input type="text" class="form-control" id="name" name="name" required>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="name" name="name" required autocomplete="off">
+                            <div id="batchSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
+                        </div>
+                        <small class="text-muted">Type to search for batches, or enter a custom name</small>
                     </div>
                     <div class="mb-3">
                         <label for="par_level" class="form-label">Par Level</label>
                         <input type="number" class="form-control" id="par_level" name="par_level" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
+                        <select class="form-select" id="batch_id" name="batch_id">
+                            <option value="">No batch linked</option>
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                        <small class="text-muted">Link to a batch for labor cost tracking</small>
                     </div>
                     <div class="mb-3">
                         <label for="category_id" class="form-label">Category</label>
@@ -93,7 +105,9 @@
                             <tr>
                                 <th>Name</th>
                                 <th>Par Level</th>
+                                <th>Linked Batch</th>
                                 <th>Category</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -101,7 +115,25 @@
                             <tr>
                                 <td>{{ item.name }}</td>
                                 <td>{{ item.par_level }}</td>
+                                <td>
+                                    {% if item.batch %}
+                                        <span class="badge bg-success">{{ item.batch.recipe.name }}</span>
+                                    {% else %}
+                                        <span class="text-muted">None</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ item.category.name if item.category else '-' }}</td>
+                                <td>
+                                    {% if current_user.role == "admin" %}
+                                    <a href="/inventory/items/{{ item.id }}/edit" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="/inventory/items/{{ item.id }}/delete" class="btn btn-sm btn-danger" 
+                                       onclick="return confirm('Are you sure?')">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -194,7 +226,6 @@
 let allBatches = [];
 let selectedBatch = null;
 
-document.addEventListener('DOMContentLoaded', function() {
     loadAllBatches();
     
     const nameInput = document.getElementById('name');
