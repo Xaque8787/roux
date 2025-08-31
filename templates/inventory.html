@@ -20,11 +20,7 @@
                 <form method="post" action="/inventory/new_item">
                     <div class="mb-3">
                         <label for="name" class="form-label">Item Name</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-control" id="name" name="name" required autocomplete="off">
-                            <div id="batchSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
-                        </div>
-                        <small class="text-muted">Type to search for batches, or enter a custom name</small>
+                        <input type="text" class="form-control" id="name" name="name" required>
                     </div>
                     <div class="mb-3">
                         <label for="par_level" class="form-label">Par Level</label>
@@ -34,7 +30,9 @@
                         <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
                         <select class="form-select" id="batch_id" name="batch_id">
                             <option value="">No batch linked</option>
-                            <!-- Options will be populated by JavaScript -->
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">{{ batch.recipe.name }} ({{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }})</option>
+                            {% endfor %}
                         </select>
                         <small class="text-muted">Link to a batch for labor cost tracking</small>
                     </div>
@@ -221,116 +219,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-let allBatches = [];
-let selectedBatch = null;
-
-    loadAllBatches();
-    
-    const nameInput = document.getElementById('name');
-    const suggestions = document.getElementById('batchSuggestions');
-    const batchSelect = document.getElementById('batch_id');
-    
-    let searchTimeout;
-    
-    // Search batches as user types in name field
-    nameInput.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        const query = this.value.toLowerCase().trim();
-        
-        if (query.length < 2) {
-            suggestions.style.display = 'none';
-            return;
-        }
-        
-        searchTimeout = setTimeout(() => {
-            filterBatches(query);
-        }, 300);
-    });
-    
-    // Show suggestions when focused
-    nameInput.addEventListener('focus', function() {
-        if (this.value.length >= 2) {
-            filterBatches(this.value.toLowerCase().trim());
-        }
-    });
-    
-    // Hide suggestions when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('#name') && !e.target.closest('#batchSuggestions')) {
-            suggestions.style.display = 'none';
-        }
-    });
-});
-
-async function loadAllBatches() {
-    try {
-        const response = await fetch('/api/batches/all');
-        allBatches = await response.json();
-        
-        // Populate batch select dropdown
-        const batchSelect = document.getElementById('batch_id');
-        batchSelect.innerHTML = '<option value="">No batch linked</option>';
-        
-        allBatches.forEach(batch => {
-            const option = document.createElement('option');
-            option.value = batch.id;
-            option.textContent = `${batch.recipe_name} (${batch.yield_amount} ${batch.yield_unit})`;
-            batchSelect.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Error loading batches:', error);
-    }
-}
-
-function filterBatches(query) {
-    const suggestions = document.getElementById('batchSuggestions');
-    
-    const filteredBatches = allBatches.filter(batch => 
-        batch.recipe_name.toLowerCase().includes(query) ||
-        (batch.category && batch.category.toLowerCase().includes(query))
-    );
-    
-    suggestions.innerHTML = '';
-    
-    if (filteredBatches.length === 0) {
-        suggestions.style.display = 'none';
-        return;
-    }
-    
-    filteredBatches.forEach(batch => {
-        const item = document.createElement('a');
-        item.className = 'dropdown-item';
-        item.href = '#';
-        item.innerHTML = `
-            <strong>${batch.recipe_name}</strong><br>
-            <small>Yield: ${batch.yield_amount} ${batch.yield_unit} - Est. ${batch.estimated_labor_minutes} min</small>
-            ${batch.category ? `<br><small class="text-muted">${batch.category}</small>` : ''}
-        `;
-        
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            selectBatch(batch);
-        });
-        
-        suggestions.appendChild(item);
-    });
-    
-    suggestions.style.display = 'block';
-}
-
-function selectBatch(batch) {
-    selectedBatch = batch;
-    
-    // Set the name field to the batch recipe name
-    document.getElementById('name').value = `${batch.recipe_name} Prep`;
-    
-    // Select the batch in the dropdown
-    document.getElementById('batch_id').value = batch.id;
-    
-    // Hide suggestions
-    document.getElementById('batchSuggestions').style.display = 'none';
-}
-</script>
 {% endblock %}

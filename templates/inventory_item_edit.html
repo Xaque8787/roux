@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ item.name }} - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-edit"></i> Edit Inventory Item: {{ item.name }}</h1>
+        <a href="/inventory" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Inventory
+        </a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-edit"></i> Item Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/inventory/items/{{ item.id }}/edit">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Item Name</label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="par_level" class="form-label">Par Level</label>
+                        <input type="number" class="form-control" id="par_level" name="par_level" 
+                               step="0.01" value="{{ item.par_level }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
+                        <select class="form-select" id="batch_id" name="batch_id">
+                            <option value="">No batch linked</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}" {% if item.batch_id == batch.id %}selected{% endif %}>
+                                {{ batch.recipe.name }} ({{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Link to a batch for labor cost tracking</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">Select Category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if item.category_id == cat.id %}selected{% endif %}>
+                                {{ cat.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="/inventory" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

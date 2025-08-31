@@ -1315,6 +1315,7 @@ async def dish_delete(dish_id: int, current_user: User = Depends(require_admin),
 async def inventory_list(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     inventory_items = db.query(InventoryItem).options(joinedload(InventoryItem.category)).all()
     categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).join(Recipe).all()
     employees = db.query(User).filter(User.is_active == True).all()
     
     # Get current day if exists
@@ -1335,6 +1336,7 @@ async def inventory_list(request: Request, current_user: User = Depends(get_curr
         "current_user": current_user,
         "inventory_items": inventory_items,
         "categories": categories,
+        "batches": batches,
         "employees": employees,
         "current_day": current_day,
         "finalized_days": finalized_days,
@@ -1357,6 +1359,49 @@ async def create_inventory_item(
     db.add(item)
     db.commit()
     
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@app.get("/inventory/items/{item_id}/edit")
+async def inventory_item_edit_page(item_id: int, request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).join(Recipe).all()
+    
+    return templates.TemplateResponse("inventory_item_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "item": item,
+        "categories": categories,
+        "batches": batches
+    })
+
+@app.post("/inventory/items/{item_id}/edit")
+async def inventory_item_edit(item_id: int, request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    form = await request.form()
+    
+    item.name = form.get("name")
+    item.par_level = float(form.get("par_level"))
+    item.category_id = int(form.get("category_id")) if form.get("category_id") else None
+    item.batch_id = int(form.get("batch_id")) if form.get("batch_id") else None
+    
+    db.commit()
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@app.get("/inventory/items/{item_id}/delete")
+async def inventory_item_delete(item_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    db.delete(item)
+    db.commit()
     return RedirectResponse(url="/inventory", status_code=302)
 
 @app.post("/inventory/new_day")
