@@ -1061,7 +1061,10 @@ async def dish_detail(
     
     for portion in dish_batch_portions:
         # Expected cost (using estimated labor)
-        recipe_cost = sum(ri.cost for ri in portion.batch.recipe.ingredients)
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == portion.batch.recipe_id
+        ).all()
+        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
         expected_labor_cost = portion.batch.estimated_labor_cost
         expected_batch_cost = recipe_cost + expected_labor_cost
         

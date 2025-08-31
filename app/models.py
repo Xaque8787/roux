@@ -133,6 +133,9 @@ class Recipe(Base):
     category = relationship("Category")
     instructions = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Add relationship to recipe ingredients
+    ingredients = relationship("RecipeIngredient", back_populates="recipe")
 
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
@@ -142,6 +145,7 @@ class RecipeIngredient(Base):
     usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
     quantity = Column(Float)
     
+    recipe = relationship("Recipe", back_populates="ingredients")
     ingredient = relationship("Ingredient")
     usage_unit = relationship("UsageUnit")
     
