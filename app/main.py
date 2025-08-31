@@ -854,6 +854,83 @@ async def recipe_delete(recipe_id: int, current_user: User = Depends(require_adm
     
     return RedirectResponse(url="/recipes", status_code=302)
 
+@app.get("/api/batches/{batch_id}/labor_stats")
+async def get_batch_labor_stats(batch_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get labor statistics for a batch from completed tasks"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_
+    
+    # Find all completed tasks for inventory items linked to this batch
+    completed_tasks = db.query(Task).join(InventoryItem).filter(
+        and_(
+            InventoryItem.batch_id == batch_id,
+            Task.inventory_item_id == InventoryItem.id,
+            Task.finished_at.isnot(None),
+            Task.assigned_to_id.isnot(None)
+        )
+    ).all()
+    
+    if not completed_tasks:
+        return {
+            "task_count": 0,
+            "most_recent_cost": 0,
+            "most_recent_date": None,
+            "average_week": 0,
+            "average_month": 0,
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
+        }
+    
+    # Calculate labor costs for all tasks
+    task_costs = []
+    for task in completed_tasks:
+        if task.assigned_to and task.total_time_minutes > 0:
+            cost = (task.total_time_minutes / 60) * task.assigned_to.hourly_wage
+            task_costs.append({
+                "cost": cost,
+                "date": task.finished_at,
+                "task": task
+            })
+    
+    if not task_costs:
+        return {
+            "task_count": 0,
+            "most_recent_cost": 0,
+            "most_recent_date": None,
+            "average_week": 0,
+            "average_month": 0,
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
+        }
+    
+    # Sort by date (most recent first)
+    task_costs.sort(key=lambda x: x["date"], reverse=True)
+    
+    # Most recent
+    most_recent = task_costs[0]
+    
+    # Calculate averages for different time periods
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    week_costs = [tc["cost"] for tc in task_costs if tc["date"] >= week_ago]
+    month_costs = [tc["cost"] for tc in task_costs if tc["date"] >= month_ago]
+    all_costs = [tc["cost"] for tc in task_costs]
+    
+    return {
+        "task_count": len(completed_tasks),
+        "most_recent_cost": most_recent["cost"],
+        "most_recent_date": most_recent["date"].strftime('%Y-%m-%d'),
+        "average_week": sum(week_costs) / len(week_costs) if week_costs else 0,
+        "average_month": sum(month_costs) / len(month_costs) if month_costs else 0,
+        "average_all_time": sum(all_costs) / len(all_costs) if all_costs else 0,
+        "week_task_count": len(week_costs),
+        "month_task_count": len(month_costs)
+    }
+
 @app.get("/api/recipes/{recipe_id}/usage_units")
 async def get_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db)):
     try:
