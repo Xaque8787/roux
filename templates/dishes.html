@@ -230,9 +230,11 @@ function selectBatch(batch) {
 
 function showPortionSizeSelection(batch) {
     // First load available portion units for this batch
+    console.log('Loading portion units for batch:', batch.id);
     fetch(`/api/batches/${batch.id}/portion_units`)
         .then(response => response.json())
         .then(units => {
+            console.log('Loaded units:', units);
             showPortionModal(batch, units);
         })
         .catch(error => {
