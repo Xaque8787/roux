@@ -45,6 +45,9 @@
                                     <label class="form-label mb-1">
                                         <strong>{{ item.inventory_item.name }}</strong>
                                         <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                                        {% if item.inventory_item.batch %}
+                                        <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
+                                        {% endif %}
                                     </label>
                                     <input type="number" class="form-control form-control-sm mb-2" 
                                            name="item_{{ item.inventory_item.id }}" 
@@ -214,6 +217,13 @@
                             <small class="text-success">
                                 <i class="fas fa-link"></i> Direct Batch Link: 
                                 <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a>
+                            </small><br>
+                            {% elif task.inventory_item and task.inventory_item.batch %}
+                            <small class="text-info">
+                                <i class="fas fa-industry"></i> Batch: 
+                                <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
+                                    {{ task.inventory_item.batch.recipe.name }}
+                                </a>
                             </small><br>
                             {% endif %}
                             

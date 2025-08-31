@@ -1451,7 +1451,7 @@ async def create_inventory_item(
     par_level: float = Form(...),
     category_id: Optional[int] = Form(None),
     batch_id: str = Form(""),
-    db: Session = Depends(get_db)
+    category_id: Optional[str] = Form(None),
 ):
     # Convert empty string to None for batch_id
     batch_id_value = int(batch_id) if batch_id and batch_id.strip() else None
@@ -1461,7 +1461,7 @@ async def create_inventory_item(
         par_level=par_level,
         batch_id=batch_id_value,
     )
-    db.add(item)
+        category_id=category_id_int
     db.commit()
     
     return RedirectResponse(url="/inventory", status_code=302)
@@ -1720,6 +1720,14 @@ async def assign_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_manager_or_admin)
 ):
+    # Convert category_id properly
+    category_id_int = None
+    if category_id and category_id.strip():
+        try:
+            category_id_int = int(category_id)
+        except ValueError:
+            pass
+    
     form = await request.form()
     assigned_to_id = form.get("assigned_to_id")
     
