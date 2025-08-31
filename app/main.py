@@ -25,7 +25,7 @@ def needs_setup(db: Session):
 
 # Helper function to create default categories
 def create_default_categories(db: Session):
-    default_categories = [
+    """Create default categories if they don't exist"""
     default_categories = [
         ("Proteins", "ingredient"),
         ("Vegetables", "ingredient"),
@@ -36,7 +36,7 @@ def create_default_categories(db: Session):
         ("Appetizers", "dish"),
         ("Entrees", "dish"),
         ("Desserts", "dish"),
-        ("Beverages", "dish"),
+    ]
         ("Prep Items", "inventory"),
         ("Cleaning Supplies", "inventory"),
         ("Paper Goods", "inventory"),
