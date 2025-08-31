@@ -165,7 +165,8 @@ class Batch(Base):
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
     yield_amount = Column(Float)
     yield_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    labor_minutes = Column(Integer)
+    estimated_labor_minutes = Column(Integer)  # Average estimated time
+    hourly_labor_rate = Column(Float, default=16.75)  # Configurable labor rate
     can_be_scaled = Column(Boolean, default=False)
     scale_double = Column(Boolean, default=False)
     scale_half = Column(Boolean, default=False)
@@ -176,6 +177,28 @@ class Batch(Base):
     
     recipe = relationship("Recipe")
     yield_unit = relationship("UsageUnit")
+    
+    @property
+    def estimated_labor_cost(self):
+        """Calculate estimated labor cost based on average time and hourly rate"""
+        return (self.estimated_labor_minutes / 60) * self.hourly_labor_rate
+    
+    @property
+    def actual_labor_cost(self):
+        """Calculate actual labor cost from most recent completed task"""
+        # This will be calculated from the most recent completed inventory task
+        # Implementation will be in the route handlers
+        return 0
+    
+    @property
+    def average_labor_cost_week(self):
+        """Average labor cost from past week's completed tasks"""
+        return 0
+    
+    @property
+    def average_labor_cost_month(self):
+        """Average labor cost from past month's completed tasks"""
+        return 0
 
 class Dish(Base):
     __tablename__ = "dishes"
@@ -223,7 +246,9 @@ class InventoryItem(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Link to batch
     category = relationship("Category")
+    batch = relationship("Batch")
     par_level = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -253,6 +278,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True)
     day_id = Column(Integer, ForeignKey("inventory_days.id"))
     assigned_to_id = Column(Integer, ForeignKey("users.id"))
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
     description = Column(String)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
@@ -264,6 +290,7 @@ class Task(Base):
     
     assigned_to = relationship("User")
     day = relationship("InventoryDay")
+    inventory_item = relationship("InventoryItem")
     
     @property
     def total_time_minutes(self):
@@ -279,6 +306,13 @@ class Task(Base):
             return 0
         total_seconds = (self.finished_at - self.started_at).total_seconds()
         return int(total_seconds / 60) - int(self.total_pause_time / 60)
+    
+    @property
+    def labor_cost(self):
+        """Calculate labor cost for this task"""
+        if self.assigned_to and self.total_time_minutes > 0:
+            return (self.total_time_minutes / 60) * self.assigned_to.hourly_wage
+        return 0
     
     @property
     def status(self):
