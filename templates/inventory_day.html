@@ -132,15 +132,21 @@
                 {% if not inventory_day.finalized %}
                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new" class="mb-3">
                     <div class="mb-2">
-                        <select class="form-select form-select-sm" name="assigned_to_id" required>
-                            <option value="">Assign to...</option>
+                        <label class="form-label">Assign to Employees:</label>
+                        <div class="border p-2" style="max-height: 120px; overflow-y: auto;">
                             {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
                             {% for emp in employees %}
                             {% if emp.id|string in working_employee_ids %}
-                            <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp_{{ emp.id }}">
+                                <label class="form-check-label" for="emp_{{ emp.id }}">
+                                    {{ emp.full_name or emp.username }}
+                                </label>
+                            </div>
                             {% endif %}
                             {% endfor %}
-                        </select>
+                        </div>
+                        <small class="text-muted">Select one or more employees, or leave blank for unassigned task</small>
                     </div>
                     <div class="mb-2">
                         <select class="form-select form-select-sm" name="inventory_item_id">
@@ -197,6 +203,13 @@
                             
                             {% if task.inventory_item and task.inventory_item.batch %}
                             <small class="text-info">Batch: {{ task.inventory_item.batch.recipe.name }}</small><br>
+                            {% endif %}
+                            
+                            {% if task.batch %}
+                            <small class="text-success">
+                                <i class="fas fa-link"></i> Linked to: 
+                                <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a>
+                            </small><br>
                             {% endif %}
                             
                             {% if task.status == "not_started" %}

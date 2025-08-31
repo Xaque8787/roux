@@ -1857,6 +1857,74 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         "detail": exc.detail
     }, status_code=exc.status_code)
 
+# API endpoint for batch labor statistics
+@app.get("/api/batches/{batch_id}/labor_stats")
+async def get_batch_labor_stats(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Get all completed tasks for this batch
+    completed_tasks = db.query(Task).filter(
+        and_(
+            Task.batch_id == batch_id,
+            Task.finished_at.isnot(None),
+            Task.assigned_to_id.isnot(None)
+        )
+    ).options(joinedload(Task.assigned_to)).all()
+    
+    if not completed_tasks:
+        return {
+            "task_count": 0,
+            "most_recent_cost": 0,
+            "most_recent_date": None,
+            "average_week": 0,
+            "average_month": 0,
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
+        }
+    
+    # Calculate labor costs for all tasks
+    task_costs = []
+    for task in completed_tasks:
+        labor_cost = task.labor_cost
+        task_costs.append({
+            "cost": labor_cost,
+            "date": task.finished_at,
+            "task": task
+        })
+    
+    # Sort by date (most recent first)
+    task_costs.sort(key=lambda x: x["date"], reverse=True)
+    
+    # Most recent
+    most_recent = task_costs[0]
+    
+    # Filter by timeframes
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    week_tasks = [tc for tc in task_costs if tc["date"] >= week_ago]
+    month_tasks = [tc for tc in task_costs if tc["date"] >= month_ago]
+    
+    # Calculate averages
+    average_week = sum(tc["cost"] for tc in week_tasks) / len(week_tasks) if week_tasks else 0
+    average_month = sum(tc["cost"] for tc in month_tasks) / len(month_tasks) if month_tasks else 0
+    average_all_time = sum(tc["cost"] for tc in task_costs) / len(task_costs) if task_costs else 0
+    
+    return {
+        "task_count": len(task_costs),
+        "most_recent_cost": most_recent["cost"],
+        "most_recent_date": most_recent["date"].strftime('%Y-%m-%d'),
+        "average_week": average_week,
+        "average_month": average_month,
+        "average_all_time": average_all_time,
+        "week_task_count": len(week_tasks),
+        "month_task_count": len(month_tasks)
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
