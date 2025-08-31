@@ -1553,6 +1553,31 @@ async def task_detail(request: Request, day_id: int, task_id: int, current_user:
         "employees": employees
     })
 
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/assign")
+async def assign_task(
+    day_id: int, 
+    task_id: int, 
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    form = await request.form()
+    assigned_to_id = form.get("assigned_to_id")
+    
+    if not assigned_to_id:
+        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    
+    # Get the task
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Update assignment
+    task.assigned_to_id = int(assigned_to_id)
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/start")
 async def start_task(day_id: int, task_id: int, current_user: User = Depends(require_user_or_above), db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
