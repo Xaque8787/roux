@@ -68,9 +68,16 @@ class RecipeOut(BaseModel):
 class BatchCreate(BaseModel):
     recipe_id: int
     yield_amount: float
-    labor_minutes: int
+    yield_unit_id: int
+    estimated_labor_minutes: int
+    hourly_labor_rate: float = 16.75
     can_be_broken_down: Optional[bool] = False
-    breakdown_sizes: Optional[str] = None
+    can_be_scaled: Optional[bool] = False
+    scale_double: Optional[bool] = False
+    scale_half: Optional[bool] = False
+    scale_quarter: Optional[bool] = False
+    scale_eighth: Optional[bool] = False
+    scale_sixteenth: Optional[bool] = False
 
 class BatchOut(BatchCreate):
     id: int
