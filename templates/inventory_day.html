@@ -143,6 +143,14 @@
                         </select>
                     </div>
                     <div class="mb-2">
+                        <select class="form-select form-select-sm" name="inventory_item_id">
+                            <option value="">Link to inventory item (optional)...</option>
+                            {% for item in inventory_day_items %}
+                            <option value="{{ item.inventory_item.id }}">{{ item.inventory_item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
                         <input type="text" class="form-control form-control-sm" name="description" placeholder="Task description" required>
                     </div>
                     <button type="submit" class="btn btn-sm btn-success">

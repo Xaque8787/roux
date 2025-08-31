@@ -1189,8 +1189,8 @@ async def get_batch_labor_stats(
     from datetime import datetime, timedelta
     
     # Find all completed tasks for this batch through inventory items
-    completed_tasks = db.query(Task).join(InventoryItem).filter(
-        InventoryItem.batch_id == batch_id,
+    completed_tasks = db.query(Task).filter(
+        Task.batch_id == batch_id,
         Task.finished_at.isnot(None),
         Task.assigned_to_id.isnot(None)
     ).all()
@@ -1617,8 +1617,6 @@ async def update_inventory_day(
             if not existing_task:
                 task = Task(
                     day_id=day_id,
-                    inventory_item_id=item.inventory_item.id,
-                    batch_id=item.inventory_item.batch_id,  # Inherit batch from inventory item
                     description=f"Restock {item.inventory_item.name} (below par: {item.quantity}/{item.inventory_item.par_level})",
                     auto_generated=True
                 )
