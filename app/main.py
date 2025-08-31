@@ -1617,6 +1617,8 @@ async def update_inventory_day(
             if not existing_task:
                 task = Task(
                     day_id=day_id,
+                    inventory_item_id=item.inventory_item.id,
+                    batch_id=item.inventory_item.batch_id,  # Inherit batch from inventory item
                     description=f"Restock {item.inventory_item.name} (below par: {item.quantity}/{item.inventory_item.par_level})",
                     auto_generated=True
                 )
