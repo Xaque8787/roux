@@ -240,7 +240,35 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
 # Add API endpoint to get available portion units for a batch
 @app.get("/api/batches/{batch_id}/portion_units")
 async def get_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
-    """Get available portion units for a batch (yield unit + ingredient usage units)"""
+    """Get all available portion units for a batch (yield unit + ingredient usage units)"""
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get recipe ingredients and their usage units
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == batch.recipe_id
+    ).all()
+    
+    # Collect all unique usage units from ingredients
+    usage_unit_ids = set()
+    
+    # Add batch yield unit
+    if batch.yield_unit_id:
+        usage_unit_ids.add(batch.yield_unit_id)
+    
+    # Add usage units from recipe ingredients
+    for ri in recipe_ingredients:
+        usage_unit_ids.add(ri.usage_unit_id)
+    
+    # Get usage unit details
+    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
+    
+    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+
+@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
+async def get_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Depends(get_db)):
+    """Calculate cost per unit for a specific unit"""
     batch = db.query(Batch).options(
         joinedload(Batch.recipe).joinedload(Recipe.ingredients).joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit),
         joinedload(Batch.yield_unit)
@@ -249,108 +277,126 @@ async def get_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    available_units = []
-    unit_ids_seen = set()
-    
-    # Add batch yield unit
-    if batch.yield_unit:
-        available_units.append({
-            "id": batch.yield_unit.id,
-            "name": batch.yield_unit.name
-        })
-        unit_ids_seen.add(batch.yield_unit.id)
-    
-    # Get all usage units from recipe ingredients
+    # Calculate total batch cost (recipe + estimated labor)
     recipe_ingredients = db.query(RecipeIngredient).options(
         joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
     ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     
-    for recipe_ingredient in recipe_ingredients:
-        for ingredient_usage_unit in recipe_ingredient.ingredient.usage_units:
-            usage_unit = ingredient_usage_unit.usage_unit
-            if usage_unit.id not in unit_ids_seen:
-                # Check if we can convert from batch yield unit to this usage unit
-                can_convert = can_convert_units(batch.yield_unit_id, usage_unit.id, db)
-                if can_convert:
-                    available_units.append({
-                        "id": usage_unit.id,
-                        "name": usage_unit.name
-                    })
-                    unit_ids_seen.add(usage_unit.id)
-    
-    return available_units
-
-def can_convert_units(from_unit_id: int, to_unit_id: int, db: Session) -> bool:
-    """Check if we can convert between two units"""
-    if from_unit_id == to_unit_id:
-        return True
-    
-    # Check if there's a direct vendor unit conversion path
-    # This is a simplified check - in a real system you might have more complex conversion logic
-    
-    # For now, we'll allow conversions between units that share the same "type"
-    # This is a basic implementation - you could enhance this with a proper unit conversion system
-    
-    from_unit = db.query(UsageUnit).filter(UsageUnit.id == from_unit_id).first()
-    to_unit = db.query(UsageUnit).filter(UsageUnit.id == to_unit_id).first()
-    
-    if not from_unit or not to_unit:
-        return False
-    
-    # Define unit type groups for conversion compatibility
-    weight_units = ['lb', 'lbs', 'pound', 'pounds', 'oz', 'ounce', 'ounces', 'gram', 'grams', 'kg', 'kilogram', 'kilograms']
-    volume_units = ['gal', 'gallon', 'gallons', 'qt', 'quart', 'quarts', 'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons', 'ml', 'milliliter', 'milliliters', 'liter', 'liters']
-    count_units = ['each', 'piece', 'pieces', 'item', 'items', 'can', 'cans', 'bottle', 'bottles', 'bag', 'bags']
-    
-    from_name = from_unit.name.lower()
-    to_name = to_unit.name.lower()
-    
-    # Check if both units are in the same category
-    if ((from_name in weight_units and to_name in weight_units) or
-        (from_name in volume_units and to_name in volume_units) or
-        (from_name in count_units and to_name in count_units)):
-        return True
-    
-    return False
-
-@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
-async def get_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Depends(get_db)):
-    """Calculate cost per unit for a specific usage unit in a batch"""
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Get recipe ingredients for cost calculation
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == batch.recipe_id
-    ).all()
-    
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+    estimated_total_cost = total_recipe_cost + batch.estimated_labor_cost
     
-    # If requesting yield unit, return cost per yield unit
+    # Calculate actual total cost (recipe + actual labor)
+    actual_labor_cost = get_batch_actual_labor_cost(batch_id, db)
+    actual_total_cost = total_recipe_cost + actual_labor_cost
+    
     if unit_id == batch.yield_unit_id:
-        if batch.yield_amount > 0:
-            return {"cost_per_unit": total_batch_cost / batch.yield_amount}
-        return {"cost_per_unit": 0}
+        # Same as yield unit - simple division
+        expected_cost_per_unit = estimated_total_cost / batch.yield_amount
+        actual_cost_per_unit = actual_total_cost / batch.yield_amount
+    else:
+        # Different unit - calculate conversion through recipe ingredients
+        expected_cost_per_unit = calculate_unit_cost_conversion(
+            batch, unit_id, estimated_total_cost, recipe_ingredients, db
+        )
+        actual_cost_per_unit = calculate_unit_cost_conversion(
+            batch, unit_id, actual_total_cost, recipe_ingredients, db
+        )
     
-    # For other units, need to find conversion from yield unit to requested unit
-    # This is complex - for now, we'll estimate based on ingredient ratios
-    # Find if this unit is used by any ingredient in the recipe
-    for ri in recipe_ingredients:
-        if ri.usage_unit_id == unit_id:
-            # Calculate what portion of the batch this ingredient represents
-            ingredient_cost_ratio = ri.cost / total_recipe_cost if total_recipe_cost > 0 else 0
-            # Estimate cost per unit based on ingredient usage in recipe
-            if ri.quantity > 0:
-                cost_per_recipe_unit = (total_batch_cost * ingredient_cost_ratio) / ri.quantity
-                return {"cost_per_unit": cost_per_recipe_unit}
+    return {
+        "expected_cost_per_unit": expected_cost_per_unit,
+        "actual_cost_per_unit": actual_cost_per_unit,
+        "estimated_total_cost": estimated_total_cost,
+        "actual_total_cost": actual_total_cost,
+        "yield_amount": batch.yield_amount,
+        "yield_unit": batch.yield_unit.name if batch.yield_unit else None,
+        "selected_unit": db.query(UsageUnit).filter(UsageUnit.id == unit_id).first().name
+    }
+
+def calculate_unit_cost_conversion(batch, target_unit_id: int, total_batch_cost: float, recipe_ingredients, db: Session) -> float:
+    """Calculate cost per unit when converting from batch yield unit to a different unit"""
     
-    # Fallback: assume 1:1 ratio with yield unit
-    if batch.yield_amount > 0:
-        return {"cost_per_unit": total_batch_cost / batch.yield_amount}
+    if target_unit_id == batch.yield_unit_id:
+        # Same unit - simple division
+        return total_batch_cost / batch.yield_amount
     
-    return {"cost_per_unit": 0}
+    # Find if any recipe ingredient uses this target unit
+    target_unit = db.query(UsageUnit).filter(UsageUnit.id == target_unit_id).first()
+    if not target_unit:
+        return total_batch_cost / batch.yield_amount  # Fallback
+    
+    # Look for an ingredient that uses both the batch yield unit and the target unit
+    for recipe_ingredient in recipe_ingredients:
+        ingredient = recipe_ingredient.ingredient
+        
+        # Check if this ingredient has usage units for both yield unit and target unit
+        yield_unit_usage = None
+        target_unit_usage = None
+        
+        for usage_unit in ingredient.usage_units:
+            if usage_unit.usage_unit_id == batch.yield_unit_id:
+                yield_unit_usage = usage_unit
+            if usage_unit.usage_unit_id == target_unit_id:
+                target_unit_usage = usage_unit
+        
+        if yield_unit_usage and target_unit_usage:
+            # We can convert through this ingredient
+            # Calculate how much of the batch yield unit this ingredient represents
+            ingredient_portion = recipe_ingredient.quantity / batch.yield_amount
+            
+            # Calculate conversion ratio
+            # If 1 lb of ingredient = 16 oz, and we want cost per oz
+            # conversion_ratio = yield_unit_conversion / target_unit_conversion
+            conversion_ratio = yield_unit_usage.conversion_factor / target_unit_usage.conversion_factor
+            
+            # Cost per target unit = (total_cost / yield_amount) / conversion_ratio
+            return (total_batch_cost / batch.yield_amount) / conversion_ratio
+    
+    # No direct conversion found - use basic weight/volume conversion estimates
+    yield_unit_name = batch.yield_unit.name.lower() if batch.yield_unit else ""
+    target_unit_name = target_unit.name.lower()
+    
+    # Basic conversion factors (this could be enhanced with a proper conversion table)
+    conversion_factor = get_basic_conversion_factor(yield_unit_name, target_unit_name)
+    
+    if conversion_factor:
+        return (total_batch_cost / batch.yield_amount) / conversion_factor
+    
+    # Fallback - assume 1:1 ratio
+    return total_batch_cost / batch.yield_amount
+
+def get_basic_conversion_factor(from_unit: str, to_unit: str) -> float:
+    """Basic conversion factors for common units"""
+    conversions = {
+        # Weight conversions
+        ('lb', 'oz'): 16.0,
+        ('lbs', 'oz'): 16.0,
+        ('pound', 'ounce'): 16.0,
+        ('pounds', 'ounces'): 16.0,
+        ('kg', 'gram'): 1000.0,
+        ('kilogram', 'grams'): 1000.0,
+        
+        # Volume conversions
+        ('gal', 'qt'): 4.0,
+        ('gallon', 'quart'): 4.0,
+        ('qt', 'cup'): 4.0,
+        ('quart', 'cups'): 4.0,
+        ('cup', 'tbsp'): 16.0,
+        ('cups', 'tablespoon'): 16.0,
+        ('tbsp', 'tsp'): 3.0,
+        ('tablespoon', 'teaspoon'): 3.0,
+        ('liter', 'ml'): 1000.0,
+        ('liters', 'milliliter'): 1000.0,
+    }
+    
+    # Check direct conversion
+    if (from_unit, to_unit) in conversions:
+        return conversions[(from_unit, to_unit)]
+    
+    # Check reverse conversion
+    if (to_unit, from_unit) in conversions:
+        return 1.0 / conversions[(to_unit, from_unit)]
+    
+    return None  # No conversion available
 
 @app.get("/dishes/{dish_id}", response_class=HTMLResponse)
 async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
