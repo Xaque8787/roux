@@ -279,6 +279,7 @@ class Task(Base):
     day_id = Column(Integer, ForeignKey("inventory_days.id"))
     assigned_to_id = Column(Integer, ForeignKey("users.id"))
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Inherited from inventory item
     description = Column(String)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
@@ -291,6 +292,7 @@ class Task(Base):
     assigned_to = relationship("User")
     day = relationship("InventoryDay")
     inventory_item = relationship("InventoryItem")
+    batch = relationship("Batch")
     
     @property
     def total_time_minutes(self):
