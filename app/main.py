@@ -1335,6 +1335,7 @@ async def inventory_list(request: Request, current_user: User = Depends(get_curr
         "request": request,
         "current_user": current_user,
         "inventory_items": inventory_items,
+        "batches": batches,
         "categories": categories,
         "batches": batches,
         "employees": employees,
@@ -1429,6 +1430,7 @@ async def create_inventory_day(
     
     # Create inventory day items for all inventory items
     inventory_items = db.query(InventoryItem).all()
+    batches = db.query(Batch).join(Recipe).all()
     for item in inventory_items:
         day_item = InventoryDayItem(
             day_id=inventory_day.id,
