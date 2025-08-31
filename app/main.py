@@ -847,6 +847,9 @@ async def batches(request: Request, current_user: User = Depends(get_current_use
     recipes = db.query(Recipe).all()
     usage_units = db.query(UsageUnit).all()
     
+    # Get all usage units that are used by ingredients
+    usage_units = db.query(UsageUnit).join(IngredientUsageUnit).distinct().all()
+    
     return templates.TemplateResponse("batches.html", {
         "request": request,
         "current_user": current_user,
@@ -930,7 +933,10 @@ async def batch_edit_form(
         raise HTTPException(status_code=404, detail="Batch not found")
     
     recipes = db.query(Recipe).all()
-    usage_units = db.query(UsageUnit).all()
+    
+    # Get all usage units that are used by ingredients
+    usage_units = db.query(UsageUnit).join(IngredientUsageUnit).distinct().all()
+    
     
     return templates.TemplateResponse("batch_edit.html", {
         "request": request,
@@ -1776,9 +1782,10 @@ async def api_batches_search(q: str = "", db: Session = Depends(get_db)):
     """Search batches for dish creation"""
     query = db.query(Batch).join(Recipe)
     
-    if q:
-        query = query.filter(Recipe.name.ilike(f"%{q}%"))
-    
+    batches = db.query(Batch).options(
+        joinedload(Batch.recipe).joinedload(Recipe.category),
+        joinedload(Batch.yield_unit)
+    ).join(Recipe).filter(Recipe.name.ilike(f"%{q}%")).all()
     batches = query.limit(10).all()
     result = []
     
@@ -1825,36 +1832,29 @@ async def api_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
         seen_unit_ids.add(batch.yield_unit_id)
         logger.debug(f"Added yield unit: {batch.yield_unit.name}")
     
-    # Get all usage units from recipe ingredients
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == batch.recipe_id
-    ).all()
+    # Get all usage units from recipe ingredients with proper joins
+    recipe_ingredients = db.query(RecipeIngredient).options(
+        joinedload(RecipeIngredient.ingredient).joinedload(Ingredient.usage_units).joinedload(IngredientUsageUnit.usage_unit)
+    ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     
     logger.debug(f"Processing {len(recipe_ingredients)} recipe ingredients")
     
     for ri in recipe_ingredients:
         logger.debug(f"Processing ingredient: {ri.ingredient.name}")
         
-        # Get all usage units for this ingredient
-        ingredient_usage_units = db.query(IngredientUsageUnit).filter(
-            IngredientUsageUnit.ingredient_id == ri.ingredient_id
-        ).all()
-        
-        logger.debug(f"Found {len(ingredient_usage_units)} usage units for {ri.ingredient.name}")
-        
-        for iu in ingredient_usage_units:
-            if iu.usage_unit_id not in seen_unit_ids:
-                # Check if this unit is compatible with batch yield unit
+        # Get all usage units for this ingredient (already loaded via joinedload)
+        for iu in ri.ingredient.usage_units:
+            if iu.usage_unit and iu.usage_unit.id not in unit_ids_seen:
                 if batch.yield_unit and are_units_compatible(batch.yield_unit.name, iu.usage_unit.name):
                     available_units.append({
-                        "id": iu.usage_unit_id,
+                        "id": iu.usage_unit.id,
                         "name": iu.usage_unit.name,
                         "type": "ingredient"
                     })
-                    seen_unit_ids.add(iu.usage_unit_id)
-                    logger.debug(f"Added convertible unit: {iu.usage_unit.name}")
+                    unit_ids_seen.add(iu.usage_unit.id)
+                    print(f"DEBUG: Added convertible unit {iu.usage_unit.name}")
                 else:
-                    logger.debug(f"Skipped incompatible unit: {iu.usage_unit.name} (not compatible with {batch.yield_unit.name})")
+                    print(f"DEBUG: Skipped incompatible unit {iu.usage_unit.name}")
     
     logger.debug(f"Returning {len(available_units)} available units: {[u['name'] for u in available_units]}")
     return available_units
