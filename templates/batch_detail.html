@@ -280,14 +280,28 @@ async function loadLaborStats() {
                     <div class="col-4">
                         <small class="text-muted">Week Avg</small>
                         <p class="mb-0"><strong>$${stats.average_week.toFixed(2)}</strong></p>
+                        <small class="text-muted">(${stats.week_task_count} tasks)</small>
                     </div>
                     <div class="col-4">
                         <small class="text-muted">Month Avg</small>
                         <p class="mb-0"><strong>$${stats.average_month.toFixed(2)}</strong></p>
+                        <small class="text-muted">(${stats.month_task_count} tasks)</small>
                     </div>
                     <div class="col-4">
-                        <small class="text-muted">Year Avg</small>
-                        <p class="mb-0"><strong>$${stats.average_year.toFixed(2)}</strong></p>
+                        <small class="text-muted">All Time Avg</small>
+                        <p class="mb-0"><strong>$${stats.average_all_time.toFixed(2)}</strong></p>
+                        <small class="text-muted">(${stats.task_count} tasks)</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="row text-center">
+                    <div class="col-12">
+                        <small class="text-muted">Estimated vs Most Recent</small>
+                        <p class="mb-0">
+                            <span class="${stats.most_recent_cost > {{ batch.estimated_labor_cost }} ? 'text-danger' : 'text-success'}">
+                                ${stats.most_recent_cost > {{ batch.estimated_labor_cost }} ? '+' : ''}${(stats.most_recent_cost - {{ batch.estimated_labor_cost }}).toFixed(2)}
+                            </span>
+                        </p>
                     </div>
                 </div>
             `;
