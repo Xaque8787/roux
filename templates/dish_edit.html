@@ -190,6 +190,20 @@ function selectBatch(batch) {
 }
 
 function showPortionSizeSelection(batch) {
+    // First load available portion units for this batch
+    fetch(`/api/batches/${batch.id}/portion_units`)
+        .then(response => response.json())
+        .then(units => {
+            showPortionModal(batch, units);
+        })
+        .catch(error => {
+            console.error('Error loading portion units:', error);
+            // Fallback to just yield unit
+            showPortionModal(batch, [{id: batch.yield_unit_id, name: batch.yield_unit}]);
+        });
+}
+
+function showPortionModal(batch, availableUnits) {
     const modal = document.createElement('div');
     modal.className = 'modal fade';
     modal.innerHTML = `
@@ -207,8 +221,19 @@ function showPortionSizeSelection(batch) {
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Portion Size</label>
-                        <input type="number" class="form-control" id="portionSizeInput" step="0.01" min="0" required>
-                        <small class="text-muted">Enter portion size in ${batch.yield_unit}</small>
+                        <div class="row">
+                            <div class="col-8">
+                                <input type="number" class="form-control" id="portionSizeInput" step="0.01" min="0" required>
+                            </div>
+                            <div class="col-4">
+                                <select class="form-select" id="portionUnitSelect">
+                                    ${availableUnits.map(unit => 
+                                        `<option value="${unit.id}" ${unit.id === batch.yield_unit_id ? 'selected' : ''}>${unit.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <small class="text-muted">Enter portion size and select unit</small>
                     </div>
                     <div class="mb-3">
                         <small class="text-muted">Estimated cost: $<span id="estimatedPortionCost">0.00</span></small>
@@ -228,15 +253,33 @@ function showPortionSizeSelection(batch) {
     
     // Update cost estimate when portion size changes
     const portionSizeInput = modal.querySelector('#portionSizeInput');
+    const portionUnitSelect = modal.querySelector('#portionUnitSelect');
     const estimatedCost = modal.querySelector('#estimatedPortionCost');
     
-    function updatePortionCost() {
+    async function updatePortionCost() {
         const portionSize = parseFloat(portionSizeInput.value) || 0;
-        const cost = portionSize * batch.cost_per_unit;
-        estimatedCost.textContent = cost.toFixed(2);
+        const selectedUnitId = portionUnitSelect.value;
+        
+        if (portionSize > 0 && selectedUnitId) {
+            try {
+                const response = await fetch(`/api/batches/${batch.id}/cost_per_unit/${selectedUnitId}`);
+                const data = await response.json();
+                const cost = portionSize * data.cost_per_unit;
+                estimatedCost.textContent = cost.toFixed(2);
+            } catch (error) {
+                console.error('Error calculating cost:', error);
+                estimatedCost.textContent = '0.00';
+            }
+        } else {
+            estimatedCost.textContent = '0.00';
+        }
     }
     
     portionSizeInput.addEventListener('input', updatePortionCost);
+    portionUnitSelect.addEventListener('change', updatePortionCost);
+    
+    // Initial cost calculation
+    updatePortionCost();
     
     // Clean up modal when closed
     modal.addEventListener('hidden.bs.modal', function() {
@@ -246,20 +289,30 @@ function showPortionSizeSelection(batch) {
 
 function addBatchToDish() {
     const portionSizeInput = document.querySelector('#portionSizeInput');
+    const portionUnitSelect = document.querySelector('#portionUnitSelect');
     
     const portionSize = parseFloat(portionSizeInput.value);
+    const portionUnitId = parseInt(portionUnitSelect.value);
+    const portionUnitName = portionUnitSelect.selectedOptions[0].text;
+    
     if (!portionSize || portionSize <= 0) {
         alert('Please enter a valid portion size.');
         return;
     }
     
-    const estimatedCost = portionSize * currentBatchData.cost_per_unit;
+    if (!portionUnitId) {
+        alert('Please select a portion unit.');
+        return;
+    }
+    
+    const estimatedCost = parseFloat(document.querySelector('#estimatedPortionCost').textContent);
     
     // Add to selected batches
     selectedBatches.push({
         batch_id: currentBatchData.id,
         recipe_name: currentBatchData.recipe_name,
-        yield_unit: currentBatchData.yield_unit,
+        portion_unit_id: portionUnitId,
+        portion_unit_name: portionUnitName,
         portion_size: portionSize,
         estimated_cost: estimatedCost
     });
@@ -296,7 +349,7 @@ function updateSelectedBatchesDisplay() {
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <strong>${batch.recipe_name}</strong><br>
-                            <small>${batch.portion_size} ${batch.yield_unit} - $${batch.estimated_cost.toFixed(2)}</small>
+                            <small>${batch.portion_size} ${batch.portion_unit_name} - $${batch.estimated_cost.toFixed(2)}</small>
                         </div>
                         <button type="button" class="btn btn-sm btn-danger" onclick="removeBatch(${index})">
                             <i class="fas fa-times"></i>
