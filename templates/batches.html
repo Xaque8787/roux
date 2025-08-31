@@ -49,8 +49,16 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="labor_minutes" class="form-label">Labor Minutes</label>
-                        <input type="number" class="form-control" id="labor_minutes" name="labor_minutes" required>
+                        <label for="estimated_labor_minutes" class="form-label">Estimated Labor Minutes (Average)</label>
+                        <input type="number" class="form-control" id="estimated_labor_minutes" name="estimated_labor_minutes" required>
+                        <small class="text-muted">Average time to complete this batch</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="hourly_labor_rate" class="form-label">Hourly Labor Rate</label>
+                        <input type="number" class="form-control" id="hourly_labor_rate" name="hourly_labor_rate" 
+                               step="0.01" value="16.75" required>
+                        <small class="text-muted">Cost per hour for labor</small>
                     </div>
                     
                     <div class="mb-3 form-check">
@@ -111,7 +119,7 @@
                             <tr>
                                 <th>Recipe</th>
                                 <th>Yield</th>
-                                <th>Labor (min)</th>
+                                <th>Est. Labor</th>
                                 <th>Scaling</th>
                                 <th>Actions</th>
                             </tr>
@@ -128,7 +136,10 @@
                                 <td>
                                     {{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }}
                                 </td>
-                                <td>{{ batch.labor_minutes }}</td>
+                                <td>
+                                    {{ batch.estimated_labor_minutes }} min<br>
+                                    <small class="text-muted">${{ "%.2f"|format(batch.hourly_labor_rate) }}/hr</small>
+                                </td>
                                 <td>
                                     {% if batch.can_be_scaled %}
                                         <span class="badge bg-success">Scalable</span>

@@ -134,8 +134,11 @@
                     <div class="mb-2">
                         <select class="form-select form-select-sm" name="assigned_to_id" required>
                             <option value="">Assign to...</option>
+                            {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
                             {% for emp in employees %}
+                            {% if emp.id|string in working_employee_ids %}
                             <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                            {% endif %}
                             {% endfor %}
                         </select>
                     </div>
@@ -154,15 +157,38 @@
                         <div class="card-body p-2">
                             <div class="d-flex justify-content-between align-items-start mb-1">
                                 <small><strong>{{ task.description }}</strong></small>
-                                {% if task.auto_generated %}
-                                <span class="badge bg-info">Auto</span>
-                                {% endif %}
+                                <div>
+                                    {% if task.auto_generated %}
+                                    <span class="badge bg-info">Auto</span>
+                                    {% endif %}
+                                    {% if task.inventory_item and task.inventory_item.batch %}
+                                    <span class="badge bg-success">Batch</span>
+                                    {% endif %}
+                                </div>
                             </div>
                             
                             {% if task.assigned_to %}
                             <small class="text-muted">Assigned to: {{ task.assigned_to.full_name or task.assigned_to.username }}</small><br>
                             {% else %}
-                            <small class="text-warning">Unassigned</small><br>
+                            <small class="text-warning">Unassigned</small>
+                            {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/assign" style="display:inline;">
+                                <select name="assigned_to_id" class="form-select form-select-sm mt-1" onchange="this.form.submit()">
+                                    <option value="">Assign to...</option>
+                                    {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
+                                    {% for emp in employees %}
+                                    {% if emp.id|string in working_employee_ids %}
+                                    <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                                    {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </form>
+                            {% endif %}
+                            <br>
+                            {% endif %}
+                            
+                            {% if task.inventory_item and task.inventory_item.batch %}
+                            <small class="text-info">Batch: {{ task.inventory_item.batch.recipe.name }}</small><br>
                             {% endif %}
                             
                             {% if task.status == "not_started" %}
@@ -195,6 +221,9 @@
                             {% elif task.status == "completed" %}
                                 <span class="badge bg-success">Completed</span>
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
+                                {% if task.assigned_to %}
+                                <br><small class="text-success">Cost: ${{ "%.2f"|format(task.labor_cost) }}</small>
+                                {% endif %}
                             {% endif %}
                             
                             <div class="mt-1">

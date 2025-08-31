@@ -160,12 +160,13 @@
                 <hr>
                 
                 <p><strong>Yield:</strong> {{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }}</p>
-                <p><strong>Labor Time:</strong> {{ batch.labor_minutes }} minutes</p>
+                <p><strong>Est. Labor Time:</strong> {{ batch.estimated_labor_minutes }} minutes</p>
+                <p><strong>Hourly Rate:</strong> ${{ "%.2f"|format(batch.hourly_labor_rate) }}/hr</p>
                 
                 <hr>
                 
                 <p><strong>Recipe Cost:</strong> <span class="text-success">${{ "%.2f"|format(total_recipe_cost) }}</span></p>
-                <p><strong>Labor Cost:</strong> <span class="text-warning">${{ "%.2f"|format(labor_cost) }}</span></p>
+                <p><strong>Est. Labor Cost:</strong> <span class="text-warning">${{ "%.2f"|format(batch.estimated_labor_cost) }}</span></p>
                 <p><strong>Total Batch Cost:</strong> <span class="text-primary">${{ "%.2f"|format(total_batch_cost) }}</span></p>
                 
                 <hr>
@@ -180,6 +181,20 @@
                 {% endif %}
                 
                 <p><strong>Created:</strong> {{ batch.created_at.strftime('%Y-%m-%d %H:%M') if batch.created_at else 'N/A' }}</p>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-clock"></i> Actual Labor Costs</h5>
+            </div>
+            <div class="card-body" id="laborStats">
+                <div class="text-center">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2">Loading labor statistics...</p>
+                </div>
             </div>
         </div>
         
@@ -219,11 +234,74 @@
                 <hr>
                 <div class="d-flex justify-content-between">
                     <small><strong>Labor Cost</strong></small>
-                    <small><strong>${{ "%.2f"|format(labor_cost) }} ({{ "%.1f"|format((labor_cost / total_batch_cost * 100) if total_batch_cost > 0 else 0) }}%)</strong></small>
+                    <small><strong>${{ "%.2f"|format(batch.estimated_labor_cost) }} ({{ "%.1f"|format((batch.estimated_labor_cost / total_batch_cost * 100) if total_batch_cost > 0 else 0) }}%)</strong></small>
                 </div>
             </div>
         </div>
         {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadLaborStats();
+});
+
+async function loadLaborStats() {
+    try {
+        const response = await fetch('/api/batches/{{ batch.id }}/labor_stats');
+        const stats = await response.json();
+        
+        const laborStatsDiv = document.getElementById('laborStats');
+        
+        if (stats.task_count === 0) {
+            laborStatsDiv.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-info-circle"></i>
+                    <p>No completed tasks yet for this batch</p>
+                    <small>Labor costs will appear here once inventory tasks are completed</small>
+                </div>
+            `;
+        } else {
+            laborStatsDiv.innerHTML = `
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h6 class="text-primary">Most Recent</h6>
+                        <p class="mb-1"><strong>$${stats.most_recent_cost.toFixed(2)}</strong></p>
+                        <small class="text-muted">${stats.most_recent_date}</small>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-info">Tasks Completed</h6>
+                        <p class="mb-0"><strong>${stats.task_count}</strong></p>
+                    </div>
+                </div>
+                <hr>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <small class="text-muted">Week Avg</small>
+                        <p class="mb-0"><strong>$${stats.average_week.toFixed(2)}</strong></p>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted">Month Avg</small>
+                        <p class="mb-0"><strong>$${stats.average_month.toFixed(2)}</strong></p>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted">Year Avg</small>
+                        <p class="mb-0"><strong>$${stats.average_year.toFixed(2)}</strong></p>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading labor stats:', error);
+        document.getElementById('laborStats').innerHTML = `
+            <div class="text-center text-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error loading labor statistics</p>
+            </div>
+        `;
+    }
+}
+</script>
+{% endblock %}
 {% endblock %}

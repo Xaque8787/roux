@@ -896,8 +896,7 @@ async def create_batch(
     recipe_id: int = Form(...),
     yield_amount: float = Form(...),
     yield_unit_id: int = Form(...),
-    estimated_labor_minutes: int = Form(...),
-    hourly_labor_rate: float = Form(16.75),
+    labor_minutes: int = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
     scale_half: bool = Form(False),
@@ -911,8 +910,7 @@ async def create_batch(
         recipe_id=recipe_id,
         yield_amount=yield_amount,
         yield_unit_id=yield_unit_id,
-        estimated_labor_minutes=estimated_labor_minutes,
-        hourly_labor_rate=hourly_labor_rate,
+        labor_minutes=labor_minutes,
         can_be_scaled=can_be_scaled,
         scale_double=scale_double if can_be_scaled else False,
         scale_half=scale_half if can_be_scaled else False,
@@ -943,7 +941,7 @@ async def batch_detail(request: Request, batch_id: int, current_user: User = Dep
     ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    labor_cost = (batch.estimated_labor_minutes / 60) * batch.hourly_labor_rate
+    labor_cost = (batch.labor_minutes / 60) * 15.0  # Default wage
     total_batch_cost = total_recipe_cost + labor_cost
     cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
     
@@ -985,8 +983,7 @@ async def batch_edit_post(
     recipe_id: int = Form(...),
     yield_amount: float = Form(...),
     yield_unit_id: int = Form(...),
-    estimated_labor_minutes: int = Form(...),
-    hourly_labor_rate: float = Form(16.75),
+    labor_minutes: int = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
     scale_half: bool = Form(False),
@@ -1003,8 +1000,7 @@ async def batch_edit_post(
     batch.recipe_id = recipe_id
     batch.yield_amount = yield_amount
     batch.yield_unit_id = yield_unit_id
-    batch.estimated_labor_minutes = estimated_labor_minutes
-    batch.hourly_labor_rate = hourly_labor_rate
+    batch.labor_minutes = labor_minutes
     batch.can_be_scaled = can_be_scaled
     batch.scale_double = scale_double if can_be_scaled else False
     batch.scale_half = scale_half if can_be_scaled else False
@@ -1050,7 +1046,7 @@ async def search_batches(q: str = "", db: Session = Depends(get_db)):
             # Calculate cost per unit
             recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            labor_cost = (batch.estimated_labor_minutes / 60) * batch.hourly_labor_rate
+            labor_cost = (batch.labor_minutes / 60) * 15.0
             total_batch_cost = total_recipe_cost + labor_cost
             cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
             
@@ -1067,6 +1063,97 @@ async def search_batches(q: str = "", db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Error in search_batches: {e}")
         return []
+
+# API endpoint for batch search (for inventory items)
+@app.get("/api/batches/all")
+def get_all_batches(db: Session = Depends(get_db)):
+    try:
+        batches = db.query(Batch).join(Recipe).all()
+        
+        batch_data = []
+        for batch in batches:
+            # Calculate total recipe cost
+            recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            
+            # Calculate estimated labor cost
+            estimated_labor_cost = batch.estimated_labor_cost
+            total_batch_cost = total_recipe_cost + estimated_labor_cost
+            
+            # Calculate cost per unit
+            cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+            
+            batch_data.append({
+                "id": batch.id,
+                "recipe_name": batch.recipe.name,
+                "yield_amount": batch.yield_amount,
+                "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
+                "estimated_labor_minutes": batch.estimated_labor_minutes,
+                "hourly_labor_rate": batch.hourly_labor_rate,
+                "cost_per_unit": cost_per_unit,
+                "category": batch.recipe.category.name if batch.recipe.category else None
+            })
+        
+        return batch_data
+    except Exception as e:
+        print(f"Error in get_all_batches: {e}")
+        return []
+
+@app.get("/api/batches/{batch_id}/labor_stats")
+def get_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        from datetime import timedelta
+        
+        # Get all completed tasks for this batch's inventory items
+        completed_tasks = db.query(Task).join(InventoryItem).filter(
+            InventoryItem.batch_id == batch_id,
+            Task.finished_at.isnot(None)
+        ).all()
+        
+        if not completed_tasks:
+            return {
+                "most_recent_cost": 0,
+                "average_week": 0,
+                "average_month": 0,
+                "average_year": 0,
+                "task_count": 0
+            }
+        
+        # Most recent task
+        most_recent_task = max(completed_tasks, key=lambda t: t.finished_at)
+        most_recent_cost = most_recent_task.labor_cost
+        
+        # Calculate averages for different time periods
+        now = datetime.utcnow()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+        year_ago = now - timedelta(days=365)
+        
+        week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
+        month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
+        year_tasks = [t for t in completed_tasks if t.finished_at >= year_ago]
+        
+        average_week = sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else 0
+        average_month = sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else 0
+        average_year = sum(t.labor_cost for t in year_tasks) / len(year_tasks) if year_tasks else 0
+        
+        return {
+            "most_recent_cost": most_recent_cost,
+            "average_week": average_week,
+            "average_month": average_month,
+            "average_year": average_year,
+            "task_count": len(completed_tasks),
+            "most_recent_date": most_recent_task.finished_at.strftime('%Y-%m-%d') if most_recent_task.finished_at else None
+        }
+    except Exception as e:
+        print(f"Error in get_batch_labor_stats: {e}")
+        return {
+            "most_recent_cost": 0,
+            "average_week": 0,
+            "average_month": 0,
+            "average_year": 0,
+            "task_count": 0
+        }
 
 # Dishes
 @app.get("/dishes", response_class=HTMLResponse)

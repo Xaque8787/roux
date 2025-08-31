@@ -56,9 +56,17 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="labor_minutes" class="form-label">Labor Minutes</label>
-                        <input type="number" class="form-control" id="labor_minutes" name="labor_minutes" 
-                               value="{{ batch.labor_minutes }}" required>
+                        <label for="estimated_labor_minutes" class="form-label">Estimated Labor Minutes (Average)</label>
+                        <input type="number" class="form-control" id="estimated_labor_minutes" name="estimated_labor_minutes" 
+                               value="{{ batch.estimated_labor_minutes }}" required>
+                        <small class="text-muted">Average time to complete this batch</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="hourly_labor_rate" class="form-label">Hourly Labor Rate</label>
+                        <input type="number" class="form-control" id="hourly_labor_rate" name="hourly_labor_rate" 
+                               step="0.01" value="{{ batch.hourly_labor_rate }}" required>
+                        <small class="text-muted">Cost per hour for labor</small>
                     </div>
                     
                     <div class="mb-3 form-check">
