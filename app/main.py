@@ -41,6 +41,7 @@ def create_default_categories(db: Session):
         ("Cleaning Supplies", "inventory"),
         ("Paper Goods", "inventory"),
     ]
+    ]
     
     for name, category_type in default_categories:
         # Check if category already exists
