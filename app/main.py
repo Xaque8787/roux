@@ -224,6 +224,49 @@ async def setup_form(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("setup.html", {"request": request})
 
 @app.post("/setup")
+async def setup_post(
+    request: Request,
+    username: str = Form(...), 
+    password: str = Form(...),
+    full_name: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Check if any users already exist
+        existing_user = db.query(User).first()
+        if existing_user:
+            return RedirectResponse(url="/login", status_code=303)
+        
+        # Use username as full_name if not provided
+        if not full_name.strip():
+            full_name = username
+        
+        # Create the first admin user
+        hashed_password = hash_password(password)
+        admin_user = User(
+            username=username,
+            hashed_password=hashed_password,
+            full_name=full_name,
+            role="admin",
+            hourly_wage=15.0,
+            is_active=True
+        )
+        db.add(admin_user)
+        db.commit()
+        
+        # Create default categories and units
+        create_default_categories(db)
+        create_default_units(db)
+        
+        return RedirectResponse(url="/login", status_code=302)
+    except Exception as e:
+        logger.error(f"Setup error: {str(e)}")
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "error": "Setup failed. Please try again."
+        })
+
+@app.post("/setup")
 async def setup_admin(
     request: Request,
     username: str = Form(...),
