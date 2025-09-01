@@ -11,7 +11,17 @@
             </div>
             <div class="card-body">
                 <p class="text-muted">Create the first admin user to get started.</p>
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-exclamation-triangle"></i> {{ error }}
+                </div>
+                {% endif %}
                 <form method="post">
+                    <div class="mb-3">
+                        <label for="full_name" class="form-label">Full Name</label>
+                        <input type="text" class="form-control" id="full_name" name="full_name" placeholder="Enter your full name">
+                        <small class="text-muted">Optional - will use username if not provided</small>
+                    </div>
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
                         <input type="text" class="form-control" id="username" name="username" required>
@@ -19,6 +29,7 @@
                     <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
                         <input type="password" class="form-control" id="password" name="password" required>
+                        <small class="text-muted">Choose a strong password for the admin account</small>
                     </div>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-user-plus"></i> Create Admin User

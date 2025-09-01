@@ -25,6 +25,18 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+def check_setup_required(db: Session) -> bool:
+    """Check if initial setup is required (no users exist)"""
+    user_count = db.query(User).count()
+    return user_count == 0
+
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
+    """Get current user but don't raise exception if not authenticated"""
+    try:
+        return get_current_user(request, db)
+    except HTTPException:
+        return None
+
 # Helper function to check if setup is needed
 def needs_setup(db: Session):
     return db.query(User).count() == 0
@@ -99,15 +111,15 @@ def create_default_units(db: Session):
 
 # Root redirect
 @app.get("/")
-async def root():
+async def root(db: Session = Depends(get_db)):
+    if check_setup_required(db):
+        return RedirectResponse(url="/setup", status_code=307)
     return RedirectResponse(url="/home", status_code=307)
 
 # Setup routes
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_form(request: Request, db: Session = Depends(get_db)):
-    if not needs_setup(db):
-        return RedirectResponse(url="/home", status_code=302)
-    return templates.TemplateResponse("setup.html", {"request": request})
+    if not check_setup_required(db):
 
 @app.post("/setup")
 async def setup_create_admin(
@@ -146,14 +158,16 @@ async def setup_create_admin(
             "request": request,
             "error": f"Error creating admin user: {str(e)}"
         })
+    # Check if setup is required
+    if check_setup_required(db):
+        return RedirectResponse(url="/setup", status_code=302)
+    
 
 # Login routes
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request, db: Session = Depends(get_db)):
     if needs_setup(db):
-        return RedirectResponse(url="/setup", status_code=302)
-    return templates.TemplateResponse("login.html", {"request": request})
-
+    if not check_setup_required(db):
 @app.post("/login")
 async def login(
     request: Request,
@@ -161,6 +175,10 @@ async def login(
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    # Check if setup is required
+    if check_setup_required(db):
+        return RedirectResponse(url="/setup", status_code=302)
+    
     from .auth import verify_password
     
     user = db.query(User).filter(User.username == username).first()
@@ -192,7 +210,12 @@ async def logout():
 
 # Home page
 @app.get("/home", response_class=HTMLResponse)
-async def home(request: Request, current_user: User = Depends(get_current_user)):
+async def home(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # This should not be reached if setup is required due to auth dependency,
+    # but adding as extra safety
+    if check_setup_required(db):
+        return RedirectResponse(url="/setup", status_code=302)
+    
     return templates.TemplateResponse("home.html", {
         "request": request,
         "current_user": current_user
