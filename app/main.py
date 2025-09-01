@@ -49,8 +49,15 @@ def create_default_categories(db: Session):
         ("Prep", "inventory"),
         ("Proteins", "inventory"),
         ("Produce", "inventory"),
-        ("Dry Goods", "inventory"),
-    ]
+        # Check if category already exists
+        existing = db.query(Category).filter(
+            Category.name == name, 
+            Category.type == category_type
+        ).first()
+        
+        if not existing:
+            category = Category(name=name, type=category_type)
+            db.add(category)
     
     for name, cat_type in default_categories:
         existing = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
@@ -59,6 +66,45 @@ def create_default_categories(db: Session):
             db.add(category)
     
     db.commit()
+def create_default_units(db: Session):
+    """Create default vendor and usage units if they don't exist"""
+    # Default vendor units
+    vendor_units = [
+        ("lb", "Pound"),
+        ("oz", "Ounce"),
+        ("gal", "Gallon"),
+        ("qt", "Quart"),
+        ("pt", "Pint"),
+        ("kg", "Kilogram"),
+        ("g", "Gram"),
+        ("L", "Liter"),
+        ("mL", "Milliliter")
+    ]
+    
+    for name, description in vendor_units:
+        existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
+        if not existing:
+            unit = VendorUnit(name=name, description=description)
+            db.add(unit)
+    
+    # Default usage units
+    usage_units = [
+        "lb", "oz", "cup", "tbsp", "tsp", "gal", "qt", "pt", "fl oz",
+        "kg", "g", "L", "mL", "each", "can", "jar", "bag", "box", "bunch"
+    ]
+    
+    for name in usage_units:
+        existing = db.query(UsageUnit).filter(UsageUnit.name == name).first()
+        if not existing:
+            unit = UsageUnit(name=name)
+            db.add(unit)
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # Units might already exist, which is fine
+        pass
 
 def create_default_units(db: Session):
     """Create default vendor and usage units if they don't exist"""
@@ -146,6 +192,9 @@ async def create_admin_user(
         
         # Create default categories and units
         create_default_categories(db)
+        
+        # Create default units
+        create_default_units(db)
         create_default_units(db)
         
         return RedirectResponse(url="/login?setup=success", status_code=303)
