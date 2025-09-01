@@ -45,14 +45,6 @@ def verify_jwt(token: str):
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
     if not token:
-        # Check if this is a setup scenario (no users exist)
-        user_count = db.query(User).count()
-        if user_count == 0:
-            raise HTTPException(
-                status_code=401,
-                detail="Setup required",
-                headers={"Location": "/setup"}
-            )
         raise HTTPException(
             status_code=401, 
             detail="Not authenticated",
@@ -63,14 +55,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     username = payload.get("sub")
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.is_active:
-        # Check if this is a setup scenario (no users exist)
-        user_count = db.query(User).count()
-        if user_count == 0:
-            raise HTTPException(
-                status_code=401,
-                detail="Setup required", 
-                headers={"Location": "/setup"}
-            )
         raise HTTPException(
             status_code=401, 
             detail="User not found",
