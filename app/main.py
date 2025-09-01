@@ -295,6 +295,434 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
         "current_user": current_user
     })
 
+# Ingredients routes
+@app.get("/ingredients", response_class=HTMLResponse)
+async def ingredients_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).all()
+    categories = db.query(Category).filter(Category.type == "ingredient").all()
+    vendors = db.query(Vendor).all()
+    vendor_units = db.query(VendorUnit).all()
+    usage_units = db.query(UsageUnit).all()
+    
+    return templates.TemplateResponse("ingredients.html", {
+        "request": request,
+        "current_user": current_user,
+        "ingredients": ingredients,
+        "categories": categories,
+        "vendors": vendors,
+        "vendor_units": vendor_units,
+        "usage_units": usage_units
+    })
+
+@app.post("/ingredients/new")
+async def create_ingredient(
+    request: Request,
+    name: str = Form(...),
+    category_id: Optional[int] = Form(None),
+    vendor_id: Optional[int] = Form(None),
+    vendor_unit_id: Optional[int] = Form(None),
+    purchase_type: str = Form(...),
+    purchase_unit_name: str = Form(...),
+    purchase_weight_volume: float = Form(...),
+    purchase_total_cost: float = Form(...),
+    breakable_case: bool = Form(False),
+    items_per_case: Optional[int] = Form(None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Create ingredient
+        ingredient = Ingredient(
+            name=name,
+            category_id=category_id if category_id else None,
+            vendor_id=vendor_id if vendor_id else None,
+            vendor_unit_id=vendor_unit_id if vendor_unit_id else None,
+            purchase_type=purchase_type,
+            purchase_unit_name=purchase_unit_name,
+            purchase_weight_volume=purchase_weight_volume,
+            purchase_total_cost=purchase_total_cost,
+            breakable_case=breakable_case,
+            items_per_case=items_per_case if purchase_type == 'case' else None
+        )
+        db.add(ingredient)
+        db.flush()  # Get the ID
+        
+        # Add usage unit conversions
+        form_data = await request.form()
+        for key, value in form_data.items():
+            if key.startswith('conversion_') and value:
+                usage_unit_id = int(key.split('_')[1])
+                conversion_factor = float(value)
+                
+                usage_conversion = IngredientUsageUnit(
+                    ingredient_id=ingredient.id,
+                    usage_unit_id=usage_unit_id,
+                    conversion_factor=conversion_factor
+                )
+                db.add(usage_conversion)
+        
+        db.commit()
+        return RedirectResponse(url="/ingredients", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/ingredients/{ingredient_id}", response_class=HTMLResponse)
+async def ingredient_detail(ingredient_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    usage_units = db.query(IngredientUsageUnit).filter(IngredientUsageUnit.ingredient_id == ingredient_id).all()
+    
+    return templates.TemplateResponse("ingredient_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "ingredient": ingredient,
+        "usage_units": usage_units
+    })
+
+# Recipes routes
+@app.get("/recipes", response_class=HTMLResponse)
+async def recipes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    recipes = db.query(Recipe).all()
+    categories = db.query(Category).filter(Category.type == "recipe").all()
+    
+    return templates.TemplateResponse("recipes.html", {
+        "request": request,
+        "current_user": current_user,
+        "recipes": recipes,
+        "categories": categories
+    })
+
+@app.get("/recipes/{recipe_id}", response_class=HTMLResponse)
+async def recipe_detail(recipe_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
+    total_cost = sum(ri.cost for ri in recipe_ingredients)
+    
+    return templates.TemplateResponse("recipe_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "recipe": recipe,
+        "recipe_ingredients": recipe_ingredients,
+        "total_cost": total_cost
+    })
+
+# Batches routes
+@app.get("/batches", response_class=HTMLResponse)
+async def batches_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batches = db.query(Batch).all()
+    recipes = db.query(Recipe).all()
+    usage_units = db.query(UsageUnit).all()
+    
+    return templates.TemplateResponse("batches.html", {
+        "request": request,
+        "current_user": current_user,
+        "batches": batches,
+        "recipes": recipes,
+        "usage_units": usage_units
+    })
+
+@app.get("/batches/{batch_id}", response_class=HTMLResponse)
+async def batch_detail(batch_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+    cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+    
+    return templates.TemplateResponse("batch_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "batch": batch,
+        "recipe_ingredients": recipe_ingredients,
+        "total_recipe_cost": total_recipe_cost,
+        "total_batch_cost": total_batch_cost,
+        "cost_per_yield_unit": cost_per_yield_unit
+    })
+
+# Dishes routes
+@app.get("/dishes", response_class=HTMLResponse)
+async def dishes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    dishes = db.query(Dish).all()
+    categories = db.query(Category).filter(Category.type == "dish").all()
+    
+    return templates.TemplateResponse("dishes.html", {
+        "request": request,
+        "current_user": current_user,
+        "dishes": dishes,
+        "categories": categories
+    })
+
+@app.get("/dishes/{dish_id}", response_class=HTMLResponse)
+async def dish_detail(dish_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
+    
+    # Calculate costs
+    expected_total_cost = 0
+    actual_total_cost = 0
+    
+    for portion in dish_batch_portions:
+        # Calculate expected cost (using estimated labor)
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == portion.batch.recipe_id).all()
+        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_batch_cost = recipe_cost + portion.batch.estimated_labor_cost
+        cost_per_unit = total_batch_cost / portion.batch.yield_amount if portion.batch.yield_amount > 0 else 0
+        portion.expected_cost = portion.portion_size * cost_per_unit
+        expected_total_cost += portion.expected_cost
+        
+        # For now, actual cost equals expected cost (will be updated with real labor data later)
+        portion.actual_cost = portion.expected_cost
+        actual_total_cost += portion.actual_cost
+    
+    expected_profit = dish.sale_price - expected_total_cost
+    expected_profit_margin = (expected_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    actual_profit = dish.sale_price - actual_total_cost
+    actual_profit_margin = (actual_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    return templates.TemplateResponse("dish_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "dish": dish,
+        "dish_batch_portions": dish_batch_portions,
+        "expected_total_cost": expected_total_cost,
+        "actual_total_cost": actual_total_cost,
+        "expected_profit": expected_profit,
+        "expected_profit_margin": expected_profit_margin,
+        "actual_profit": actual_profit,
+        "actual_profit_margin": actual_profit_margin
+    })
+
+# Inventory routes
+@app.get("/inventory", response_class=HTMLResponse)
+async def inventory_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    inventory_items = db.query(InventoryItem).all()
+    categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).all()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    # Get current day (today's inventory day if exists)
+    today = date.today()
+    current_day = db.query(InventoryDay).filter(InventoryDay.date == today).first()
+    
+    # Get recent finalized days (last 30 days)
+    thirty_days_ago = today - timedelta(days=30)
+    finalized_days = db.query(InventoryDay).filter(
+        InventoryDay.finalized == True,
+        InventoryDay.date >= thirty_days_ago
+    ).order_by(InventoryDay.date.desc()).limit(10).all()
+    
+    return templates.TemplateResponse("inventory.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_items": inventory_items,
+        "categories": categories,
+        "batches": batches,
+        "employees": employees,
+        "current_day": current_day,
+        "finalized_days": finalized_days,
+        "today_date": today.isoformat()
+    })
+
+# Employees routes (admin only)
+@app.get("/employees", response_class=HTMLResponse)
+async def employees_page(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    employees = db.query(User).all()
+    
+    return templates.TemplateResponse("employees.html", {
+        "request": request,
+        "current_user": current_user,
+        "employees": employees
+    })
+
+# Utilities routes (admin only)
+@app.get("/utilities", response_class=HTMLResponse)
+async def utilities_page(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    utilities = db.query(UtilityCost).all()
+    
+    return templates.TemplateResponse("utilities.html", {
+        "request": request,
+        "current_user": current_user,
+        "utilities": utilities
+    })
+
+# API routes for AJAX functionality
+@app.get("/api/ingredients/all")
+async def get_all_ingredients(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).all()
+    result = []
+    
+    for ingredient in ingredients:
+        usage_units = db.query(IngredientUsageUnit).filter(IngredientUsageUnit.ingredient_id == ingredient.id).all()
+        
+        ingredient_data = {
+            "id": ingredient.id,
+            "name": ingredient.name,
+            "category": ingredient.category.name if ingredient.category else None,
+            "usage_units": [
+                {
+                    "usage_unit_id": iu.usage_unit_id,
+                    "usage_unit_name": iu.usage_unit.name,
+                    "price_per_usage_unit": iu.price_per_usage_unit
+                }
+                for iu in usage_units
+            ]
+        }
+        result.append(ingredient_data)
+    
+    return result
+
+@app.get("/api/batches/all")
+async def get_all_batches(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batches = db.query(Batch).all()
+    result = []
+    
+    for batch in batches:
+        # Calculate batch cost
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_cost = recipe_cost + batch.estimated_labor_cost
+        cost_per_unit = total_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+        
+        batch_data = {
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
+            "yield_unit_id": batch.yield_unit_id,
+            "cost_per_unit": cost_per_unit,
+            "category": batch.recipe.category.name if batch.recipe.category else None
+        }
+        result.append(batch_data)
+    
+    return result
+
+@app.get("/api/batches/search")
+async def search_batches(q: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batches = db.query(Batch).join(Recipe).filter(Recipe.name.ilike(f"%{q}%")).all()
+    result = []
+    
+    for batch in batches:
+        # Calculate batch cost
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_cost = recipe_cost + batch.estimated_labor_cost
+        cost_per_unit = total_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+        
+        batch_data = {
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
+            "yield_unit_id": batch.yield_unit_id,
+            "cost_per_unit": cost_per_unit,
+            "category": batch.recipe.category.name if batch.recipe.category else None
+        }
+        result.append(batch_data)
+    
+    return result
+
+@app.get("/api/vendor_units/{vendor_unit_id}/conversions")
+async def get_vendor_unit_conversions(vendor_unit_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    conversions = db.query(VendorUnitConversion).filter(VendorUnitConversion.vendor_unit_id == vendor_unit_id).all()
+    result = {}
+    
+    for conversion in conversions:
+        result[conversion.usage_unit_id] = conversion.conversion_factor
+    
+    return result
+
+# Categories route
+@app.post("/categories/new")
+async def create_category(
+    name: str = Form(...),
+    type: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        category = Category(name=name, type=type)
+        db.add(category)
+        db.commit()
+        
+        # Redirect back to the appropriate page based on type
+        if type == "ingredient":
+            return RedirectResponse(url="/ingredients", status_code=303)
+        elif type == "recipe":
+            return RedirectResponse(url="/recipes", status_code=303)
+        elif type == "dish":
+            return RedirectResponse(url="/dishes", status_code=303)
+        elif type == "inventory":
+            return RedirectResponse(url="/inventory", status_code=303)
+        else:
+            return RedirectResponse(url="/home", status_code=303)
+            
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Vendors route
+@app.post("/vendors/new")
+async def create_vendor(
+    name: str = Form(...),
+    contact_info: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        vendor = Vendor(name=name, contact_info=contact_info)
+        db.add(vendor)
+        db.commit()
+        return RedirectResponse(url="/ingredients", status_code=303)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Vendor Units route
+@app.post("/vendor_units/new")
+async def create_vendor_unit(
+    name: str = Form(...),
+    description: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        vendor_unit = VendorUnit(name=name, description=description)
+        db.add(vendor_unit)
+        db.commit()
+        return RedirectResponse(url="/ingredients", status_code=303)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Usage Units route
+@app.post("/usage_units/new")
+async def create_usage_unit(
+    name: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        usage_unit = UsageUnit(name=name)
+        db.add(usage_unit)
+        db.commit()
+        return RedirectResponse(url="/ingredients", status_code=303)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
 # Error handlers
 @app.exception_handler(401)
 async def unauthorized_handler(request: Request, exc: HTTPException):
