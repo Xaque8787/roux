@@ -1434,48 +1434,48 @@ async def create_inventory_item(
 @app.post("/inventory/new_day")
 async def create_inventory_day(
     request: Request,
-    date: str = Form(...),
-    employees_working: List[str] = Form(...),
+    date: date = Form(...),
+    employees_working: List[int] = Form([]),
     global_notes: str = Form(""),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
 ):
     try:
-        from datetime import datetime
-        
-        # Parse date
-        inventory_date = datetime.strptime(date, '%Y-%m-%d').date()
-        
         # Check if day already exists
-        existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date).first()
+        existing_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
         if existing_day:
-            return RedirectResponse(url=f"/inventory/day/{existing_day.id}", status_code=303)
+            return templates.TemplateResponse("error.html", {
+                "request": request,
+                "status_code": 400,
+                "detail": "Inventory day already exists for this date"
+            })
         
-        # Create inventory day
-        inventory_day = InventoryDay(
-            date=inventory_date,
-            employees_working=','.join(employees_working),
+        # Create new inventory day
+        new_day = InventoryDay(
+            date=date,
+            employees_working=",".join(map(str, employees_working)),
             global_notes=global_notes
         )
-        db.add(inventory_day)
+        db.add(new_day)
         db.flush()  # Get the ID
         
         # Create inventory day items for all inventory items
         inventory_items = db.query(InventoryItem).all()
         for item in inventory_items:
             day_item = InventoryDayItem(
-                day_id=inventory_day.id,
+                day_id=new_day.id,
                 inventory_item_id=item.id,
                 quantity=0
             )
             db.add(day_item)
         
         db.commit()
-        return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=303)
+        return RedirectResponse(url=f"/inventory/day/{new_day.id}", status_code=303)
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Error creating inventory day: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating inventory day: {str(e)}")
 
 @app.get("/inventory/day/{day_id}", response_class=HTMLResponse)
 async def inventory_day_detail(
@@ -1628,112 +1628,157 @@ async def delete_utility(
 @app.get("/api/recipes/{recipe_id}/usage_units")
 async def get_recipe_usage_units(
     recipe_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
-    usage_unit_ids = set()
-    
-    for ri in recipe_ingredients:
-        usage_unit_ids.add(ri.usage_unit_id)
-    
-    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
-    
-    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+    try:
+        # Get all usage units from recipe ingredients
+        recipe_usage_units = db.query(UsageUnit).join(
+            RecipeIngredient, RecipeIngredient.usage_unit_id == UsageUnit.id
+        ).filter(RecipeIngredient.recipe_id == recipe_id).distinct().all()
+        
+        # Also get usage units from ingredients used in the recipe
+        ingredient_usage_units = db.query(UsageUnit).join(
+            IngredientUsageUnit, IngredientUsageUnit.usage_unit_id == UsageUnit.id
+        ).join(
+            RecipeIngredient, RecipeIngredient.ingredient_id == IngredientUsageUnit.ingredient_id
+        ).filter(RecipeIngredient.recipe_id == recipe_id).distinct().all()
+        
+        # Combine and deduplicate
+        all_units = {}
+        for unit in recipe_usage_units + ingredient_usage_units:
+            all_units[unit.id] = {"id": unit.id, "name": unit.name}
+        
+        return list(all_units.values())
+    except Exception as e:
+        print(f"Error getting recipe usage units: {e}")
+        return []
 
 @app.get("/api/batches/{batch_id}/portion_units")
 async def get_batch_portion_units(
     batch_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Get recipe ingredients and their usage units
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-    usage_unit_ids = set()
-    
-    for ri in recipe_ingredients:
-        usage_unit_ids.add(ri.usage_unit_id)
-    
-    # Always include the batch yield unit
-    if batch.yield_unit_id:
-        usage_unit_ids.add(batch.yield_unit_id)
-    
-    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
-    
-    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+    try:
+        batch = db.query(Batch).filter(Batch.id == batch_id).first()
+        if not batch:
+            return []
+        
+        # Get all usage units from recipe ingredients
+        recipe_usage_units = db.query(UsageUnit).join(
+            RecipeIngredient, RecipeIngredient.usage_unit_id == UsageUnit.id
+        ).filter(RecipeIngredient.recipe_id == batch.recipe_id).distinct().all()
+        
+        # Also get usage units from ingredients used in the recipe
+        ingredient_usage_units = db.query(UsageUnit).join(
+            IngredientUsageUnit, IngredientUsageUnit.usage_unit_id == UsageUnit.id
+        ).join(
+            RecipeIngredient, RecipeIngredient.ingredient_id == IngredientUsageUnit.ingredient_id
+        ).filter(RecipeIngredient.recipe_id == batch.recipe_id).distinct().all()
+        
+        # Combine and deduplicate
+        all_units = {}
+        for unit in recipe_usage_units + ingredient_usage_units:
+            all_units[unit.id] = {"id": unit.id, "name": unit.name}
+        
+        return list(all_units.values())
+    except Exception as e:
+        print(f"Error getting batch portion units: {e}")
+        return []
 
 @app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
 async def get_batch_cost_per_unit(
     batch_id: int,
     unit_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Calculate total batch cost
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-    recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    total_cost = recipe_cost + batch.estimated_labor_cost
-    
-    # Calculate cost per yield unit
-    cost_per_yield_unit = total_cost / batch.yield_amount if batch.yield_amount > 0 else 0
-    
-    # If requesting yield unit, return directly
-    if unit_id == batch.yield_unit_id:
-        return {"expected_cost_per_unit": cost_per_yield_unit}
-    
-    # Otherwise, need to convert from yield unit to requested unit
-    # For now, return the yield unit cost (conversion logic can be added later)
-    return {"expected_cost_per_unit": cost_per_yield_unit}
+    try:
+        batch = db.query(Batch).filter(Batch.id == batch_id).first()
+        if not batch:
+            return {"expected_cost_per_unit": 0}
+        
+        # Calculate total batch cost (recipe + labor)
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == batch.recipe_id
+        ).all()
+        
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+        
+        # Calculate cost per yield unit
+        if batch.yield_amount and batch.yield_amount > 0:
+            cost_per_yield_unit = total_batch_cost / batch.yield_amount
+            
+            # If requesting different unit than yield unit, apply conversion
+            if unit_id != batch.yield_unit_id:
+                # For now, assume 1:1 conversion - you may want to add proper conversion logic
+                # This would require a conversion table between units
+                conversion_factor = 1.0  # Placeholder
+                cost_per_unit = cost_per_yield_unit * conversion_factor
+            else:
+                cost_per_unit = cost_per_yield_unit
+            
+            return {"expected_cost_per_unit": cost_per_unit}
+        
+        return {"expected_cost_per_unit": 0}
+    except Exception as e:
+        print(f"Error calculating batch cost per unit: {e}")
+        return {"expected_cost_per_unit": 0}
 
 @app.get("/api/batches/{batch_id}/labor_stats")
 async def get_batch_labor_stats(
     batch_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    from datetime import datetime, timedelta
-    
-    # Get completed tasks for this batch
-    completed_tasks = db.query(Task).filter(
-        Task.batch_id == batch_id,
-        Task.finished_at.isnot(None)
-    ).order_by(Task.finished_at.desc()).all()
-    
-    if not completed_tasks:
+    try:
+        # Get completed tasks for this batch
+        completed_tasks = db.query(Task).filter(
+            Task.batch_id == batch_id,
+            Task.finished_at.isnot(None)
+        ).order_by(Task.finished_at.desc()).all()
+        
+        if not completed_tasks:
+            return {
+                "task_count": 0,
+                "most_recent_cost": 0,
+                "most_recent_date": "",
+                "average_week": 0,
+                "average_month": 0,
+                "average_all_time": 0,
+                "week_task_count": 0,
+                "month_task_count": 0
+            }
+        
+        # Calculate statistics
+        most_recent = completed_tasks[0]
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        
+        week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
+        month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
+        
+        return {
+            "task_count": len(completed_tasks),
+            "most_recent_cost": most_recent.labor_cost,
+            "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
+            "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else 0,
+            "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else 0,
+            "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
+            "week_task_count": len(week_tasks),
+            "month_task_count": len(month_tasks)
+        }
+    except Exception as e:
+        print(f"Error getting labor stats: {e}")
         return {
             "task_count": 0,
             "most_recent_cost": 0,
-            "most_recent_date": None,
+            "most_recent_date": "",
             "average_week": 0,
             "average_month": 0,
             "average_all_time": 0,
             "week_task_count": 0,
             "month_task_count": 0
         }
-    
-    # Calculate stats
-    most_recent = completed_tasks[0]
-    week_ago = datetime.utcnow() - timedelta(days=7)
-    month_ago = datetime.utcnow() - timedelta(days=30)
-    
-    week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
-    month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
-    
-    return {
-        "task_count": len(completed_tasks),
-        "most_recent_cost": most_recent.labor_cost,
-        "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
-        "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else 0,
-        "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else 0,
-        "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
-        "week_task_count": len(week_tasks),
-        "month_task_count": len(month_tasks)
-    }
