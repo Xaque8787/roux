@@ -49,7 +49,7 @@
                     <div class="mb-3">
                         <div class="input-group">
                             <input type="text" class="form-control" id="batchSearch" 
-                                   placeholder="Search for batches or click to see all..." autocomplete="off">
+                                   placeholder="Search for batches..." autocomplete="off">
                             <button type="button" class="btn btn-outline-secondary" id="addBatchBtn">
                                 <i class="fas fa-plus"></i> Add
                             </button>
@@ -155,11 +155,6 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(searchTimeout);
         const query = this.value.trim();
         
-        if (query.length === 0) {
-            loadAllBatches();
-            return;
-        }
-        
         if (query.length < 2) {
             suggestions.style.display = 'none';
             return;
@@ -175,13 +170,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 300);
     });
     
-    // Show all batches when field is focused
-    batchSearch.addEventListener('focus', function() {
-        if (this.value.trim() === '') {
-            loadAllBatches();
-        }
-    });
-    
     // Hide suggestions when clicking outside
     document.addEventListener('click', function(e) {
         if (!e.target.closest('#batchSearch') && !e.target.closest('#batchSuggestions')) {
@@ -194,15 +182,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('batchPortionsData').value = JSON.stringify(selectedBatches);
     });
 });
-
-function loadAllBatches() {
-    fetch('/api/batches/all')
-        .then(response => response.json())
-        .then(data => {
-            displayBatchSuggestions(data);
-        })
-        .catch(error => console.error('Error loading all batches:', error));
-}
 
 function displayBatchSuggestions(batches) {
     const suggestions = document.getElementById('batchSuggestions');
