@@ -946,11 +946,14 @@ def dish_detail(
     actual_total_cost_week = sum(portion.actual_cost_week_avg for portion in dish_batch_portions)
     actual_total_cost_month = sum(portion.actual_cost_month_avg for portion in dish_batch_portions)
     actual_total_cost_all_time = sum(portion.actual_cost_all_time_avg for portion in dish_batch_portions)
-    actual_total_cost_week = sum(portion.actual_cost_week_avg for portion in dish_batch_portions)
-    actual_total_cost_month = sum(portion.actual_cost_month_avg for portion in dish_batch_portions)
-    actual_total_cost_all_time = sum(portion.actual_cost_all_time_avg for portion in dish_batch_portions)
     
     # Calculate profits and margins
+    expected_profit = dish.sale_price - expected_total_cost
+    expected_profit_margin = (expected_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    actual_profit = dish.sale_price - actual_total_cost
+    actual_profit_margin = (actual_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
     actual_profit_week = dish.sale_price - actual_total_cost_week
     actual_profit_margin_week = (actual_profit_week / dish.sale_price * 100) if dish.sale_price > 0 else 0
     
@@ -959,6 +962,11 @@ def dish_detail(
     
     actual_profit_all_time = dish.sale_price - actual_total_cost_all_time
     actual_profit_margin_all_time = (actual_profit_all_time / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    return templates.TemplateResponse("dish_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "dish": dish,
         "dish_batch_portions": dish_batch_portions,
         "expected_total_cost": expected_total_cost,
         "actual_total_cost": actual_total_cost,
