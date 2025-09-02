@@ -1,230 +1,356 @@
-{% extends "base.html" %}
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Date
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from datetime import datetime
 
-{% block title %}Edit {{ item.name }} - Food Cost Management{% endblock %}
+Base = declarative_base()
 
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <h1><i class="fas fa-edit"></i> Edit Inventory Item: {{ item.name }}</h1>
-        <a href="/inventory" class="btn btn-secondary mb-3">
-            <i class="fas fa-arrow-left"></i> Back to Inventory
-        </a>
-    </div>
-</div>
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    full_name = Column(String)
+    hashed_password = Column(String)
+    role = Column(String, default="user")  # admin, manager, user
+    hourly_wage = Column(Float, default=15.0)
+    work_schedule = Column(String)  # comma-separated days
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-edit"></i> Item Information</h5>
-            </div>
-            <div class="card-body">
-                <form method="post" action="/inventory/items/{{ item.id }}/edit">
-                    <div class="mb-3">
-                        <label for="name" class="form-label">Item Name</label>
-                        <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="par_level" class="form-label">Par Level</label>
-                        <input type="number" class="form-control" id="par_level" name="par_level" 
-                               step="0.01" min="0" value="{{ item.par_level }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="par_unit_equals_amount" class="form-label">Par Unit Equals</label>
-                        <div class="row">
-                            <div class="col-8">
-                                <input type="number" class="form-control" id="par_unit_equals_amount" name="par_unit_equals_amount" 
-                                       step="0.01" min="0.01" value="{{ item.par_unit_equals_amount or 1.0 }}" required>
-                            </div>
-                            <div class="col-4">
-                                <select class="form-select" id="par_unit_equals_unit_id" name="par_unit_equals_unit_id" required>
-                                    <option value="">Select Unit</option>
-                                    {% for unit in usage_units %}
-                                    <option value="{{ unit.id }}" {% if item.par_unit_equals_unit_id == unit.id %}selected{% endif %}>
-                                        {{ unit.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <small class="text-muted">1 par level count equals how many units?</small>
-                        <div id="conversionPreview" class="mt-2" style="display: none;">
-                            <small id="conversionText" class=""></small>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="manual_conversion_factor" class="form-label">Manual Conversion Override (Optional)</label>
-                        <input type="number" class="form-control" id="manual_conversion_factor" name="manual_conversion_factor" 
-                               step="0.0001" value="{{ item.manual_conversion_factor or '' }}" 
-                               placeholder="Leave blank for automatic conversion">
-                        <small class="text-muted">Override automatic conversion between batch yield and par units</small>
-                    </div>
-                    <div class="mb-3">
-                        <label for="conversion_notes" class="form-label">Conversion Notes (Optional)</label>
-                        <input type="text" class="form-control" id="conversion_notes" name="conversion_notes" 
-                               value="{{ item.conversion_notes or '' }}" placeholder="Notes about the conversion method">
-                    </div>
-                    <div class="mb-3">
-                        <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
-                        <select class="form-select" id="batch_id" name="batch_id">
-                            <option value="">No batch linked</option>
-                            {% for batch in batches %}
-                            <option value="{{ batch.id }}" {% if item.batch_id == batch.id %}selected{% endif %}>
-                                {{ batch.recipe.name }} ({{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <small class="text-muted">Link to a batch for labor cost tracking</small>
-                    </div>
-                    <div class="mb-3">
-                        <label for="category_id" class="form-label">Category</label>
-                        <select class="form-select" id="category_id" name="category_id">
-                            <option value="">Select Category</option>
-                            {% for cat in categories %}
-                            <option value="{{ cat.id }}" {% if item.category_id == cat.id %}selected{% endif %}>
-                                {{ cat.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="d-flex justify-content-between">
-                        <a href="/inventory" class="btn btn-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-save"></i> Save Changes
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
+class Category(Base):
+    __tablename__ = "categories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    type = Column(String)  # ingredient, recipe, dish, inventory
+    
+    # Add unique constraint on name + type combination
+    __table_args__ = (
+        {'sqlite_autoincrement': True},
+    )
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Load units when batch selection changes
-    document.getElementById('batch_id').addEventListener('change', loadUnitsForBatch);
+class Vendor(Base):
+    __tablename__ = "vendors"
     
-    // Load units on page load
-    loadUnitsForBatch();
-    
-    // Update conversion preview when values change
-    document.getElementById('batch_id').addEventListener('change', updateConversionPreview);
-    document.getElementById('par_unit_equals_unit_id').addEventListener('change', updateConversionPreview);
-    document.getElementById('manual_conversion_factor').addEventListener('input', updateConversionPreview);
-});
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    contact_info = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-async function loadUnitsForBatch() {
-    const batchSelect = document.getElementById('batch_id');
-    const unitSelect = document.getElementById('par_unit_equals_unit_id');
-    const currentUnitId = {{ item.par_unit_equals_unit_id or 'null' }};
-    const batchId = batchSelect.value;
+class VendorUnit(Base):
+    __tablename__ = "vendor_units"
     
-    // Store current selection
-    const currentValue = unitSelect.value;
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(String)
     
-    // Clear current options
-    unitSelect.innerHTML = '<option value="">Select Unit</option>';
+    # Relationships
+    conversions = relationship("VendorUnitConversion", back_populates="vendor_unit")
+
+class UsageUnit(Base):
+    __tablename__ = "usage_units"
     
-    if (!batchId) {
-        // No batch selected - load all usage units
-        try {
-            const response = await fetch('/api/usage_units/all');
-            const units = await response.json();
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(String)
+    
+    # Relationships
+    vendor_conversions = relationship("VendorUnitConversion", back_populates="usage_unit")
+
+class VendorUnitConversion(Base):
+    __tablename__ = "vendor_unit_conversions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
+    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    conversion_factor = Column(Float)  # How many usage units per vendor unit
+    
+    # Relationships
+    vendor_unit = relationship("VendorUnit", back_populates="conversions")
+    usage_unit = relationship("UsageUnit", back_populates="vendor_conversions")
+
+class Ingredient(Base):
+    __tablename__ = "ingredients"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    vendor_id = Column(Integer, ForeignKey("vendors.id"))
+    
+    # Purchase level information
+    purchase_type = Column(String, default="single")  # single, case
+    purchase_unit_name = Column(String)  # Case, Bag, Sack, etc.
+    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
+    purchase_weight_volume = Column(Float)
+    purchase_total_cost = Column(Float)
+    breakable_case = Column(Boolean, default=False)
+    
+    # Case-specific fields
+    items_per_case = Column(Integer)
+    item_weight_volume = Column(Float)  # Calculated: purchase_weight_volume / items_per_case
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    category = relationship("Category")
+    vendor = relationship("Vendor")
+    vendor_unit = relationship("VendorUnit")
+    usage_units = relationship("IngredientUsageUnit", back_populates="ingredient")
+
+class IngredientUsageUnit(Base):
+    __tablename__ = "ingredient_usage_units"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
+    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    conversion_factor = Column(Float)  # How many usage units per purchase unit
+    price_per_usage_unit = Column(Float)  # Calculated from ingredient cost and conversion
+    
+    # Relationships
+    ingredient = relationship("Ingredient", back_populates="usage_units")
+    usage_unit = relationship("UsageUnit")
+
+class Recipe(Base):
+    __tablename__ = "recipes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    instructions = Column(Text)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    category = relationship("Category")
+    ingredients = relationship("RecipeIngredient", back_populates="recipe")
+
+class RecipeIngredient(Base):
+    __tablename__ = "recipe_ingredients"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
+    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    quantity = Column(Float)
+    cost = Column(Float)  # Calculated from quantity * price_per_usage_unit
+    
+    # Relationships
+    recipe = relationship("Recipe", back_populates="ingredients")
+    ingredient = relationship("Ingredient")
+    usage_unit = relationship("UsageUnit")
+
+class Batch(Base):
+    __tablename__ = "batches"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    
+    # Yield information - nullable for variable yields
+    is_variable = Column(Boolean, default=False)
+    yield_amount = Column(Float)  # Nullable for variable yields
+    yield_unit_id = Column(Integer, ForeignKey("usage_units.id"))  # Nullable for variable yields
+    
+    # Labor information
+    estimated_labor_minutes = Column(Integer)
+    hourly_labor_rate = Column(Float, default=16.75)
+    
+    # Scaling options
+    can_be_scaled = Column(Boolean, default=False)
+    scale_double = Column(Boolean, default=False)
+    scale_half = Column(Boolean, default=False)
+    scale_quarter = Column(Boolean, default=False)
+    scale_eighth = Column(Boolean, default=False)
+    scale_sixteenth = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    recipe = relationship("Recipe")
+    yield_unit = relationship("UsageUnit")
+    
+    @property
+    def estimated_labor_cost(self):
+        return (self.estimated_labor_minutes / 60) * self.hourly_labor_rate
+
+class Dish(Base):
+    __tablename__ = "dishes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    sale_price = Column(Float)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    category = relationship("Category")
+    batch_portions = relationship("DishBatchPortion", back_populates="dish")
+
+class DishBatchPortion(Base):
+    __tablename__ = "dish_batch_portions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    dish_id = Column(Integer, ForeignKey("dishes.id"))
+    batch_id = Column(Integer, ForeignKey("batches.id"))
+    portion_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    portion_size = Column(Float)
+    expected_cost = Column(Float)  # Calculated cost
+    actual_cost = Column(Float)  # Based on actual labor data
+    
+    # Relationships
+    dish = relationship("Dish", back_populates="batch_portions")
+    batch = relationship("Batch")
+    portion_unit = relationship("UsageUnit")
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    par_level = Column(Float)
+    
+    # Par unit equals system
+    par_unit_equals_amount = Column(Float, default=1.0)
+    par_unit_equals_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    
+    # Conversion system
+    manual_conversion_factor = Column(Float)  # Override automatic conversion
+    conversion_notes = Column(String)  # User notes about conversion
+    
+    # Batch linking
+    batch_id = Column(Integer, ForeignKey("batches.id"))
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    category = relationship("Category")
+    batch = relationship("Batch")
+    par_unit_equals_unit = relationship("UsageUnit")
+
+class InventoryDay(Base):
+    __tablename__ = "inventory_days"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, unique=True, index=True)
+    employees_working = Column(String)  # comma-separated employee IDs
+    global_notes = Column(Text)
+    finalized = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    items = relationship("InventoryDayItem", back_populates="day")
+    tasks = relationship("Task", back_populates="day")
+
+class InventoryDayItem(Base):
+    __tablename__ = "inventory_day_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    day_id = Column(Integer, ForeignKey("inventory_days.id"))
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"))
+    quantity = Column(Float)
+    override_create_task = Column(Boolean, default=False)
+    override_no_task = Column(Boolean, default=False)
+    
+    # Relationships
+    day = relationship("InventoryDay", back_populates="items")
+    inventory_item = relationship("InventoryItem")
+
+class Task(Base):
+    __tablename__ = "tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    day_id = Column(Integer, ForeignKey("inventory_days.id"))
+    assigned_to_id = Column(Integer, ForeignKey("users.id"))
+    description = Column(String)
+    status = Column(String, default="not_started")  # not_started, in_progress, paused, completed
+    auto_generated = Column(Boolean, default=False)
+    
+    # Batch and inventory linking
+    batch_id = Column(Integer, ForeignKey("batches.id"))
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"))
+    
+    # Task completion data
+    requires_manual_made = Column(Boolean, default=False)
+    made_amount = Column(Float)  # Manual input for variable yields
+    made_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    selected_scale = Column(String)  # For scalable batches: "double", "half", etc.
+    final_inventory_amount = Column(Float)  # Calculated final inventory
+    
+    # Time tracking
+    started_at = Column(DateTime)
+    finished_at = Column(DateTime)
+    paused_at = Column(DateTime)
+    is_paused = Column(Boolean, default=False)
+    total_pause_time = Column(Integer, default=0)  # seconds
+    notes = Column(Text)
+    
+    # Relationships
+    day = relationship("InventoryDay", back_populates="tasks")
+    assigned_to = relationship("User")
+    batch = relationship("Batch")
+    inventory_item = relationship("InventoryItem")
+    made_unit = relationship("UsageUnit")
+    
+    @property
+    def total_time_minutes(self):
+        if not self.started_at:
+            return 0
+        
+        end_time = self.finished_at or datetime.utcnow()
+        total_seconds = (end_time - self.started_at).total_seconds()
+        total_seconds -= self.total_pause_time
+        return max(0, int(total_seconds / 60))
+    
+    @property
+    def labor_cost(self):
+        if not self.assigned_to or not self.started_at:
+            return 0.0
+        return (self.total_time_minutes / 60) * self.assigned_to.hourly_wage
+    
+    @property
+    def can_be_completed(self):
+        """Check if task can be completed based on requirements"""
+        if self.status == "completed":
+            return False
+        if self.requires_manual_made and not self.made_amount:
+            return False
+        return True
+    
+    def get_made_amount_in_par_units(self):
+        """Get the made amount converted to par units"""
+        if not self.inventory_item or not self.inventory_item.par_unit_equals_unit_id:
+            return None
+        
+        if self.made_amount and self.made_unit_id:
+            # Manual made amount - convert if needed
+            if self.made_unit_id == self.inventory_item.par_unit_equals_unit_id:
+                return self.made_amount
+            # TODO: Add conversion logic here
+            return self.made_amount
+        
+        if self.selected_scale and self.batch and not self.batch.is_variable:
+            # Scaled batch - calculate from batch yield
+            scale_factors = {
+                "double": 2.0,
+                "full": 1.0,
+                "half": 0.5,
+                "quarter": 0.25,
+                "eighth": 0.125,
+                "sixteenth": 0.0625
+            }
+            scale_factor = scale_factors.get(self.selected_scale, 1.0)
+            batch_yield = self.batch.yield_amount * scale_factor
             
-            units.forEach(unit => {
-                const option = document.createElement('option');
-                option.value = unit.id;
-                option.textContent = unit.name;
-                if (unit.id === currentUnitId) {
-                    option.selected = true;
-                }
-                unitSelect.appendChild(option);
-            });
-        } catch (error) {
-            console.error('Error loading all units:', error);
-        }
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/inventory/batch/${batchId}/available_units`);
-        const units = await response.json();
+            # TODO: Convert batch yield to par units using conversion system
+            return batch_yield
         
-        // Group units by priority
-        const recipeUnits = units.filter(u => u.source === 'recipe');
-        const batchUnits = units.filter(u => u.source === 'batch');
-        const generalUnits = units.filter(u => u.source === 'general');
-        
-        // Add recipe units first
-        if (recipeUnits.length > 0) {
-            const recipeGroup = document.createElement('optgroup');
-            recipeGroup.label = 'Recipe Units (Recommended)';
-            recipeUnits.forEach(unit => {
-                const option = document.createElement('option');
-                option.value = unit.id;
-                option.textContent = unit.name;
-                if (unit.id === currentUnitId) {
-                    option.selected = true;
-                }
-                recipeGroup.appendChild(option);
-            });
-            unitSelect.appendChild(recipeGroup);
-        }
-        
-        // Add batch units
-        if (batchUnits.length > 0) {
-            const batchGroup = document.createElement('optgroup');
-            batchGroup.label = 'Batch Units';
-            batchUnits.forEach(unit => {
-                const option = document.createElement('option');
-                option.value = unit.id;
-                option.textContent = unit.name;
-                if (unit.id === currentUnitId) {
-                    option.selected = true;
-                }
-                batchGroup.appendChild(option);
-            });
-            unitSelect.appendChild(batchGroup);
-        }
-        
-        // Add general units
-        if (generalUnits.length > 0) {
-            const generalGroup = document.createElement('optgroup');
-            generalGroup.label = 'Other Units';
-            generalUnits.forEach(unit => {
-                const option = document.createElement('option');
-                option.value = unit.id;
-                option.textContent = unit.name;
-                if (unit.id === currentUnitId) {
-                    option.selected = true;
-                }
-                generalGroup.appendChild(option);
-            });
-            unitSelect.appendChild(generalGroup);
-        }
-        
-        updateConversionPreview();
-    } catch (error) {
-        console.error('Error loading units for batch:', error);
-    }
-}
+        return None
 
-async function updateConversionPreview() {
-    const batchSelect = document.getElementById('batch_id');
-    const unitSelect = document.getElementById('par_unit_equals_unit_id');
-    const manualFactorInput = document.getElementById('manual_conversion_factor');
-    const previewDiv = document.getElementById('conversionPreview');
-    const previewText = document.getElementById('conversionText');
+class UtilityCost(Base):
+    __tablename__ = "utility_costs"
     
-    const batchId = batchSelect.value;
-    const unitId = unitSelect.value;
-    const manualFactor = manualFactorInput.value;
-    
-    if (!batchId || !unitId) {
-        previewDiv.style.display = 'none';
-        return;
-    }
-    
-    try {
-{% endblock %}
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    monthly_cost = Column(Float)
+    last_updated = Column(DateTime, default=datetime.utcnow)

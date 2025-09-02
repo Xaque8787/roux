@@ -12,6 +12,7 @@ from .database import engine, get_db
 from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, VendorUnit, UsageUnit, VendorUnitConversion, IngredientUsageUnit, Vendor
 from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
 from .conversion_utils import get_batch_to_par_conversion, get_available_units_for_inventory_item, get_scale_options_for_batch, preview_conversion
+from .conversion_utils import get_batch_to_par_conversion, get_available_units_for_inventory_item, get_scale_options_for_batch, preview_conversion
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -709,6 +710,7 @@ async def batches(request: Request, current_user: User = Depends(get_current_use
 @app.post("/batches/new")
 async def create_batch(
     recipe_id: int = Form(...),
+    is_variable: bool = Form(False),
     yield_amount: float = Form(...),
     is_variable: bool = Form(False),
     yield_unit_id: int = Form(...),
@@ -733,6 +735,7 @@ async def create_batch(
     
     batch = Batch(
         recipe_id=recipe_id,
+        is_variable=is_variable,
         is_variable=is_variable,
         yield_amount=yield_amount,
         yield_unit_id=yield_unit_id,
@@ -791,8 +794,8 @@ async def batch_edit_form(request: Request, batch_id: int, current_user: User = 
 async def batch_edit(
     batch_id: int,
     recipe_id: int = Form(...),
-    yield_amount: float = Form(...),
-    yield_unit_id: int = Form(...),
+    yield_amount: Optional[float] = Form(None),
+    yield_unit_id: Optional[int] = Form(None),
     estimated_labor_minutes: int = Form(...),
     hourly_labor_rate: float = Form(16.75),
     can_be_scaled: bool = Form(False),
@@ -804,6 +807,15 @@ async def batch_edit(
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
+    # Validate yield fields for non-variable batches
+    if not is_variable and (not yield_amount or not yield_unit_id):
+        raise HTTPException(status_code=400, detail="Yield amount and unit required for non-variable batches")
+    
+    # For variable batches, clear yield fields
+    if is_variable:
+        yield_amount = None
+        yield_unit_id = None
+    
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
@@ -1044,6 +1056,10 @@ async def create_inventory_item(
     par_unit_equals_unit_id: Optional[int] = Form(None),
     manual_conversion_factor: Optional[float] = Form(None),
     conversion_notes: Optional[str] = Form(None),
+    par_unit_equals_amount: float = Form(1.0),
+    par_unit_equals_unit_id: Optional[int] = Form(None),
+    manual_conversion_factor: Optional[float] = Form(None),
+    conversion_notes: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
@@ -1051,6 +1067,10 @@ async def create_inventory_item(
     inventory_item = InventoryItem(
         name=name,
         par_level=par_level,
+        par_unit_equals_amount=par_unit_equals_amount,
+        par_unit_equals_unit_id=par_unit_equals_unit_id,
+        manual_conversion_factor=manual_conversion_factor,
+        conversion_notes=conversion_notes,
         par_unit_equals_amount=par_unit_equals_amount,
         par_unit_equals_unit_id=par_unit_equals_unit_id,
         manual_conversion_factor=manual_conversion_factor,
@@ -1316,19 +1336,38 @@ async def create_task(
     batch_id = None
     if inventory_item_id:
         inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+        
+        # Calculate par and inventory in actual units
+        par_in_units = inventory_item.par_level * inventory_item.par_unit_equals_amount if inventory_item.par_unit_equals_amount else inventory_item.par_level
+        inventory_in_units = item.quantity * inventory_item.par_unit_equals_amount if inventory_item.par_unit_equals_amount else item.quantity
+        
+        # Determine if task should be created
         if inventory_item and inventory_item.batch_id:
             batch_id = inventory_item.batch_id
     
     if assigned_to_ids:
         # Create a task for each assigned employee
         for assigned_to_id in assigned_to_ids:
+            # Determine if manual made amount is required
+            requires_manual = (
+                inventory_item.batch.is_variable or 
+                not inventory_item.par_unit_equals_unit_id or
+                not inventory_item.batch.yield_unit_id
+            )
+            
+            # Create task description with unit information
+            unit_info = ""
+            if inventory_item.par_unit_equals_unit:
+                unit_info = f" (Par: {inventory_item.par_level} = {par_in_units:.1f} {inventory_item.par_unit_equals_unit.name}, Current: {item.quantity} = {inventory_in_units:.1f} {inventory_item.par_unit_equals_unit.name})"
+            
             task = Task(
                 day_id=day_id,
                 assigned_to_id=int(assigned_to_id),
-                inventory_item_id=inventory_item_id if inventory_item_id else None,
+                description=f"Prep {inventory_item.name}{unit_info}",
                 batch_id=batch_id,
                 description=description,
-                auto_generated=False
+                auto_generated=True,
+                requires_manual_made=requires_manual
             )
             db.add(task)
     else:
