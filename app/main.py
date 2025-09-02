@@ -1075,6 +1075,30 @@ async def inventory_item_edit_form(request: Request, item_id: int, current_user:
         "request": request,
         "current_user": current_user,
         "item": item,
+        "usage_units": usage_units,
+        "batches": batches,
+        "categories": categories
+    })
+
+@app.get("/inventory/items/{item_id}/edit")
+async def edit_inventory_item_form(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    item = db.query(InventoryItem).get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    usage_units = db.query(UsageUnit).all()
+    batches = db.query(Batch).join(Recipe).all()
+    categories = db.query(Category).filter(Category.type == "inventory").all()
+    
+    return templates.TemplateResponse("inventory_item_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "item": item,
         "categories": categories,
         "batches": batches
     })
