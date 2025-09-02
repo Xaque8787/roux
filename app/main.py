@@ -1129,6 +1129,10 @@ async def inventory_item_edit(
     name: str = Form(...),
     par_level: float = Form(...),
     batch_id: Optional[int] = Form(None),
+    par_unit_equals_amount: float = Form(1.0),
+    par_unit_equals_unit_id: Optional[int] = Form(None),
+    manual_conversion_factor: Optional[float] = Form(None),
+    conversion_notes: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
@@ -1139,6 +1143,10 @@ async def inventory_item_edit(
     
     item.name = name
     item.par_level = par_level
+    item.par_unit_equals_amount = par_unit_equals_amount
+    item.par_unit_equals_unit_id = par_unit_equals_unit_id
+    item.manual_conversion_factor = manual_conversion_factor
+    item.conversion_notes = conversion_notes
     item.batch_id = batch_id if batch_id else None
     item.category_id = category_id if category_id else None
     
