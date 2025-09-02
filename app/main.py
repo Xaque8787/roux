@@ -440,54 +440,12 @@ async def batch_detail(batch_id: int, request: Request, current_user: User = Dep
     cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
     
     return templates.TemplateResponse("batch_detail.html", {
-        "request": request,
-        "current_user": current_user,
-        "batch": batch,
-        "recipe_ingredients": recipe_ingredients,
-        "total_recipe_cost": total_recipe_cost,
-        "total_batch_cost": total_batch_cost,
-        "cost_per_yield_unit": cost_per_yield_unit
-    })
-
-# Dishes routes
-@app.get("/dishes", response_class=HTMLResponse)
-async def dishes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    dishes = db.query(Dish).all()
-    categories = db.query(Category).filter(Category.type == "dish").all()
-    
-    return templates.TemplateResponse("dishes.html", {
-        "request": request,
-        "current_user": current_user,
-        "dishes": dishes,
-        "categories": categories
-    })
-
-@app.get("/dishes/{dish_id}", response_class=HTMLResponse)
-async def dish_detail(dish_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    dish = db.query(Dish).filter(Dish.id == dish_id).first()
-    if not dish:
-        raise HTTPException(status_code=404, detail="Dish not found")
-    
-    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
-    
-    # Calculate costs
-    expected_total_cost = 0
+    # Calculate total costs using the property methods
+    expected_total_cost = sum(portion.expected_cost for portion in dish_batch_portions)
     actual_total_cost = sum(portion.actual_cost for portion in dish_batch_portions)
     actual_total_cost_week = sum(portion.actual_cost_week_avg for portion in dish_batch_portions)
     actual_total_cost_month = sum(portion.actual_cost_month_avg for portion in dish_batch_portions)
     actual_total_cost_all_time = sum(portion.actual_cost_all_time_avg for portion in dish_batch_portions)
-    
-    for portion in dish_batch_portions:
-        # Calculate expected cost (using estimated labor)
-        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == portion.batch.recipe_id).all()
-        recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-        total_batch_cost = recipe_cost + portion.batch.estimated_labor_cost
-        cost_per_unit = total_batch_cost / portion.batch.yield_amount if portion.batch.yield_amount > 0 else 0
-        portion.expected_cost = portion.portion_size * cost_per_unit
-        expected_total_cost += portion.expected_cost
-        
-        # For now, actual cost equals expected cost (will be updated with real labor data later)
-        portion.actual_cost = portion.expected_cost
         actual_total_cost += portion.actual_cost
     
     expected_profit = dish.sale_price - expected_total_cost
