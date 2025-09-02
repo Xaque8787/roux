@@ -321,7 +321,7 @@ class DishBatchPortion(Base):
             ).all()
             
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.estimated_labor_cost
+            total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
             # If portion unit is same as yield unit, simple calculation
@@ -337,15 +337,10 @@ class DishBatchPortion(Base):
     @property
     def expected_cost(self):
         """Calculate expected cost using estimated labor"""
-        return self.cost
-    
-    @property
-    def actual_cost(self):
-        """Calculate actual cost using actual labor from completed tasks"""
         if not self.batch or not self.portion_size:
             return 0
         
-        # Calculate ingredient cost per unit with actual labor
+        # Calculate ingredient cost per unit with ESTIMATED labor
         from sqlalchemy.orm import sessionmaker
         from .database import engine
         Session = sessionmaker(bind=engine)
@@ -358,7 +353,7 @@ class DishBatchPortion(Base):
             ).all()
             
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
+            total_batch_cost = total_recipe_cost + self.batch.estimated_labor_cost
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
             # If portion unit is same as yield unit, simple calculation
@@ -369,6 +364,15 @@ class DishBatchPortion(Base):
                 return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
+    
+    @property
+    def actual_cost(self):
+        """Calculate actual cost using most recent actual labor from completed tasks"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        # This is the same as the cost property - uses most recent actual labor
+        return self.cost
     
     @property
     def actual_cost_week_avg(self):
@@ -425,6 +429,35 @@ class DishBatchPortion(Base):
                 return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
+    
+    @property
+    def actual_cost_all_time_avg(self):
+        """Calculate actual cost using all-time average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+
     
     @property
     def actual_cost_all_time_avg(self):
