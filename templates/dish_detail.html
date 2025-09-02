@@ -110,22 +110,88 @@
                 
                 <hr>
                 <h6>Actual Costs (Real Labor Data)</h6>
-                <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost) }}</span></p>
-                <p><strong>Profit:</strong> 
-                   <span class="{% if actual_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
-                       ${{ "%.2f"|format(actual_profit) }}
-                   </span>
-                </p>
-                <p><strong>Profit Margin:</strong> 
-                   <span class="{% if actual_profit_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
-                       {{ "%.1f"|format(actual_profit_margin) }}%
-                   </span>
-                </p>
-                <p><strong>Food Cost %:</strong> 
-                   <span class="{% if (actual_total_cost/dish.sale_price*100) <= 30 %}text-success{% elif (actual_total_cost/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
-                       {{ "%.1f"|format(actual_total_cost/dish.sale_price*100) }}%
-                   </span>
-                </p>
+                
+                <div class="row">
+                    <div class="col-6">
+                        <h6 class="text-primary">Most Recent</h6>
+                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost) }}</span></p>
+                        <p><strong>Profit:</strong> 
+                           <span class="{% if actual_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               ${{ "%.2f"|format(actual_profit) }}
+                           </span>
+                        </p>
+                        <p><strong>Profit Margin:</strong> 
+                           <span class="{% if actual_profit_margin >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_profit_margin) }}%
+                           </span>
+                        </p>
+                        <p><strong>Food Cost %:</strong> 
+                           <span class="{% if (actual_total_cost/dish.sale_price*100) <= 30 %}text-success{% elif (actual_total_cost/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_total_cost/dish.sale_price*100) }}%
+                           </span>
+                        </p>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-info">Week Average</h6>
+                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost_week) }}</span></p>
+                        <p><strong>Profit:</strong> 
+                           <span class="{% if actual_profit_week >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               ${{ "%.2f"|format(actual_profit_week) }}
+                           </span>
+                        </p>
+                        <p><strong>Profit Margin:</strong> 
+                           <span class="{% if actual_profit_margin_week >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_profit_margin_week) }}%
+                           </span>
+                        </p>
+                        <p><strong>Food Cost %:</strong> 
+                           <span class="{% if (actual_total_cost_week/dish.sale_price*100) <= 30 %}text-success{% elif (actual_total_cost_week/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_total_cost_week/dish.sale_price*100) }}%
+                           </span>
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="row mt-2">
+                    <div class="col-6">
+                        <h6 class="text-warning">Month Average</h6>
+                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
+                        <p><strong>Profit:</strong> 
+                           <span class="{% if actual_profit_month >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               ${{ "%.2f"|format(actual_profit_month) }}
+                           </span>
+                        </p>
+                        <p><strong>Profit Margin:</strong> 
+                           <span class="{% if actual_profit_margin_month >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_profit_margin_month) }}%
+                           </span>
+                        </p>
+                        <p><strong>Food Cost %:</strong> 
+                           <span class="{% if (actual_total_cost_month/dish.sale_price*100) <= 30 %}text-success{% elif (actual_total_cost_month/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_total_cost_month/dish.sale_price*100) }}%
+                           </span>
+                        </p>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-secondary">All Time Average</h6>
+                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
+                        <p><strong>Profit:</strong> 
+                           <span class="{% if actual_profit_all_time >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               ${{ "%.2f"|format(actual_profit_all_time) }}
+                           </span>
+                        </p>
+                        <p><strong>Profit Margin:</strong> 
+                           <span class="{% if actual_profit_margin_all_time >= 0 %}text-success{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_profit_margin_all_time) }}%
+                           </span>
+                        </p>
+                        <p><strong>Food Cost %:</strong> 
+                           <span class="{% if (actual_total_cost_all_time/dish.sale_price*100) <= 30 %}text-success{% elif (actual_total_cost_all_time/dish.sale_price*100) <= 35 %}text-warning{% else %}text-danger{% endif %}">
+                               {{ "%.1f"|format(actual_total_cost_all_time/dish.sale_price*100) }}%
+                           </span>
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -160,17 +226,27 @@
                 <div class="d-flex justify-content-between mb-1">
                     <small>{{ portion.batch.recipe.name }}</small>
                     <small>
-                        Expected: ${{ "%.2f"|format(portion.expected_cost) }}<br>
-                        Actual: ${{ "%.2f"|format(portion.actual_cost) }}
+                        Est: ${{ "%.2f"|format(portion.expected_cost) }}<br>
+                        Recent: ${{ "%.2f"|format(portion.actual_cost) }}<br>
+                        Week: ${{ "%.2f"|format(portion.actual_cost_week_avg) }}<br>
+                        Month: ${{ "%.2f"|format(portion.actual_cost_month_avg) }}
                     </small>
                 </div>
                 {% endfor %}
                 <hr>
                 <div class="d-flex justify-content-between">
-                    <small><strong>Variance</strong></small>
+                    <small><strong>Recent vs Expected</strong></small>
                     <small>
                         <strong class="{% if actual_total_cost > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
                             {% if actual_total_cost > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost - expected_total_cost) }}
+                        </strong>
+                    </small>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <small><strong>Week vs Expected</strong></small>
+                    <small>
+                        <strong class="{% if actual_total_cost_week > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
+                            {% if actual_total_cost_week > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost_week - expected_total_cost) }}
                         </strong>
                     </small>
                 </div>

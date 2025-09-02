@@ -190,19 +190,95 @@ class Batch(Base):
     @property
     def actual_labor_cost(self):
         """Calculate actual labor cost from most recent completed task"""
-        # This will be calculated from the most recent completed inventory task
-        # Implementation will be in the route handlers
-        return 0
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            # Get most recent completed task for this batch
+            from .models import Task
+            recent_task = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None)
+            ).order_by(Task.finished_at.desc()).first()
+            
+            if recent_task:
+                return recent_task.labor_cost
+            return self.estimated_labor_cost  # Fallback to estimated
+        finally:
+            db.close()
     
     @property
     def average_labor_cost_week(self):
         """Average labor cost from past week's completed tasks"""
-        return 0
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        from datetime import datetime, timedelta
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            week_ago = datetime.utcnow() - timedelta(days=7)
+            
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None),
+                Task.finished_at >= week_ago
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
     
     @property
     def average_labor_cost_month(self):
         """Average labor cost from past month's completed tasks"""
-        return 0
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        from datetime import datetime, timedelta
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            month_ago = datetime.utcnow() - timedelta(days=30)
+            
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None),
+                Task.finished_at >= month_ago
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
+
+    @property
+    def average_labor_cost_all_time(self):
+        """Average labor cost from all completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None)
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
 
 class Dish(Base):
     __tablename__ = "dishes"
@@ -231,6 +307,152 @@ class DishBatchPortion(Base):
         if not self.batch or not self.portion_size:
             return 0
         
+        # Calculate ingredient cost per unit
+        recipe_ingredients = []
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.estimated_labor_cost
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            # If portion unit is same as yield unit, simple calculation
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                # For different units, assume 1:1 conversion for now
+                # In full implementation, you'd need proper unit conversion
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def expected_cost(self):
+        """Calculate expected cost using estimated labor"""
+        return self.cost
+    
+    @property
+    def actual_cost(self):
+        """Calculate actual cost using actual labor from completed tasks"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        # Calculate ingredient cost per unit with actual labor
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            # If portion unit is same as yield unit, simple calculation
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                # For different units, assume 1:1 conversion for now
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def actual_cost_week_avg(self):
+        """Calculate actual cost using week average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_week
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def actual_cost_month_avg(self):
+        """Calculate actual cost using month average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_month
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def actual_cost_all_time_avg(self):
+        """Calculate actual cost using all-time average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"

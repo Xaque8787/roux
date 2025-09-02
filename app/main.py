@@ -472,7 +472,10 @@ async def dish_detail(dish_id: int, request: Request, current_user: User = Depen
     
     # Calculate costs
     expected_total_cost = 0
-    actual_total_cost = 0
+    actual_total_cost = sum(portion.actual_cost for portion in dish_batch_portions)
+    actual_total_cost_week = sum(portion.actual_cost_week_avg for portion in dish_batch_portions)
+    actual_total_cost_month = sum(portion.actual_cost_month_avg for portion in dish_batch_portions)
+    actual_total_cost_all_time = sum(portion.actual_cost_all_time_avg for portion in dish_batch_portions)
     
     for portion in dish_batch_portions:
         # Calculate expected cost (using estimated labor)
@@ -492,6 +495,15 @@ async def dish_detail(dish_id: int, request: Request, current_user: User = Depen
     actual_profit = dish.sale_price - actual_total_cost
     actual_profit_margin = (actual_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
     
+    actual_profit_week = dish.sale_price - actual_total_cost_week
+    actual_profit_margin_week = (actual_profit_week / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    actual_profit_month = dish.sale_price - actual_total_cost_month
+    actual_profit_margin_month = (actual_profit_month / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
+    actual_profit_all_time = dish.sale_price - actual_total_cost_all_time
+    actual_profit_margin_all_time = (actual_profit_all_time / dish.sale_price * 100) if dish.sale_price > 0 else 0
+    
     return templates.TemplateResponse("dish_detail.html", {
         "request": request,
         "current_user": current_user,
@@ -499,10 +511,19 @@ async def dish_detail(dish_id: int, request: Request, current_user: User = Depen
         "dish_batch_portions": dish_batch_portions,
         "expected_total_cost": expected_total_cost,
         "actual_total_cost": actual_total_cost,
+        "actual_total_cost_week": actual_total_cost_week,
+        "actual_total_cost_month": actual_total_cost_month,
+        "actual_total_cost_all_time": actual_total_cost_all_time,
         "expected_profit": expected_profit,
         "expected_profit_margin": expected_profit_margin,
         "actual_profit": actual_profit,
-        "actual_profit_margin": actual_profit_margin
+        "actual_profit_margin": actual_profit_margin,
+        "actual_profit_week": actual_profit_week,
+        "actual_profit_margin_week": actual_profit_margin_week,
+        "actual_profit_month": actual_profit_month,
+        "actual_profit_margin_month": actual_profit_margin_month,
+        "actual_profit_all_time": actual_profit_all_time,
+        "actual_profit_margin_all_time": actual_profit_margin_all_time
     })
 
 # Inventory routes
