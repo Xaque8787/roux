@@ -1928,4 +1928,26 @@ async def api_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Dep
     total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
     
     # For now, return cost per yield unit (conversion logic can be added later)
-    if
+    cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
+    
+    return {"cost_per_unit": cost_per_unit}
+
+@app.get("/api/inventory/items/{item_id}/conversion_preview")
+async def api_inventory_conversion_preview(
+    item_id: int,
+    amount: float = 1.0,
+    db: Session = Depends(get_db)
+):
+    item = db.query(InventoryItem).options(
+        joinedload(InventoryItem.batch).joinedload(Batch.recipe),
+        joinedload(InventoryItem.batch).joinedload(Batch.yield_unit),
+        joinedload(InventoryItem.par_unit_equals_unit)
+    ).filter(InventoryItem.id == item_id).first()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    if not item.batch:
+        return {"error": "No batch associated with this inventory item"}
+    
+    return preview_conversion(db, item.batch, item, amount)
