@@ -225,10 +225,6 @@
                     <button type="button" class="btn btn-success w-100" onclick="showFinishTaskModal({{ task.id }})" disabled>
                         <i class="fas fa-check"></i> Finish Task
                     </button>
-                    {% else %}
-                    <button type="button" class="btn btn-success w-100" onclick="showFinishTaskModal({{ task.id }})" disabled>
-                        <i class="fas fa-check"></i> Finish Task
-                    </button>
                     {% endif %}
                     {% elif task.status == "paused" %}
                     <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume">

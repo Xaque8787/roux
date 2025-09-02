@@ -119,20 +119,13 @@
                     {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
                     <div class="col-md-6 mb-3">
                         <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
-                            <div class="card-body p-2">
-                                <label class="form-label mb-1">
-                                    <strong>{{ item.inventory_item.name }}</strong>
-                                    <small class="text-muted">
-                                        (Par: {{ item.inventory_item.par_level }}
-                                        {% if item.inventory_item.par_unit_equals_unit %}
-                                         = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
-                                        {% endif %})
+                                         = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }})
+                                         = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }})
+                                        {% else %})
+                                        {% endif %}
                                     </small>
                                 </label>
                                 <input type="number" class="form-control form-control-sm" 
-                                       value="{{ item.quantity }}" 
-                                       readonly
-                                       {% if is_below_par %}
                                        style="background-color: #ffebee;"
                                        {% elif is_near_par %}
                                        style="background-color: #fff8e1;"

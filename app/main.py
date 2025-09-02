@@ -2001,6 +2001,10 @@ async def api_conversion_preview(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
+    unit = db.query(UsageUnit).get(unit_id)
+    if not unit:
+        return {"available": False, "message": "Unit not found", "indicator_class": "text-danger"}
+    
     # Create temporary inventory item for preview
     temp_item = InventoryItem(
         par_unit_equals_unit_id=unit_id,
