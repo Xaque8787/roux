@@ -40,7 +40,6 @@
                         {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
                         {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
                         {% set par_in_units = (item.inventory_item.par_level * item.inventory_item.par_unit_equals_amount) if item.inventory_item.par_unit_equals_amount else item.inventory_item.par_level %}
-                        {% set inventory_in_units = (item.quantity * item.inventory_item.par_unit_equals_amount) if item.inventory_item.par_unit_equals_amount else item.quantity %}
                         <div class="col-md-6 mb-3">
                             <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
                                 <div class="card-body p-2">
@@ -49,18 +48,11 @@
                                         <small class="text-muted">
                                             (Par: {{ item.inventory_item.par_level }}
                                             {% if item.inventory_item.par_unit_equals_unit %}
-                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
-                                            {% endif %})
-                                            {% if item.inventory_item.par_unit_equals_unit %}
-                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
-                                            {% endif %})
-                                            {% if item.inventory_item.par_unit_equals_unit %}
-                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
-                                            {% endif %})
+                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }})
+                                            {% else %}
+                                            )
+                                            {% endif %}
                                         </small>
-                                        {% if item.inventory_item.batch %}
-                                        <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
-                                        {% endif %}
                                         {% if item.inventory_item.batch %}
                                         <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
                                         {% endif %}
@@ -117,19 +109,32 @@
                     {% for item in inventory_day_items %}
                     {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
                     {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
+                    {% set par_in_units = (item.inventory_item.par_level * item.inventory_item.par_unit_equals_amount) if item.inventory_item.par_unit_equals_amount else item.inventory_item.par_level %}
                     <div class="col-md-6 mb-3">
                         <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
+                            <div class="card-body p-2">
+                                <label class="form-label mb-1">
+                                    <strong>{{ item.inventory_item.name }}</strong>
+                                    <small class="text-muted">
+                                        (Par: {{ item.inventory_item.par_level }}
+                                        {% if item.inventory_item.par_unit_equals_unit %}
                                          = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }})
-                                         = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }})
-                                        {% else %})
+                                        {% else %}
+                                        )
                                         {% endif %}
                                     </small>
+                                    {% if item.inventory_item.batch %}
+                                    <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
+                                    {% endif %}
                                 </label>
-                                <input type="number" class="form-control form-control-sm" 
-                                       style="background-color: #ffebee;"
-                                       {% elif is_near_par %}
-                                       style="background-color: #fff8e1;"
-                                       {% endif %}>
+                                <div class="form-control form-control-sm" 
+                                     {% if is_below_par %}
+                                     style="background-color: #ffebee;"
+                                     {% elif is_near_par %}
+                                     style="background-color: #fff8e1;"
+                                     {% endif %}>
+                                    {{ item.quantity }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -218,18 +223,6 @@
                             <br>
                             {% endif %}
                             
-                            {% if task.inventory_item and task.inventory_item.batch %}
-                            <small class="text-info">
-                                <i class="fas fa-industry"></i> Batch: 
-                                <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
-                                    {{ task.inventory_item.batch.recipe.name }}
-                                </a>
-                                {% if task.inventory_item.batch.is_variable %}
-                                <span class="badge bg-warning">Variable</span>
-                                {% endif %}
-                            </small><br>
-                            {% endif %}
-                            
                             {% if task.batch %}
                             <small class="text-success">
                                 <i class="fas fa-link"></i> Direct Batch Link: 
@@ -241,6 +234,9 @@
                                 <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
                                     {{ task.inventory_item.batch.recipe.name }}
                                 </a>
+                                {% if task.inventory_item.batch.is_variable %}
+                                <span class="badge bg-warning">Variable</span>
+                                {% endif %}
                             </small><br>
                             {% endif %}
                             
@@ -257,9 +253,15 @@
                                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
                                     <button type="submit" class="btn btn-xs btn-warning">Pause</button>
                                 </form>
-                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
-                                    <button type="submit" class="btn btn-xs btn-success">Finish</button>
-                                </form>
+                                {% if task.can_be_completed %}
+                                <button type="button" class="btn btn-xs btn-success" onclick="showFinishTaskModal({{ task.id }})">
+                                    Finish
+                                </button>
+                                {% else %}
+                                <button type="button" class="btn btn-xs btn-success" onclick="showFinishTaskModal({{ task.id }})" disabled>
+                                    Finish
+                                </button>
+                                {% endif %}
                                 {% endif %}
                                 <span class="badge bg-primary">In Progress</span>
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
@@ -309,6 +311,107 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Finish Task Modal -->
+<div class="modal fade" id="finishTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Finish Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" id="finishTaskForm">
+                <div class="modal-body">
+                    <div id="taskFinishContent">
+                        <!-- Content will be loaded dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Finish Task
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+async function showFinishTaskModal(taskId) {
+    const modal = document.getElementById('finishTaskModal');
+    const form = document.getElementById('finishTaskForm');
+    const content = document.getElementById('taskFinishContent');
+    
+    // Set form action
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish`;
+    
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/finish_requirements`);
+        const requirements = await response.json();
+        
+        let html = '';
+        
+        if (requirements.requires_manual_made) {
+            html += `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> This task requires manual entry of the amount made.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Amount Made</label>
+                    <div class="row">
+                        <div class="col-8">
+                            <input type="number" class="form-control" name="made_amount" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-4">
+                            <input type="text" class="form-control" value="${requirements.made_unit_name}" readonly>
+                            <input type="hidden" name="made_unit_id" value="${requirements.made_unit_id}">
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (requirements.scale_options && requirements.scale_options.length > 0) {
+            html += `
+                <div class="alert alert-info">
+                    <i class="fas fa-expand-arrows-alt"></i> Select the batch size that was made.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Batch Scale Made</label>
+                    <select class="form-select" name="selected_scale" required>
+                        <option value="">Select batch size...</option>
+            `;
+            
+            requirements.scale_options.forEach(option => {
+                html += `<option value="${option.key}">${option.label} (${option.yield_amount} ${requirements.batch_unit_name})</option>`;
+            });
+            
+            html += `
+                    </select>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> Task will be completed with automatic yield calculation.
+                </div>
+                <div class="mb-3">
+                    <p><strong>Expected Yield:</strong> ${requirements.expected_yield} ${requirements.batch_unit_name}</p>
+                    ${requirements.conversion_preview ? `<p><strong>In Par Units:</strong> ${requirements.conversion_preview}</p>` : ''}
+                </div>
+            `;
+        }
+        
+        content.innerHTML = html;
+        
+        const modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+        
+    } catch (error) {
+        console.error('Error loading task finish requirements:', error);
+        alert('Error loading task requirements. Please try again.');
+    }
+}
+</script>
 
 <style>
 .btn-xs {
