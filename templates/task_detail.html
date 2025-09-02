@@ -73,8 +73,6 @@
                         <p><strong>Made Amount:</strong> {{ task.made_amount }} {{ task.made_unit.name }}</p>
                         {% elif task.selected_scale %}
                         <p><strong>Made:</strong> {{ task.selected_scale.title() }} Batch</p>
-                        {% elif task.selected_scale %}
-                        <p><strong>Made:</strong> {{ task.selected_scale.title() }} Batch</p>
                         {% endif %}
                         
                         {% if task.finished_at and task.assigned_to %}
@@ -87,42 +85,11 @@
                         {% if task.inventory_item and task.final_inventory_amount %}
                         <hr>
                         <h6>Inventory Calculation:</h6>
-                        {% set current_inventory = task.inventory_item.par_level * task.inventory_item.par_unit_equals_amount if task.inventory_item.par_unit_equals_amount else 0 %}
                         {% set made_in_par_units = task.get_made_amount_in_par_units() %}
                         <p><strong>Par Level:</strong> {{ task.inventory_item.par_level }}
                             {% if task.inventory_item.par_unit_equals_unit %}
                              ({{ "%.1f"|format(task.inventory_item.par_level * task.inventory_item.par_unit_equals_amount) }} {{ task.inventory_item.par_unit_equals_unit.name }})
                             {% endif %}
-                        </p>
-                        <p><strong>Starting Inventory:</strong> 
-                            <!-- Get from day item -->
-                        </p>
-                        {% if made_in_par_units %}
-                        <p><strong>Made:</strong> {{ "%.1f"|format(made_in_par_units) }}
-                            {% if task.inventory_item.par_unit_equals_unit %}
-                             {{ task.inventory_item.par_unit_equals_unit.name }}
-                            {% endif %}
-                        </p>
-                        <p><strong>Final Inventory:</strong> {{ "%.1f"|format(task.final_inventory_amount) }}
-                            {% if task.inventory_item.par_unit_equals_unit %}
-                             {{ task.inventory_item.par_unit_equals_unit.name }}
-                            {% endif %}
-                        </p>
-                        {% endif %}
-                        {% endif %}
-                        
-                        {% if task.inventory_item and task.final_inventory_amount %}
-                        <hr>
-                        <h6>Inventory Calculation:</h6>
-                        {% set current_inventory = task.inventory_item.par_level * task.inventory_item.par_unit_equals_amount if task.inventory_item.par_unit_equals_amount else 0 %}
-                        {% set made_in_par_units = task.get_made_amount_in_par_units() %}
-                        <p><strong>Par Level:</strong> {{ task.inventory_item.par_level }}
-                            {% if task.inventory_item.par_unit_equals_unit %}
-                             ({{ "%.1f"|format(task.inventory_item.par_level * task.inventory_item.par_unit_equals_amount) }} {{ task.inventory_item.par_unit_equals_unit.name }})
-                            {% endif %}
-                        </p>
-                        <p><strong>Starting Inventory:</strong> 
-                            <!-- Get from day item -->
                         </p>
                         {% if made_in_par_units %}
                         <p><strong>Made:</strong> {{ "%.1f"|format(made_in_par_units) }}
@@ -142,12 +109,12 @@
             </div>
         </div>
         
+        {% if task.batch %}
         <div class="card mt-3">
             <div class="card-header">
                 <h5><i class="fas fa-industry"></i> Assigned Batch</h5>
             </div>
             <div class="card-body">
-                {% if task.batch %}
                 <p><strong>Batch:</strong> 
                     <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">
                         {{ task.batch.recipe.name }}
@@ -163,11 +130,9 @@
                     </span>
                 </p>
                 {% endif %}
-                {% else %}
-                <p class="text-muted">No batch assigned to this task</p>
-                {% endif %}
             </div>
         </div>
+        {% endif %}
         
         <div class="card mt-3">
             <div class="card-header">
@@ -298,32 +263,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success">
-                            <i class="fas fa-check"></i> Finish Task
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Finish Task Modal -->
-<div class="modal fade" id="finishTaskModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Finish Task</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" id="finishTaskForm">
-                <div class="modal-body">
-                    <div id="taskFinishContent">
-                        <!-- Content will be loaded dynamically -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success">
-                            <i class="fas fa-check"></i> Finish Task
+                        <i class="fas fa-check"></i> Finish Task
                     </button>
                 </div>
             </form>
@@ -405,133 +345,5 @@ async function showFinishTaskModal(taskId) {
         alert('Error loading task requirements. Please try again.');
     }
 }
-
-async function showFinishTaskModal(taskId) {
-    const modal = document.getElementById('finishTaskModal');
-    const form = document.getElementById('finishTaskForm');
-    const content = document.getElementById('taskFinishContent');
-    
-    // Set form action
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish`;
-    
-    try {
-        const response = await fetch(`/api/tasks/${taskId}/finish_requirements`);
-        const requirements = await response.json();
-        
-        let html = '';
-        
-        if (requirements.requires_manual_made) {
-            html += `
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i> This task requires manual entry of the amount made.
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Amount Made</label>
-                    <div class="row">
-                        <div class="col-8">
-                            <input type="number" class="form-control" name="made_amount" step="0.01" min="0" required>
-                        </div>
-                        <div class="col-4">
-                            <input type="text" class="form-control" value="${requirements.made_unit_name}" readonly>
-                            <input type="hidden" name="made_unit_id" value="${requirements.made_unit_id}">
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else if (requirements.scale_options && requirements.scale_options.length > 0) {
-            html += `
-                <div class="alert alert-info">
-                    <i class="fas fa-expand-arrows-alt"></i> Select the batch size that was made.
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Batch Scale Made</label>
-                    <select class="form-select" name="selected_scale" required>
-                        <option value="">Select batch size...</option>
-            `;
-            
-            requirements.scale_options.forEach(option => {
-                html += `<option value="${option.key}">${option.label} (${option.yield_amount} ${requirements.batch_unit_name})</option>`;
-            });
-            
-            html += `
-                    </select>
-                </div>
-            `;
-        } else {
-            html += `
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i> Task will be completed with automatic yield calculation.
-                </div>
-                <div class="mb-3">
-                    <p><strong>Expected Yield:</strong> ${requirements.expected_yield} ${requirements.batch_unit_name}</p>
-                    ${requirements.conversion_preview ? `<p><strong>In Par Units:</strong> ${requirements.conversion_preview}</p>` : ''}
-                </div>
-            `;
-        }
-        
-        content.innerHTML = html;
-        
-        const modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
-        
-    } catch (error) {
-        console.error('Error loading task finish requirements:', error);
-        alert('Error loading task requirements. Please try again.');
-    }
-}
 </script>
-                    {% elif task.status == "paused" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume">
-                        <button type="submit" class="btn btn-info w-100">
-                            <i class="fas fa-play"></i> Resume Task
-                        </button>
-                    </form>
-                    {% elif task.status == "completed" %}
-                    <div class="alert alert-success text-center">
-                        <i class="fas fa-check-circle"></i> Task Completed
-                    </div>
-                    {% endif %}
-                </div>
-                {% else %}
-                <div class="alert alert-info text-center">
-                    {% if inventory_day.finalized %}
-                    <i class="fas fa-lock"></i> Day is finalized
-                    {% else %}
-                    <i class="fas fa-eye"></i> View only
-                    {% endif %}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5><i class="fas fa-calendar-day"></i> Day Information</h5>
-            </div>
-            <div class="card-body">
-                <p><strong>Date:</strong> {{ inventory_day.date }}</p>
-                <p><strong>Status:</strong> 
-                    {% if inventory_day.finalized %}
-                        <span class="badge bg-success">Finalized</span>
-                    {% else %}
-                        <span class="badge bg-warning">In Progress</span>
-                    {% endif %}
-                </p>
-                {% if inventory_day.employees_working %}
-                <p><strong>Employees Working:</strong></p>
-                <ul class="list-unstyled">
-                    {% set employee_ids = inventory_day.employees_working.split(',') %}
-                    {% for emp_id in employee_ids %}
-                        {% for emp in employees %}
-                            {% if emp.id|string == emp_id %}
-                            <li><i class="fas fa-user"></i> {{ emp.full_name or emp.username }}</li>
-                            {% endif %}
-                        {% endfor %}
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
