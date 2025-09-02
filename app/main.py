@@ -11,6 +11,7 @@ from typing import List, Optional
 from .database import engine, get_db
 from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, VendorUnit, UsageUnit, VendorUnitConversion, IngredientUsageUnit, Vendor
 from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
+from .conversion_utils import get_batch_to_par_conversion, get_available_units_for_inventory_item, get_scale_options_for_batch, preview_conversion
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -709,6 +710,7 @@ async def batches(request: Request, current_user: User = Depends(get_current_use
 async def create_batch(
     recipe_id: int = Form(...),
     yield_amount: float = Form(...),
+    is_variable: bool = Form(False),
     yield_unit_id: int = Form(...),
     estimated_labor_minutes: int = Form(...),
     hourly_labor_rate: float = Form(16.75),
@@ -721,8 +723,17 @@ async def create_batch(
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
+    # Validate required fields based on variable yield
+    if not is_variable and (yield_amount is None or yield_unit_id is None):
+        raise HTTPException(status_code=400, detail="Yield amount and unit required for non-variable batches")
+    
+    if is_variable:
+        yield_amount = None
+        yield_unit_id = None
+    
     batch = Batch(
         recipe_id=recipe_id,
+        is_variable=is_variable,
         yield_amount=yield_amount,
         yield_unit_id=yield_unit_id,
         estimated_labor_minutes=estimated_labor_minutes,
@@ -1029,6 +1040,10 @@ async def create_inventory_item(
     name: str = Form(...),
     par_level: float = Form(...),
     batch_id: Optional[int] = Form(None),
+    par_unit_equals_amount: float = Form(1.0),
+    par_unit_equals_unit_id: Optional[int] = Form(None),
+    manual_conversion_factor: Optional[float] = Form(None),
+    conversion_notes: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
@@ -1036,6 +1051,10 @@ async def create_inventory_item(
     inventory_item = InventoryItem(
         name=name,
         par_level=par_level,
+        par_unit_equals_amount=par_unit_equals_amount,
+        par_unit_equals_unit_id=par_unit_equals_unit_id,
+        manual_conversion_factor=manual_conversion_factor,
+        conversion_notes=conversion_notes,
         batch_id=batch_id if batch_id else None,
         category_id=category_id if category_id else None
     )
