@@ -68,93 +68,111 @@ async def setup_admin(
         ("Vegetables", "ingredient"),
         ("Dairy", "ingredient"),
         ("Grains", "ingredient"),
-        # Create default categories (only if they don't exist)
-        default_categories = [
-            ("Proteins", "ingredient"),
-            ("Vegetables", "ingredient"),
-            ("Dairy", "ingredient"),
-            ("Grains", "ingredient"),
-            ("Spices", "ingredient"),
-            ("Sauces", "recipe"),
-            ("Soups", "recipe"),
-            ("Salads", "recipe"),
-            ("Main Dishes", "recipe"),
-            ("Appetizers", "dish"),
-            ("Entrees", "dish"),
-            ("Desserts", "dish"),
-            ("Beverages", "dish"),
-            ("Prep Items", "inventory"),
-            ("Finished Goods", "inventory")
-        ]
+        ("Spices", "ingredient"),
+        ("Appetizers", "recipe"),
+        ("Main Courses", "recipe"),
+        ("Desserts", "recipe"),
+        ("Beverages", "recipe"),
+        ("Prep Items", "batch"),
+        ("Sauces", "batch"),
+        ("Appetizers", "dish"),
+        ("Entrees", "dish"),
+        ("Desserts", "dish"),
+        ("Beverages", "dish"),
+        ("Proteins", "inventory"),
+        ("Vegetables", "inventory"),
+        ("Dairy", "inventory"),
+        ("Dry Goods", "inventory")
+    ]
+    
+    for name, cat_type in default_categories:
+        # Check if category already exists
+        existing = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
+        if not existing:
+            category = Category(name=name, type=cat_type)
+            db.add(category)
+    
+    # Create default vendor units
+    default_vendor_units = [
+        ("lb", "Pound"),
+        ("oz", "Ounce"),
+        ("gal", "Gallon"),
+        ("qt", "Quart"),
+        ("pt", "Pint"),
+        ("fl oz", "Fluid Ounce"),
+        ("kg", "Kilogram"),
+        ("g", "Gram"),
+        ("L", "Liter"),
+        ("mL", "Milliliter")
+    ]
+    
+    for name, description in default_vendor_units:
+        existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
+        if not existing:
+            vendor_unit = VendorUnit(name=name, description=description)
+            db.add(vendor_unit)
+    
+    # Create default usage units
+    default_usage_units = [
+        "lb", "oz", "cup", "tbsp", "tsp", "gal", "qt", "pt", "fl oz",
+        "each", "can", "jar", "bag", "box", "bunch", "head", "clove",
+        "slice", "piece", "pinch", "dash", "kg", "g", "L", "mL"
+    ]
+    
+    for unit_name in default_usage_units:
+        existing = db.query(UsageUnit).filter(UsageUnit.name == unit_name).first()
+        if not existing:
+            usage_unit = UsageUnit(name=unit_name)
+            db.add(usage_unit)
+    
+    # Create default vendor unit conversions
+    db.flush()  # Ensure units are created before conversions
+    
+    # Common conversions (vendor unit to usage unit)
+    default_conversions = [
+        ("lb", "lb", 1.0),
+        ("lb", "oz", 16.0),
+        ("oz", "oz", 1.0),
+        ("oz", "lb", 0.0625),
+        ("gal", "gal", 1.0),
+        ("gal", "qt", 4.0),
+        ("gal", "pt", 8.0),
+        ("gal", "cup", 16.0),
+        ("gal", "fl oz", 128.0),
+        ("qt", "qt", 1.0),
+        ("qt", "pt", 2.0),
+        ("qt", "cup", 4.0),
+        ("qt", "fl oz", 32.0),
+        ("pt", "pt", 1.0),
+        ("pt", "cup", 2.0),
+        ("pt", "fl oz", 16.0),
+        ("fl oz", "fl oz", 1.0),
+        ("kg", "kg", 1.0),
+        ("kg", "g", 1000.0),
+        ("kg", "lb", 2.20462),
+        ("g", "g", 1.0),
+        ("g", "oz", 0.035274),
+        ("L", "L", 1.0),
+        ("L", "mL", 1000.0),
+        ("L", "qt", 1.05669),
+        ("mL", "mL", 1.0),
+        ("mL", "fl oz", 0.033814)
+    ]
+    
+    for vendor_unit_name, usage_unit_name, factor in default_conversions:
+        vendor_unit = db.query(VendorUnit).filter(VendorUnit.name == vendor_unit_name).first()
+        usage_unit = db.query(UsageUnit).filter(UsageUnit.name == usage_unit_name).first()
         
-        for name, cat_type in default_categories:
-            existing = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
-            if not existing:
-                db.add(Category(name=name, type=cat_type))
-        
-        # Create default vendor units (only if they don't exist)
-        default_vendor_units = [
-            ("lb", "Pound"),
-            ("oz", "Ounce"),
-            ("gal", "Gallon"),
-            ("qt", "Quart"),
-            ("pt", "Pint"),
-            ("fl oz", "Fluid Ounce"),
-            ("kg", "Kilogram"),
-            ("g", "Gram"),
-            ("L", "Liter"),
-            ("mL", "Milliliter")
-        ]
-        
-        for name, description in default_vendor_units:
-            existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
-            if not existing:
-                db.add(VendorUnit(name=name, description=description))
-        
-        # Create default usage units (only if they don't exist)
-        default_usage_units = [
-            "lb", "oz", "cup", "tbsp", "tsp", "gal", "qt", "pt", "fl oz",
-            "each", "can", "jar", "bottle", "bag", "box", "bunch", "head", 
-            "clove", "slice", "piece"
-        ]
-        
-        for name in default_usage_units:
-            existing = db.query(UsageUnit).filter(UsageUnit.name == name).first()
-            if not existing:
-                db.add(UsageUnit(name=name))
-        
-        db.flush()  # Ensure units are created before conversions
-        
-        # Create some common vendor unit conversions (only if they don't exist)
-        conversions = [
-            ("lb", "lb", 1.0),
-            ("lb", "oz", 16.0),
-            ("oz", "oz", 1.0),
-            ("gal", "gal", 1.0),
-            ("gal", "qt", 4.0),
-            ("gal", "pt", 8.0),
-            ("gal", "fl oz", 128.0),
-            ("gal", "cup", 16.0),
-            ("gal", "tbsp", 256.0),
-            ("gal", "tsp", 768.0)
-        ]
-        
-        for vendor_name, usage_name, factor in conversions:
-            vendor_unit = db.query(VendorUnit).filter(VendorUnit.name == vendor_name).first()
-            usage_unit = db.query(UsageUnit).filter(UsageUnit.name == usage_name).first()
+        if vendor_unit and usage_unit:
+            existing_conversion = db.query(VendorUnitConversion).filter(
+                VendorUnitConversion.vendor_unit_id == vendor_unit.id,
+                VendorUnitConversion.usage_unit_id == usage_unit.id
+            ).first()
             
-            if vendor_unit and usage_unit:
-                existing_conversion = db.query(VendorUnitConversion).filter(
-                    VendorUnitConversion.vendor_unit_id == vendor_unit.id,
-                    VendorUnitConversion.usage_unit_id == usage_unit.id
-                ).first()
-                
-                if not existing_conversion:
-                    db.add(VendorUnitConversion(
-                        vendor_unit_id=vendor_unit.id,
-                        usage_unit_id=usage_unit.id,
-                        conversion_factor=factor
-                    ))
+            if not existing_conversion:
+                conversion = VendorUnitConversion(
+                    vendor_unit_id=vendor_unit.id,
+                    usage_unit_id=usage_unit.id,
                     conversion_factor=factor
                 )
                 db.add(conversion)
