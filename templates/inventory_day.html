@@ -39,12 +39,28 @@
                         {% for item in inventory_day_items %}
                         {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
                         {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
+                        {% set par_in_units = (item.inventory_item.par_level * item.inventory_item.par_unit_equals_amount) if item.inventory_item.par_unit_equals_amount else item.inventory_item.par_level %}
+                        {% set inventory_in_units = (item.quantity * item.inventory_item.par_unit_equals_amount) if item.inventory_item.par_unit_equals_amount else item.quantity %}
                         <div class="col-md-6 mb-3">
                             <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
                                 <div class="card-body p-2">
                                     <label class="form-label mb-1">
                                         <strong>{{ item.inventory_item.name }}</strong>
-                                        <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                                        <small class="text-muted">
+                                            (Par: {{ item.inventory_item.par_level }}
+                                            {% if item.inventory_item.par_unit_equals_unit %}
+                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
+                                            {% endif %})
+                                            {% if item.inventory_item.par_unit_equals_unit %}
+                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
+                                            {% endif %})
+                                            {% if item.inventory_item.par_unit_equals_unit %}
+                                             = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
+                                            {% endif %})
+                                        </small>
+                                        {% if item.inventory_item.batch %}
+                                        <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
+                                        {% endif %}
                                         {% if item.inventory_item.batch %}
                                         <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
                                         {% endif %}
@@ -106,7 +122,12 @@
                             <div class="card-body p-2">
                                 <label class="form-label mb-1">
                                     <strong>{{ item.inventory_item.name }}</strong>
-                                    <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                                    <small class="text-muted">
+                                        (Par: {{ item.inventory_item.par_level }}
+                                        {% if item.inventory_item.par_unit_equals_unit %}
+                                         = {{ "%.1f"|format(par_in_units) }} {{ item.inventory_item.par_unit_equals_unit.name }}
+                                        {% endif %})
+                                    </small>
                                 </label>
                                 <input type="number" class="form-control form-control-sm" 
                                        value="{{ item.quantity }}" 
@@ -210,6 +231,9 @@
                                 <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
                                     {{ task.inventory_item.batch.recipe.name }}
                                 </a>
+                                {% if task.inventory_item.batch.is_variable %}
+                                <span class="badge bg-warning">Variable</span>
+                                {% endif %}
                             </small><br>
                             {% endif %}
                             
@@ -259,6 +283,11 @@
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
                                 {% if task.assigned_to %}
                                 <br><small class="text-success">Cost: ${{ "%.2f"|format(task.labor_cost) }}</small>
+                                {% endif %}
+                                {% if task.made_amount and task.made_unit %}
+                                <br><small class="text-info">Made: {{ task.made_amount }} {{ task.made_unit.name }}</small>
+                                {% elif task.selected_scale %}
+                                <br><small class="text-info">Made: {{ task.selected_scale.title() }} Batch</small>
                                 {% endif %}
                             {% endif %}
                             

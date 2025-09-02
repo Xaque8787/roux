@@ -19,6 +19,27 @@
             <div class="card-body">
                 <form method="post" action="/batches/new" id="batchForm">
                     <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="is_variable" name="is_variable" onchange="toggleYieldFields()">
+                            <label class="form-check-label" for="is_variable">
+                                Variable Yield
+                            </label>
+                            <small class="form-text text-muted">Check if this batch produces an undetermined amount</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="yieldFields">
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="is_variable" name="is_variable" onchange="toggleYieldFields()">
+                            <label class="form-check-label" for="is_variable">
+                                Variable Yield
+                            </label>
+                            <small class="form-text text-muted">Check if this batch produces an undetermined amount</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="yieldFields">
                         <label for="recipe_id" class="form-label">Recipe</label>
                         <select class="form-select" id="recipe_id" name="recipe_id" required onchange="loadRecipeUsageUnits()">
                             <option value="">Select Recipe</option>
@@ -30,13 +51,13 @@
                     
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="mb-3">
+                            <div class="mb-3" id="yieldAmountField">
                                 <label for="yield_amount" class="form-label">Yield Amount</label>
                                 <input type="number" class="form-control" id="yield_amount" name="yield_amount" step="0.01" required>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="mb-3">
+                            <div class="mb-3" id="yieldUnitField">
                                 <label for="yield_unit_id" class="form-label">Yield Unit</label>
                                 <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
                                     <option value="">Select Unit</option>
@@ -135,6 +156,12 @@
                                 </td>
                                 <td>
                                     {{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }}
+                                    {% if batch.is_variable %}
+                                    <br><span class="badge bg-info">Variable</span>
+                                    {% endif %}
+                                    {% if batch.is_variable %}
+                                    <br><span class="badge bg-info">Variable</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ batch.estimated_labor_minutes }} min<br>
@@ -180,6 +207,46 @@
 </div>
 
 <script>
+function toggleYieldFields() {
+    const isVariableCheckbox = document.getElementById('is_variable');
+    const yieldAmountField = document.getElementById('yieldAmountField');
+    const yieldUnitField = document.getElementById('yieldUnitField');
+    const yieldAmountInput = document.getElementById('yield_amount');
+    const yieldUnitInput = document.getElementById('yield_unit_id');
+    
+    if (isVariableCheckbox.checked) {
+        yieldAmountField.style.display = 'none';
+        yieldUnitField.style.display = 'none';
+        yieldAmountInput.required = false;
+        yieldUnitInput.required = false;
+    } else {
+        yieldAmountField.style.display = 'block';
+        yieldUnitField.style.display = 'block';
+        yieldAmountInput.required = true;
+        yieldUnitInput.required = true;
+    }
+}
+
+function toggleYieldFields() {
+    const isVariableCheckbox = document.getElementById('is_variable');
+    const yieldAmountField = document.getElementById('yieldAmountField');
+    const yieldUnitField = document.getElementById('yieldUnitField');
+    const yieldAmountInput = document.getElementById('yield_amount');
+    const yieldUnitInput = document.getElementById('yield_unit_id');
+    
+    if (isVariableCheckbox.checked) {
+        yieldAmountField.style.display = 'none';
+        yieldUnitField.style.display = 'none';
+        yieldAmountInput.required = false;
+        yieldUnitInput.required = false;
+    } else {
+        yieldAmountField.style.display = 'block';
+        yieldUnitField.style.display = 'block';
+        yieldAmountInput.required = true;
+        yieldUnitInput.required = true;
+    }
+}
+
 function toggleScalingOptions() {
     const checkbox = document.getElementById('can_be_scaled');
     const options = document.getElementById('scalingOptions');
