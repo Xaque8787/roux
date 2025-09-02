@@ -721,7 +721,6 @@ async def create_batch(
     scale_half: bool = Form(False),
     scale_quarter: bool = Form(False),
     scale_eighth: bool = Form(False),
-    scale_sixteenth: bool = Form(False),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
