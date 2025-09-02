@@ -1612,6 +1612,33 @@ async def resume_task(
     db.commit()
     return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
 
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/update_made")
+async def update_task_made_amount(
+    day_id: int,
+    task_id: int,
+    made_amount: float = Form(...),
+    made_unit_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Get the task
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.day_id == day_id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Update made amount
+    task.made_amount = made_amount
+    if made_unit_id:
+        task.made_unit_id = made_unit_id
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=303)
+
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/finish")
 async def finish_task(
     day_id: int,
