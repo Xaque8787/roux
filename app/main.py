@@ -536,6 +536,366 @@ async def inventory_page(request: Request, current_user: User = Depends(get_curr
         "today_date": today.isoformat()
     })
 
+@app.get("/inventory/day/{day_id}")
+async def inventory_day_detail(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    # Get inventory day items
+    inventory_day_items = db.query(InventoryDayItem).filter(
+        InventoryDayItem.day_id == day_id
+    ).join(InventoryItem).all()
+    
+    # Get tasks for this day
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    
+    # Get employees
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    return templates.TemplateResponse("inventory_day.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "inventory_day_items": inventory_day_items,
+        "tasks": tasks,
+        "employees": employees
+    })
+
+@app.post("/inventory/day/{day_id}/update")
+async def update_inventory_day(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Cannot update finalized day")
+    
+    try:
+        # Get form data
+        form_data = await request.form()
+        
+        # Update global notes
+        inventory_day.global_notes = form_data.get("global_notes", "")
+        
+        # Update inventory quantities and overrides
+        inventory_items = db.query(InventoryDayItem).filter(
+            InventoryDayItem.day_id == day_id
+        ).all()
+        
+        for item in inventory_items:
+            quantity_key = f"item_{item.inventory_item.id}"
+            override_create_key = f"override_create_{item.inventory_item.id}"
+            override_no_task_key = f"override_no_task_{item.inventory_item.id}"
+            
+            if quantity_key in form_data:
+                item.quantity = float(form_data[quantity_key])
+            
+            item.override_create_task = override_create_key in form_data
+            item.override_no_task = override_no_task_key in form_data
+        
+        # Generate tasks for below-par items
+        for item in inventory_items:
+            is_below_par = item.quantity <= item.inventory_item.par_level
+            should_create_task = (is_below_par and not item.override_no_task) or item.override_create_task
+            
+            if should_create_task:
+                # Check if task already exists for this item
+                existing_task = db.query(Task).filter(
+                    Task.day_id == day_id,
+                    Task.inventory_item_id == item.inventory_item.id,
+                    Task.auto_generated == True
+                ).first()
+                
+                if not existing_task:
+                    task = Task(
+                        day_id=day_id,
+                        inventory_item_id=item.inventory_item.id,
+                        batch_id=item.inventory_item.batch_id,
+                        description=f"Prep {item.inventory_item.name}",
+                        auto_generated=True
+                    )
+                    db.add(task)
+        
+        db.commit()
+        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/inventory/day/{day_id}/tasks/new")
+async def create_manual_task(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    try:
+        form_data = await request.form()
+        
+        # Get assigned employee IDs
+        assigned_to_ids = form_data.getlist("assigned_to_ids")
+        description = form_data.get("description")
+        inventory_item_id = form_data.get("inventory_item_id") or None
+        
+        if not description:
+            raise HTTPException(status_code=400, detail="Description is required")
+        
+        # Create tasks for each assigned employee or one unassigned task
+        if assigned_to_ids:
+            for emp_id in assigned_to_ids:
+                task = Task(
+                    day_id=day_id,
+                    assigned_to_id=int(emp_id),
+                    inventory_item_id=int(inventory_item_id) if inventory_item_id else None,
+                    description=description,
+                    auto_generated=False
+                )
+                # Set batch_id if inventory item has one
+                if inventory_item_id:
+                    inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+                    if inventory_item and inventory_item.batch_id:
+                        task.batch_id = inventory_item.batch_id
+                db.add(task)
+        else:
+            # Create unassigned task
+            task = Task(
+                day_id=day_id,
+                inventory_item_id=int(inventory_item_id) if inventory_item_id else None,
+                description=description,
+                auto_generated=False
+            )
+            # Set batch_id if inventory item has one
+            if inventory_item_id:
+                inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+                if inventory_item and inventory_item.batch_id:
+                    task.batch_id = inventory_item.batch_id
+            db.add(task)
+        
+        db.commit()
+        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/assign")
+async def assign_task(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    try:
+        form_data = await request.form()
+        assigned_to_id = form_data.get("assigned_to_id")
+        
+        task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task.assigned_to_id = int(assigned_to_id) if assigned_to_id else None
+        db.commit()
+        
+        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/start")
+async def start_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/pause")
+async def pause_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.started_at and not task.is_paused:
+        task.paused_at = datetime.utcnow()
+        task.is_paused = True
+        db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/resume")
+async def resume_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.is_paused and task.paused_at:
+        # Add pause time to total
+        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        task.total_pause_time += int(pause_duration)
+        task.is_paused = False
+        task.paused_at = None
+        db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/finish")
+async def finish_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.is_paused and task.paused_at:
+        # Add final pause time
+        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        task.total_pause_time += int(pause_duration)
+    
+    task.finished_at = datetime.utcnow()
+    task.is_paused = False
+    task.paused_at = None
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
+@app.get("/inventory/day/{day_id}/tasks/{task_id}")
+async def task_detail(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    return templates.TemplateResponse("task_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "task": task,
+        "inventory_day": inventory_day,
+        "employees": employees
+    })
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/notes")
+async def update_task_notes(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        form_data = await request.form()
+        notes = form_data.get("notes", "")
+        
+        task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task.notes = notes
+        db.commit()
+        
+        return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/inventory/day/{day_id}/finalize")
+async def finalize_inventory_day(
+    day_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    inventory_day.finalized = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
+@app.get("/inventory/reports/{day_id}")
+async def inventory_report(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    # Get inventory day items
+    inventory_day_items = db.query(InventoryDayItem).filter(
+        InventoryDayItem.day_id == day_id
+    ).join(InventoryItem).all()
+    
+    # Get tasks for this day
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    
+    # Calculate statistics
+    total_tasks = len(tasks)
+    completed_tasks = len([t for t in tasks if t.finished_at])
+    below_par_items = len([item for item in inventory_day_items 
+                          if item.quantity <= item.inventory_item.par_level])
+    
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    return templates.TemplateResponse("inventory_report.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "inventory_day_items": inventory_day_items,
+        "tasks": tasks,
+        "employees": employees,
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "below_par_items": below_par_items
+    })
+
 # Employees routes (admin only)
 @app.get("/employees", response_class=HTMLResponse)
 async def employees_page(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -873,6 +1233,375 @@ async def deactivate_employee(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/inventory/new_item")
+async def create_inventory_item(
+    request: Request,
+    name: str = Form(...),
+    category_id: Optional[int] = Form(None),
+    batch_id: Optional[int] = Form(None),
+    par_level: float = Form(...),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        inventory_item = InventoryItem(
+            name=name,
+            category_id=category_id if category_id else None,
+            batch_id=batch_id if batch_id else None,
+            par_level=par_level
+        )
+        db.add(inventory_item)
+        db.commit()
+        return RedirectResponse(url="/inventory", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/inventory/new_day")
+async def create_inventory_day(
+    request: Request,
+    date: date = Form(...),
+    employees_working: List[int] = Form([]),
+    global_notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    try:
+        # Check if day already exists
+        existing_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+        if existing_day:
+            return templates.TemplateResponse("error.html", {
+                "request": request,
+                "status_code": 400,
+                "detail": "Inventory day already exists for this date"
+            })
+        
+        # Create new inventory day
+        new_day = InventoryDay(
+            date=date,
+            employees_working=",".join(map(str, employees_working)),
+            global_notes=global_notes
+        )
+        db.add(new_day)
+        db.flush()  # Get the ID
+        
+        # Create inventory day items for all inventory items
+        inventory_items = db.query(InventoryItem).all()
+        for item in inventory_items:
+            day_item = InventoryDayItem(
+                day_id=new_day.id,
+                inventory_item_id=item.id,
+                quantity=0
+            )
+            db.add(day_item)
+        
+        db.commit()
+        return RedirectResponse(url=f"/inventory/day/{new_day.id}", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating inventory day: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating inventory day: {str(e)}")
+
+@app.get("/inventory/day/{day_id}", response_class=HTMLResponse)
+async def inventory_day_detail(
+    day_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    return templates.TemplateResponse("inventory_day.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "inventory_day_items": inventory_day_items,
+        "tasks": tasks,
+        "employees": employees
+    })
+
+@app.get("/inventory/items/{item_id}/edit", response_class=HTMLResponse)
+async def inventory_item_edit_form(
+    item_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).all()
+    
+    return templates.TemplateResponse("inventory_item_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "item": item,
+        "categories": categories,
+        "batches": batches
+    })
+
+@app.post("/inventory/items/{item_id}/edit")
+async def update_inventory_item(
+    item_id: int,
+    request: Request,
+    name: str = Form(...),
+    category_id: Optional[int] = Form(None),
+    batch_id: Optional[int] = Form(None),
+    par_level: float = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Inventory item not found")
+        
+        # Update item
+        item.name = name
+        item.category_id = category_id if category_id else None
+        item.batch_id = batch_id if batch_id else None
+        item.par_level = par_level
+        
+        db.commit()
+        return RedirectResponse(url="/inventory", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/inventory/items/{item_id}/delete")
+async def delete_inventory_item(
+    item_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Inventory item not found")
+        
+        # Delete related day items first
+        db.query(InventoryDayItem).filter(InventoryDayItem.inventory_item_id == item_id).delete()
+        
+        # Delete tasks related to this item
+        db.query(Task).filter(Task.inventory_item_id == item_id).delete()
+        
+        # Delete item
+        db.delete(item)
+        db.commit()
+        return RedirectResponse(url="/inventory", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/utilities/new")
+async def create_utility(
+    request: Request,
+    name: str = Form(...),
+    monthly_cost: float = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Check if utility already exists
+        existing_utility = db.query(UtilityCost).filter(UtilityCost.name == name).first()
+        if existing_utility:
+            # Update existing
+            existing_utility.monthly_cost = monthly_cost
+            existing_utility.last_updated = datetime.utcnow()
+        else:
+            # Create new
+            utility = UtilityCost(name=name, monthly_cost=monthly_cost)
+            db.add(utility)
+        
+        db.commit()
+        return RedirectResponse(url="/utilities", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/utilities/{utility_id}/delete")
+async def delete_utility(
+    utility_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    try:
+        utility = db.query(UtilityCost).filter(UtilityCost.id == utility_id).first()
+        if not utility:
+            raise HTTPException(status_code=404, detail="Utility not found")
+        
+        db.delete(utility)
+        db.commit()
+        return RedirectResponse(url="/utilities", status_code=303)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Additional API routes for recipe functionality
+@app.get("/api/recipes/{recipe_id}/usage_units")
+async def get_recipe_usage_units(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Get all usage units from recipe ingredients
+        recipe_usage_units = db.query(UsageUnit).join(
+            RecipeIngredient, RecipeIngredient.usage_unit_id == UsageUnit.id
+        ).filter(RecipeIngredient.recipe_id == recipe_id).distinct().all()
+        
+        # Also get usage units from ingredients used in the recipe
+        ingredient_usage_units = db.query(UsageUnit).join(
+            IngredientUsageUnit, IngredientUsageUnit.usage_unit_id == UsageUnit.id
+        ).join(
+            RecipeIngredient, RecipeIngredient.ingredient_id == IngredientUsageUnit.ingredient_id
+        ).filter(RecipeIngredient.recipe_id == recipe_id).distinct().all()
+        
+        # Combine and deduplicate
+        all_units = {}
+        for unit in recipe_usage_units + ingredient_usage_units:
+            all_units[unit.id] = {"id": unit.id, "name": unit.name}
+        
+        return list(all_units.values())
+    except Exception as e:
+        print(f"Error getting recipe usage units: {e}")
+        return []
+
+@app.get("/api/batches/{batch_id}/portion_units")
+async def get_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
+    """Get all available portion units for a batch based on recipe ingredients"""
+    try:
+        batch = db.query(Batch).filter(Batch.id == batch_id).first()
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        
+        # Get all usage units from recipe ingredients
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == batch.recipe_id
+        ).all()
+        
+        usage_unit_ids = set()
+        for ri in recipe_ingredients:
+            # Add the usage unit from the recipe ingredient
+            usage_unit_ids.add(ri.usage_unit_id)
+            
+            # Add all usage units available for this ingredient
+            ingredient_usage_units = db.query(IngredientUsageUnit).filter(
+                IngredientUsageUnit.ingredient_id == ri.ingredient_id
+            ).all()
+            for iu in ingredient_usage_units:
+                usage_unit_ids.add(iu.usage_unit_id)
+        
+        # Get the actual usage unit objects
+        usage_units = db.query(UsageUnit).filter(
+            UsageUnit.id.in_(usage_unit_ids)
+        ).all()
+        
+        return [{"id": unit.id, "name": unit.name} for unit in usage_units]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
+async def get_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Depends(get_db)):
+    """Calculate cost per unit for a batch in a specific unit"""
+    try:
+        batch = db.query(Batch).filter(Batch.id == batch_id).first()
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        
+        # Calculate total recipe cost
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == batch.recipe_id
+        ).all()
+        
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+        
+        # If the unit is the same as yield unit, simple calculation
+        if unit_id == batch.yield_unit_id:
+            cost_per_unit = total_batch_cost / batch.yield_amount
+        else:
+            # Need to convert between units - for now, assume 1:1 conversion
+            # In a full implementation, you'd need a conversion table
+            cost_per_unit = total_batch_cost / batch.yield_amount
+        
+        return {"expected_cost_per_unit": cost_per_unit}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/batches/{batch_id}/labor_stats")
+async def get_batch_labor_stats(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Get completed tasks for this batch
+        completed_tasks = db.query(Task).filter(
+            Task.batch_id == batch_id,
+            Task.finished_at.isnot(None)
+        ).order_by(Task.finished_at.desc()).all()
+        
+        if not completed_tasks:
+            return {
+                "task_count": 0,
+                "most_recent_cost": 0,
+                "most_recent_date": "",
+                "average_week": 0,
+                "average_month": 0,
+                "average_all_time": 0,
+                "week_task_count": 0,
+                "month_task_count": 0
+            }
+        
+        # Calculate statistics
+        most_recent = completed_tasks[0]
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        
+        week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
+        month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
+        
+        return {
+            "task_count": len(completed_tasks),
+            "most_recent_cost": most_recent.labor_cost,
+            "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
+            "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else 0,
+            "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else 0,
+            "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
+            "week_task_count": len(week_tasks),
+            "month_task_count": len(month_tasks)
+        }
+    except Exception as e:
+        print(f"Error getting labor stats: {e}")
+        return {
+            "task_count": 0,
+            "most_recent_cost": 0,
+            "most_recent_date": "",
+            "average_week": 0,
+            "average_month": 0,
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
+        }
+
 # Error handlers
 @app.exception_handler(401)
 async def unauthorized_handler(request: Request, exc: HTTPException):
@@ -1405,380 +2134,3 @@ async def delete_ingredient(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/inventory/new_item")
-async def create_inventory_item(
-    request: Request,
-    name: str = Form(...),
-    category_id: Optional[int] = Form(None),
-    batch_id: Optional[int] = Form(None),
-    par_level: float = Form(...),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
-):
-    try:
-        inventory_item = InventoryItem(
-            name=name,
-            category_id=category_id if category_id else None,
-            batch_id=batch_id if batch_id else None,
-            par_level=par_level
-        )
-        db.add(inventory_item)
-        db.commit()
-        return RedirectResponse(url="/inventory", status_code=303)
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/inventory/new_day")
-async def create_inventory_day(
-    request: Request,
-    date: date = Form(...),
-    employees_working: List[int] = Form([]),
-    global_notes: str = Form(""),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager_or_admin)
-):
-    try:
-        # Check if day already exists
-        existing_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
-        if existing_day:
-            return templates.TemplateResponse("error.html", {
-                "request": request,
-                "status_code": 400,
-                "detail": "Inventory day already exists for this date"
-            })
-        
-        # Create new inventory day
-        new_day = InventoryDay(
-            date=date,
-            employees_working=",".join(map(str, employees_working)),
-            global_notes=global_notes
-        )
-        db.add(new_day)
-        db.flush()  # Get the ID
-        
-        # Create inventory day items for all inventory items
-        inventory_items = db.query(InventoryItem).all()
-        for item in inventory_items:
-            day_item = InventoryDayItem(
-                day_id=new_day.id,
-                inventory_item_id=item.id,
-                quantity=0
-            )
-            db.add(day_item)
-        
-        db.commit()
-        return RedirectResponse(url=f"/inventory/day/{new_day.id}", status_code=303)
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error creating inventory day: {e}")
-        raise HTTPException(status_code=500, detail=f"Error creating inventory day: {str(e)}")
-
-@app.get("/inventory/day/{day_id}", response_class=HTMLResponse)
-async def inventory_day_detail(
-    day_id: int,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
-    tasks = db.query(Task).filter(Task.day_id == day_id).all()
-    employees = db.query(User).filter(User.is_active == True).all()
-    
-    return templates.TemplateResponse("inventory_day.html", {
-        "request": request,
-        "current_user": current_user,
-        "inventory_day": inventory_day,
-        "inventory_day_items": inventory_day_items,
-        "tasks": tasks,
-        "employees": employees
-    })
-
-@app.get("/inventory/items/{item_id}/edit", response_class=HTMLResponse)
-async def inventory_item_edit_form(
-    item_id: int,
-    request: Request,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
-    
-    categories = db.query(Category).filter(Category.type == "inventory").all()
-    batches = db.query(Batch).all()
-    
-    return templates.TemplateResponse("inventory_item_edit.html", {
-        "request": request,
-        "current_user": current_user,
-        "item": item,
-        "categories": categories,
-        "batches": batches
-    })
-
-@app.post("/inventory/items/{item_id}/edit")
-async def update_inventory_item(
-    item_id: int,
-    request: Request,
-    name: str = Form(...),
-    category_id: Optional[int] = Form(None),
-    batch_id: Optional[int] = Form(None),
-    par_level: float = Form(...),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    try:
-        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Inventory item not found")
-        
-        # Update item
-        item.name = name
-        item.category_id = category_id if category_id else None
-        item.batch_id = batch_id if batch_id else None
-        item.par_level = par_level
-        
-        db.commit()
-        return RedirectResponse(url="/inventory", status_code=303)
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/inventory/items/{item_id}/delete")
-async def delete_inventory_item(
-    item_id: int,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    try:
-        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Inventory item not found")
-        
-        # Delete related day items first
-        db.query(InventoryDayItem).filter(InventoryDayItem.inventory_item_id == item_id).delete()
-        
-        # Delete tasks related to this item
-        db.query(Task).filter(Task.inventory_item_id == item_id).delete()
-        
-        # Delete item
-        db.delete(item)
-        db.commit()
-        return RedirectResponse(url="/inventory", status_code=303)
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/utilities/new")
-async def create_utility(
-    request: Request,
-    name: str = Form(...),
-    monthly_cost: float = Form(...),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    try:
-        # Check if utility already exists
-        existing_utility = db.query(UtilityCost).filter(UtilityCost.name == name).first()
-        if existing_utility:
-            # Update existing
-            existing_utility.monthly_cost = monthly_cost
-            existing_utility.last_updated = datetime.utcnow()
-        else:
-            # Create new
-            utility = UtilityCost(name=name, monthly_cost=monthly_cost)
-            db.add(utility)
-        
-        db.commit()
-        return RedirectResponse(url="/utilities", status_code=303)
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/utilities/{utility_id}/delete")
-async def delete_utility(
-    utility_id: int,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    try:
-        utility = db.query(UtilityCost).filter(UtilityCost.id == utility_id).first()
-        if not utility:
-            raise HTTPException(status_code=404, detail="Utility not found")
-        
-        db.delete(utility)
-        db.commit()
-        return RedirectResponse(url="/utilities", status_code=303)
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-# Additional API routes for recipe functionality
-@app.get("/api/recipes/{recipe_id}/usage_units")
-async def get_recipe_usage_units(
-    recipe_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        # Get all usage units from recipe ingredients
-        recipe_usage_units = db.query(UsageUnit).join(
-            RecipeIngredient, RecipeIngredient.usage_unit_id == UsageUnit.id
-        ).filter(RecipeIngredient.recipe_id == recipe_id).distinct().all()
-        
-        # Also get usage units from ingredients used in the recipe
-        ingredient_usage_units = db.query(UsageUnit).join(
-            IngredientUsageUnit, IngredientUsageUnit.usage_unit_id == UsageUnit.id
-        ).join(
-            RecipeIngredient, RecipeIngredient.ingredient_id == IngredientUsageUnit.ingredient_id
-        ).filter(RecipeIngredient.recipe_id == recipe_id).distinct().all()
-        
-        # Combine and deduplicate
-        all_units = {}
-        for unit in recipe_usage_units + ingredient_usage_units:
-            all_units[unit.id] = {"id": unit.id, "name": unit.name}
-        
-        return list(all_units.values())
-    except Exception as e:
-        print(f"Error getting recipe usage units: {e}")
-        return []
-
-@app.get("/api/batches/{batch_id}/portion_units")
-async def get_batch_portion_units(
-    batch_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        batch = db.query(Batch).filter(Batch.id == batch_id).first()
-        if not batch:
-            return []
-        
-        # Get all usage units from recipe ingredients
-        recipe_usage_units = db.query(UsageUnit).join(
-            RecipeIngredient, RecipeIngredient.usage_unit_id == UsageUnit.id
-        ).filter(RecipeIngredient.recipe_id == batch.recipe_id).distinct().all()
-        
-        # Also get usage units from ingredients used in the recipe
-        ingredient_usage_units = db.query(UsageUnit).join(
-            IngredientUsageUnit, IngredientUsageUnit.usage_unit_id == UsageUnit.id
-        ).join(
-            RecipeIngredient, RecipeIngredient.ingredient_id == IngredientUsageUnit.ingredient_id
-        ).filter(RecipeIngredient.recipe_id == batch.recipe_id).distinct().all()
-        
-        # Combine and deduplicate
-        all_units = {}
-        for unit in recipe_usage_units + ingredient_usage_units:
-            all_units[unit.id] = {"id": unit.id, "name": unit.name}
-        
-        return list(all_units.values())
-    except Exception as e:
-        print(f"Error getting batch portion units: {e}")
-        return []
-
-@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
-async def get_batch_cost_per_unit(
-    batch_id: int,
-    unit_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        batch = db.query(Batch).filter(Batch.id == batch_id).first()
-        if not batch:
-            return {"expected_cost_per_unit": 0}
-        
-        # Calculate total batch cost (recipe + labor)
-        recipe_ingredients = db.query(RecipeIngredient).filter(
-            RecipeIngredient.recipe_id == batch.recipe_id
-        ).all()
-        
-        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-        
-        # Calculate cost per yield unit
-        if batch.yield_amount and batch.yield_amount > 0:
-            cost_per_yield_unit = total_batch_cost / batch.yield_amount
-            
-            # If requesting different unit than yield unit, apply conversion
-            if unit_id != batch.yield_unit_id:
-                # For now, assume 1:1 conversion - you may want to add proper conversion logic
-                # This would require a conversion table between units
-                conversion_factor = 1.0  # Placeholder
-                cost_per_unit = cost_per_yield_unit * conversion_factor
-            else:
-                cost_per_unit = cost_per_yield_unit
-            
-            return {"expected_cost_per_unit": cost_per_unit}
-        
-        return {"expected_cost_per_unit": 0}
-    except Exception as e:
-        print(f"Error calculating batch cost per unit: {e}")
-        return {"expected_cost_per_unit": 0}
-
-@app.get("/api/batches/{batch_id}/labor_stats")
-async def get_batch_labor_stats(
-    batch_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        # Get completed tasks for this batch
-        completed_tasks = db.query(Task).filter(
-            Task.batch_id == batch_id,
-            Task.finished_at.isnot(None)
-        ).order_by(Task.finished_at.desc()).all()
-        
-        if not completed_tasks:
-            return {
-                "task_count": 0,
-                "most_recent_cost": 0,
-                "most_recent_date": "",
-                "average_week": 0,
-                "average_month": 0,
-                "average_all_time": 0,
-                "week_task_count": 0,
-                "month_task_count": 0
-            }
-        
-        # Calculate statistics
-        most_recent = completed_tasks[0]
-        week_ago = datetime.utcnow() - timedelta(days=7)
-        month_ago = datetime.utcnow() - timedelta(days=30)
-        
-        week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
-        month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
-        
-        return {
-            "task_count": len(completed_tasks),
-            "most_recent_cost": most_recent.labor_cost,
-            "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
-            "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else 0,
-            "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else 0,
-            "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
-            "week_task_count": len(week_tasks),
-            "month_task_count": len(month_tasks)
-        }
-    except Exception as e:
-        print(f"Error getting labor stats: {e}")
-        return {
-            "task_count": 0,
-            "most_recent_cost": 0,
-            "most_recent_date": "",
-            "average_week": 0,
-            "average_month": 0,
-            "average_all_time": 0,
-            "week_task_count": 0,
-            "month_task_count": 0
-        }
