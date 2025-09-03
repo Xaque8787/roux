@@ -135,6 +135,8 @@ function toggleYieldFields() {
         yieldFields.style.display = 'none';
         yieldAmountInput.required = false;
         yieldUnitInput.required = false;
+        yieldAmountInput.value = '';
+        yieldUnitInput.value = '';
     } else {
         yieldFields.style.display = 'block';
         yieldAmountInput.required = true;
