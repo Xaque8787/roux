@@ -45,7 +45,7 @@
                                 <span class="badge bg-warning">Paused</span>
                             {% elif task.status == "completed" %}
                                 <span class="badge bg-success">Completed</span>
-                            <button type="button" class="btn btn-success w-100 mt-2" onclick="showFinishTaskModal({{ task.id }})">
+                            {% endif %}
                         </p>
                     </div>
                     <div class="col-md-6">
