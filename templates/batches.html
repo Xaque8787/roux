@@ -257,7 +257,8 @@ async function loadRecipeUsageUnits() {
     const yieldUnitSelect = document.getElementById('yield_unit_id');
     
     if (!recipeSelect.value) {
-        showAllUnits();
+        // Clear options if no recipe selected
+        yieldUnitSelect.innerHTML = '<option value="">Select Recipe First</option>';
         return;
     }
     
@@ -273,26 +274,14 @@ async function loadRecipeUsageUnits() {
             yieldUnitSelect.appendChild(option);
         });
         
-        // If no units found from recipe, show all units
+        // If no units found from recipe ingredients
         if (usageUnits.length === 0) {
-            showAllUnits();
+            yieldUnitSelect.innerHTML = '<option value="">No units available - add ingredients to recipe first</option>';
         }
     } catch (error) {
         console.error('Error loading usage units:', error);
-        showAllUnits();
+        yieldUnitSelect.innerHTML = '<option value="">Error loading units</option>';
     }
-}
-
-function showAllUnits() {
-    const yieldUnitSelect = document.getElementById('yield_unit_id');
-    yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-    
-    {% for unit in usage_units %}
-    const option{{ unit.id }} = document.createElement('option');
-    option{{ unit.id }}.value = {{ unit.id }};
-    option{{ unit.id }}.textContent = '{{ unit.name }}';
-    yieldUnitSelect.appendChild(option{{ unit.id }});
-    {% endfor %}
 }
 </script>
 {% endblock %}

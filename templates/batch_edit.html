@@ -187,27 +187,12 @@ async function loadRecipeUsageUnits() {
         
         // If no units found from recipe, show all units
         if (usageUnits.length === 0) {
-            showAllUnits(currentYieldUnitId);
+            yieldUnitSelect.innerHTML = '<option value="">No units available - add ingredients to recipe first</option>';
         }
     } catch (error) {
         console.error('Error loading usage units:', error);
-        showAllUnits(currentYieldUnitId);
+        yieldUnitSelect.innerHTML = '<option value="">Error loading units</option>';
     }
-}
-
-function showAllUnits(currentYieldUnitId) {
-    const yieldUnitSelect = document.getElementById('yield_unit_id');
-    yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-    
-    {% for unit in usage_units %}
-    const option{{ unit.id }} = document.createElement('option');
-    option{{ unit.id }}.value = {{ unit.id }};
-    option{{ unit.id }}.textContent = '{{ unit.name }}';
-    if ({{ unit.id }} === currentYieldUnitId) {
-        option{{ unit.id }}.selected = true;
-    }
-    yieldUnitSelect.appendChild(option{{ unit.id }});
-    {% endfor %}
 }
 
 // Load usage units on page load if recipe is already selected
