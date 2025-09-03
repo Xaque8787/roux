@@ -1947,12 +1947,45 @@ async def get_available_units_for_batch(batch_id: int, db: Session = Depends(get
     # Always include the batch yield unit if it exists
     if batch.yield_unit_id and not batch.is_variable:
         usage_units.add((batch.yield_unit.id, batch.yield_unit.name, 'batch'))
+@app.get("/api/recipes/{recipe_id}/usage_units")
+async def get_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db)):
+    """Get all usage units available from recipe ingredients"""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    # Get all unique usage units from recipe ingredients
+    usage_units = set()
+    for recipe_ingredient in recipe.ingredients:
+        for ingredient_usage_unit in recipe_ingredient.ingredient.usage_units:
     
     # Return in the expected format
     return [
         {"id": unit_id, "name": unit_name, "source": source, "priority": 1 if source == 'recipe' else 2}
         for unit_id, unit_name, source in sorted(usage_units, key=lambda x: (x[2] == 'batch', x[1]))
     ]
+
+@app.get("/api/recipes/{recipe_id}/usage_units")
+async def get_recipe_usage_units_api(recipe_id: int, db: Session = Depends(get_db)):
+    """Get all usage units available from ingredients in this recipe"""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    # Get all unique usage units from recipe ingredients
+    usage_units = set()
+    for recipe_ingredient in recipe.ingredients:
+        for ingredient_usage_unit in recipe_ingredient.ingredient.usage_units:
+            usage_units.add((
+                ingredient_usage_unit.usage_unit_id,
+                ingredient_usage_unit.usage_unit.name
+            ))
+    
+    # Convert to list of dicts
+    result = [{"id": unit_id, "name": unit_name} for unit_id, unit_name in usage_units]
+    result.sort(key=lambda x: x["name"])  # Sort alphabetically
+    
+    return result
 
 @app.get("/api/usage_units/all")
 async def get_all_usage_units(db: Session = Depends(get_db)):
