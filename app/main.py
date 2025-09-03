@@ -1854,6 +1854,24 @@ async def inventory_report(
         "below_par_items": below_par_items
     })
 
+@app.get("/api/inventory/batch/{batch_id}/available_units")
+async def get_available_units_for_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Get available units for inventory item par unit selection"""
+    from .conversion_utils import get_available_units_for_inventory_item
+    from .models import InventoryItem
+    
+    # Create a temporary inventory item with the batch to get available units
+    temp_item = InventoryItem(batch_id=batch_id)
+    units = get_available_units_for_inventory_item(db, temp_item)
+    
+    return units
+
+@app.get("/api/usage_units/all")
+async def get_all_usage_units(db: Session = Depends(get_db)):
+    """Get all usage units"""
+    units = db.query(UsageUnit).all()
+    return [{"id": unit.id, "name": unit.name, "source": "general", "priority": 3} for unit in units]
+
 # Utilities routes
 @app.get("/utilities", response_class=HTMLResponse)
 async def utilities_list(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
