@@ -1641,6 +1641,44 @@ async def update_task_made_amount(
     
     return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=303)
 
+@app.get("/api/inventory/conversion_preview")
+async def get_conversion_preview(
+    batch_id: int,
+    unit_id: int,
+    manual_factor: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get conversion preview for inventory item setup"""
+    try:
+        from .conversion_utils import preview_conversion
+        
+        batch = db.query(Batch).get(batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        
+        # Create a temporary inventory item for preview
+        temp_item = InventoryItem()
+        temp_item.par_unit_equals_unit_id = unit_id
+        temp_item.par_unit_equals_amount = 1.0
+        
+        # Apply manual conversion factor if provided
+        if manual_factor and manual_factor.strip():
+            try:
+                temp_item.manual_conversion_factor = float(manual_factor)
+            except ValueError:
+                temp_item.manual_conversion_factor = None
+        
+        preview = preview_conversion(db, batch, temp_item, 1.0)
+        return preview
+        
+    except Exception as e:
+        return {
+            "available": False,
+            "message": f"Error calculating conversion: {str(e)}",
+            "indicator_class": "text-danger"
+        }
+
 @app.get("/api/tasks/{task_id}/finish_requirements")
 async def get_task_finish_requirements(
     task_id: int,
