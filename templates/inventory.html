@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-boxes"></i> Inventory Management</h1>
+    </div>
+</div>
+
+<div class="row mt-3">
+    {% if current_user.role in ["admin", "manager"] %}
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Add Inventory Item</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/inventory/items/new">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Item Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <div class="input-group">
+                            <select class="form-select" id="category_id" name="category_id">
+                                <option value="">Select Category</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categoryModal">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="par_level" class="form-label">Par Level</label>
+                        <input type="number" class="form-control" id="par_level" name="par_level" step="0.01" min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="par_unit_equals_amount" class="form-label">Par Unit Equals</label>
+                        <div class="row">
+                            <div class="col-8">
+                                <input type="number" class="form-control" id="par_unit_equals_amount" name="par_unit_equals_amount" 
+                                       step="0.01" min="0.01" value="1.0" required>
+                            </div>
+                            <div class="col-4">
+                                <select class="form-select" id="par_unit_equals_unit_id" name="par_unit_equals_unit_id" required>
+                                    <option value="">Select Unit</option>
+                                    {% for unit in usage_units %}
+                                    <option value="{{ unit.id }}">{{ unit.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <small class="text-muted">1 par level count equals how many units?</small>
+                        <div id="conversionPreview" class="mt-2" style="display: none;">
+                            <small id="conversionText" class=""></small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
+                        <select class="form-select" id="batch_id" name="batch_id" onchange="loadUnitsForBatch()">
+                            <option value="">No batch linked</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">
+                                {{ batch.recipe.name }} 
+                                {% if batch.is_variable %}
+                                (Variable Yield)
+                                {% else %}
+                                ({{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }})
+                                {% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Link to a batch for automatic task generation</small>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add Item
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-calendar-plus"></i> Start New Inventory Day</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/inventory/day/new">
+                    <div class="mb-3">
+                        <label for="date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Employees Working Today</label>
+                        <div class="border p-2" style="max-height: 150px; overflow-y: auto;">
+                            {% for emp in employees %}
+                            {% if emp.is_active %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="employee_ids" value="{{ emp.id }}" id="emp_{{ emp.id }}">
+                                <label class="form-check-label" for="emp_{{ emp.id }}">
+                                    {{ emp.full_name or emp.username }}
+                                    <small class="text-muted">(${{ "%.2f"|format(emp.hourly_wage) }}/hr)</small>
+                                </label>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-calendar-plus"></i> Start New Day
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="{% if current_user.role in ['admin', 'manager'] %}col-md-8{% else %}col-12{% endif %}">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Inventory Items</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Par Level</th>
+                                <th>Par Unit</th>
+                                <th>Linked Batch</th>
+                                <th>Category</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_items %}
+                            <tr>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.par_level }}</td>
+                                <td>
+                                    {% if item.par_unit_equals_unit %}
+                                    {{ "%.1f"|format(item.par_level * item.par_unit_equals_amount) }} {{ item.par_unit_equals_unit.name }}
+                                    {% else %}
+                                    <span class="text-muted">No unit set</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.batch %}
+                                    <a href="/batches/{{ item.batch.id }}" class="text-decoration-none">
+                                        {{ item.batch.recipe.name }}
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">None</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.category.name if item.category else '-' }}</td>
+                                <td>
+                                    {% if current_user.role in ["admin", "manager"] %}
+                                    <a href="/inventory/items/{{ item.id }}/edit" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if current_user.role == "admin" %}
+                                    <a href="/inventory/items/{{ item.id }}/delete" class="btn btn-sm btn-danger" 
+                                       onclick="return confirm('Are you sure?')">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-calendar-alt"></i> Recent Inventory Days</h5>
+            </div>
+            <div class="card-body">
+                {% if inventory_days %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Tasks</th>
+                                <th>Completion</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for day in inventory_days %}
+                            {% set day_tasks = day.tasks|list %}
+                            {% set completed_tasks = day_tasks|selectattr('status', 'equalto', 'completed')|list %}
+                            <tr>
+                                <td>{{ day.date }}</td>
+                                <td>
+                                    {% if day.finalized %}
+                                        <span class="badge bg-success">Finalized</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">In Progress</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ day_tasks|length }}</td>
+                                <td>
+                                    {% if day_tasks|length > 0 %}
+                                    {{ "%.0f"|format((completed_tasks|length / day_tasks|length * 100)) }}%
+                                    {% else %}
+                                    0%
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="/inventory/day/{{ day.id }}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    {% if day.finalized %}
+                                    <a href="/inventory/reports/{{ day.id }}" class="btn btn-sm btn-secondary">
+                                        <i class="fas fa-chart-bar"></i> Report
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No inventory days created yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Category Modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/categories/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="categoryName" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="categoryName" name="name" required>
+                        <input type="hidden" name="type" value="inventory">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadUnitsForBatch() {
+    const batchSelect = document.getElementById('batch_id');
+    const unitSelect = document.getElementById('par_unit_equals_unit_id');
+    const batchId = batchSelect.value;
+    
+    // Store current selection
+    const currentValue = unitSelect.value;
+    
+    // Clear current options
+    unitSelect.innerHTML = '<option value="">Select Unit</option>';
+    
+    if (!batchId) {
+        // No batch selected - load all usage units
+        try {
+            const response = await fetch('/api/usage_units/all');
+            const units = await response.json();
+            
+            units.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit.id;
+                option.textContent = unit.name;
+                if (unit.id.toString() === currentValue) {
+                    option.selected = true;
+                }
+                unitSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading all units:', error);
+        }
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/inventory/batch/${batchId}/available_units`);
+        const units = await response.json();
+        
+        // Group units by priority
+        const recipeUnits = units.filter(u => u.source === 'recipe');
+        const batchUnits = units.filter(u => u.source === 'batch');
+        const generalUnits = units.filter(u => u.source === 'general');
+        
+        // Add recipe units first (recommended)
+        if (recipeUnits.length > 0) {
+            const recipeGroup = document.createElement('optgroup');
+            recipeGroup.label = 'Recipe Units (Recommended)';
+            recipeUnits.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit.id;
+                option.textContent = unit.name;
+                if (unit.id.toString() === currentValue) {
+                    option.selected = true;
+                }
+                recipeGroup.appendChild(option);
+            });
+            unitSelect.appendChild(recipeGroup);
+        }
+        
+        // Add batch units
+        if (batchUnits.length > 0) {
+            const batchGroup = document.createElement('optgroup');
+            batchGroup.label = 'Batch Units';
+            batchUnits.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit.id;
+                option.textContent = unit.name;
+                if (unit.id.toString() === currentValue) {
+                    option.selected = true;
+                }
+                batchGroup.appendChild(option);
+            });
+            unitSelect.appendChild(batchGroup);
+        }
+        
+        // Add general units
+        if (generalUnits.length > 0) {
+            const generalGroup = document.createElement('optgroup');
+            generalGroup.label = 'Other Units';
+            generalUnits.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit.id;
+                option.textContent = unit.name;
+                if (unit.id.toString() === currentValue) {
+                    option.selected = true;
+                }
+                generalGroup.appendChild(option);
+            });
+            unitSelect.appendChild(generalGroup);
+        }
+        
+        updateConversionPreview();
+    } catch (error) {
+        console.error('Error loading units for batch:', error);
+        unitSelect.innerHTML = '<option value="">Error loading units</option>';
+    }
+}
+
+async function updateConversionPreview() {
+    const batchSelect = document.getElementById('batch_id');
+    const unitSelect = document.getElementById('par_unit_equals_unit_id');
+    const previewDiv = document.getElementById('conversionPreview');
+    const previewText = document.getElementById('conversionText');
+    
+    const batchId = batchSelect.value;
+    const unitId = unitSelect.value;
+    
+    if (!batchId || !unitId) {
+        previewDiv.style.display = 'none';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/inventory/conversion_preview?batch_id=${batchId}&unit_id=${unitId}`);
+        const preview = await response.json();
+        
+        previewText.className = preview.indicator_class;
+        previewText.textContent = preview.available ? preview.preview_text : preview.message;
+        
+        if (preview.notes) {
+            previewText.textContent += ` (${preview.notes})`;
+        }
+        
+        previewDiv.style.display = 'block';
+    } catch (error) {
+        console.error('Error loading conversion preview:', error);
+        previewDiv.style.display = 'none';
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load units for currently selected batch (if any)
+    loadUnitsForBatch();
+    
+    // Update conversion preview when unit changes
+    document.getElementById('par_unit_equals_unit_id').addEventListener('change', updateConversionPreview);
+});
+</script>
+{% endblock %}
