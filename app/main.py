@@ -1066,9 +1066,7 @@ async def dish_detail(
         joinedload(DishBatchPortion.portion_unit)
     ).filter(DishBatchPortion.dish_id == dish_id).all()
     
-    expected_total_cost = sum(portion.expected_cost for portion in dish_batch_portions)
     expected_total_cost = sum(portion.expected_cost or 0 for portion in dish_batch_portions)
-    actual_total_cost = sum(portion.actual_cost or 0 for portion in dish_batch_portions)
     actual_total_cost = sum(portion.actual_cost or 0 for portion in dish_batch_portions)
     
     expected_profit = dish.sale_price - expected_total_cost
@@ -1732,6 +1730,9 @@ async def get_task_finish_requirements(
     else:
         # No batch linked - just complete the task
         pass
+    
+    requirements = {
+        "requires_manual_made": requires_manual_made,
         "scale_options": scale_options,
         "expected_yield": expected_yield,
         "batch_unit_name": batch_unit_name,
@@ -1781,17 +1782,7 @@ async def finish_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Handle different completion scenarios
-    if task.requires_manual_made:
-        # For variable yield tasks, we need manual input
     # Handle different completion types based on form data
-    made_amount = form.get("made_amount")
-    made_unit_id = form.get("made_unit_id")
-    selected_scale = form.get("selected_scale")
-            # Update made amount from form
-            task.made_amount = made_amount
-            if made_unit_id:
-                task.made_unit_id = made_unit_id
     if made_amount and made_unit_id:
         # Manual amount entry (for variable yield batches)
         task.made_amount = float(made_amount)
@@ -1799,7 +1790,6 @@ async def finish_task(
     elif selected_scale:
         # Scale selection (for scalable batches)
         task.selected_scale = selected_scale
-    # For fixed yield batches, no additional data needed
     elif task.batch and not task.batch.is_variable:
         # Fixed yield batch - use batch yield amount
         task.made_amount = task.batch.yield_amount
@@ -1811,9 +1801,6 @@ async def finish_task(
     # Update task
     task.status = "completed"
     task.finished_at = datetime.utcnow()
-    task.made_amount = made_amount
-    task.made_unit_id = made_unit_id
-    task.selected_scale = selected_scale
     
     # Calculate final inventory amount if linked to inventory item
     if task.inventory_item:
@@ -1823,54 +1810,7 @@ async def finish_task(
         ).first()
         
         if current_day_item:
-            # Calculate how much was made in par units
-            made_in_par_units = 0
-            
-            if task.made_amount and task.made_unit_id:
-                # Manual entry - convert to par units if possible
-                if task.made_unit_id == task.inventory_item.par_unit_equals_unit_id:
-                    made_in_par_units = task.made_amount / (task.inventory_item.par_unit_equals_amount or 1.0)
-                else:
-                    # TODO: Add unit conversion logic here
-                    made_in_par_units = task.made_amount / (task.inventory_item.par_unit_equals_amount or 1.0)
-            elif task.selected_scale and task.batch and task.batch.yield_amount:
-                # Scale selection - calculate from batch yield
-                scale_factors = {
-                    "double": 2.0, "full": 1.0, "half": 0.5, "quarter": 0.25,
-                    "eighth": 0.125, "sixteenth": 0.0625
-                }
-                scale_factor = scale_factors.get(task.selected_scale, 1.0)
-                batch_yield = task.batch.yield_amount * scale_factor
-                
-                # Convert batch yield to par units if possible
-                if task.batch.yield_unit_id == task.inventory_item.par_unit_equals_unit_id:
-                    made_in_par_units = batch_yield / (task.inventory_item.par_unit_equals_amount or 1.0)
-                else:
-                    # Use manual conversion factor if available
-                    if task.inventory_item.manual_conversion_factor:
-                        made_in_par_units = batch_yield * task.inventory_item.manual_conversion_factor
-                    else:
-                        # TODO: Add automatic conversion logic here
-                        made_in_par_units = batch_yield / (task.inventory_item.par_unit_equals_amount or 1.0)
-            elif task.batch and task.batch.yield_amount:
-                # Fixed yield batch - use full yield
-                batch_yield = task.batch.yield_amount
-                if task.batch.yield_unit_id == task.inventory_item.par_unit_equals_unit_id:
-                    made_in_par_units = batch_yield / (task.inventory_item.par_unit_equals_amount or 1.0)
-                else:
-                    if task.inventory_item.manual_conversion_factor:
-                        made_in_par_units = batch_yield * task.inventory_item.manual_conversion_factor
-                    else:
-                        made_in_par_units = batch_yield / (task.inventory_item.par_unit_equals_amount or 1.0)
-            
-            # Update inventory
-            task.final_inventory_amount = current_day_item.quantity + made_in_par_units
-            current_day_item.quantity = task.final_inventory_amount
-            InventoryDayItem.inventory_item_id == task.inventory_item.id
-        ).first()
-        
-        if day_item:
-            current_inventory = day_item.quantity
+            current_inventory = current_day_item.quantity
             made_in_par_units = task.get_made_amount_in_par_units()
             
             if made_in_par_units is not None:
