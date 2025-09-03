@@ -896,8 +896,8 @@ async def batch_detail(
     ).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-    cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
+    total_batch_cost = total_recipe_cost + (batch.estimated_labor_cost or 0)
+    cost_per_yield_unit = total_batch_cost / (batch.yield_amount or 1) if batch.yield_amount else 0
     
     return templates.TemplateResponse("batch_detail.html", {
         "request": request,
@@ -1068,7 +1068,7 @@ async def dish_detail(
     
     expected_total_cost = sum(portion.expected_cost for portion in dish_batch_portions)
     expected_total_cost = sum(portion.expected_cost or 0 for portion in dish_batch_portions)
-    actual_total_cost = sum(portion.actual_cost for portion in dish_batch_portions)
+    actual_total_cost = sum(portion.actual_cost or 0 for portion in dish_batch_portions)
     actual_total_cost = sum(portion.actual_cost or 0 for portion in dish_batch_portions)
     
     expected_profit = dish.sale_price - expected_total_cost

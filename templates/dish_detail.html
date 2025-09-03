@@ -44,7 +44,7 @@
                                 <td>{{ portion.portion_unit.name if portion.portion_unit else (portion.batch.yield_unit.name if portion.batch.yield_unit else '-') }}</td>
                                 <td>${{ "%.2f"|format(portion.expected_cost) }}</td>
                                 <td>${{ "%.2f"|format(portion.expected_cost or 0) }}</td>
-                                <td>${{ "%.2f"|format(portion.actual_cost) }}</td>
+                                <td>${{ "%.2f"|format(portion.actual_cost or 0) }}</td>
                                 <td>${{ "%.2f"|format(portion.actual_cost or 0) }}</td>
                             </tr>
                             {% endfor %}
@@ -227,31 +227,9 @@
                 {% for portion in dish_batch_portions %}
                 <div class="d-flex justify-content-between mb-1">
                     <small>{{ portion.batch.recipe.name }}</small>
-                    <small>
-                        Est: ${{ "%.2f"|format(portion.expected_cost) }}<br>
-                        Recent: ${{ "%.2f"|format(portion.actual_cost) }}<br>
-                        Week: ${{ "%.2f"|format(portion.actual_cost_week_avg) }}<br>
-                        Month: ${{ "%.2f"|format(portion.actual_cost_month_avg) }}
-                    </small>
+                    <small>${{ "%.2f"|format(portion.expected_cost or 0) }} ({{ "%.1f"|format(((portion.expected_cost or 0) / expected_total_cost * 100) if expected_total_cost > 0 else 0) }}%)</small>
                 </div>
                 {% endfor %}
-                <hr>
-                <div class="d-flex justify-content-between">
-                    <small><strong>Recent vs Expected</strong></small>
-                    <small>
-                        <strong class="{% if actual_total_cost > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
-                            {% if actual_total_cost > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost - expected_total_cost) }}
-                        </strong>
-                    </small>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <small><strong>Week vs Expected</strong></small>
-                    <small>
-                        <strong class="{% if actual_total_cost_week > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
-                            {% if actual_total_cost_week > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost_week - expected_total_cost) }}
-                        </strong>
-                    </small>
-                </div>
             </div>
         </div>
         {% endif %}
