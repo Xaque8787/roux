@@ -1985,6 +1985,59 @@ async def delete_utility(
     return RedirectResponse(url="/utilities", status_code=302)
 
 # API endpoints for AJAX calls
+@app.get("/api/batches/{batch_id}/labor_stats")
+async def get_batch_labor_stats(batch_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get labor statistics for a batch"""
+    from datetime import datetime, timedelta
+    
+    # Get all completed tasks for this batch
+    completed_tasks = db.query(Task).filter(
+        Task.batch_id == batch_id,
+        Task.status == "completed",
+        Task.finished_at.isnot(None)
+    ).all()
+    
+    if not completed_tasks:
+        return {
+            "task_count": 0,
+            "most_recent_cost": 0,
+            "most_recent_date": None,
+            "average_week": 0,
+            "average_month": 0,
+            "average_all_time": 0,
+            "week_task_count": 0,
+            "month_task_count": 0
+        }
+    
+    # Calculate statistics
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    # Most recent task
+    most_recent = max(completed_tasks, key=lambda t: t.finished_at)
+    
+    # Filter by time periods
+    week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
+    month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
+    
+    # Calculate averages
+    def avg_cost(tasks):
+        if not tasks:
+            return 0
+        return sum(t.labor_cost for t in tasks) / len(tasks)
+    
+    return {
+        "task_count": len(completed_tasks),
+        "most_recent_cost": most_recent.labor_cost,
+        "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
+        "average_week": avg_cost(week_tasks),
+        "average_month": avg_cost(month_tasks),
+        "average_all_time": avg_cost(completed_tasks),
+        "week_task_count": len(week_tasks),
+        "month_task_count": len(month_tasks)
+    }
+
 @app.get("/api/ingredients/all")
 async def api_ingredients_all(db: Session = Depends(get_db)):
     ingredients = db.query(Ingredient).options(
