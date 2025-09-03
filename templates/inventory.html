@@ -264,8 +264,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load units when batch selection changes
     document.getElementById('batch_id').addEventListener('change', loadUnitsForBatch);
     
-    // Load units on page load if batch is already selected
-    loadUnitsForBatch();
+    // Load all units on page load (no batch selected initially)
+    loadAllUsageUnits();
     
     // Update conversion preview when values change
     document.getElementById('batch_id').addEventListener('change', updateConversionPreview);
@@ -283,19 +283,7 @@ async function loadUnitsForBatch() {
     
     if (!batchId) {
         // No batch selected - load all usage units
-        try {
-            const response = await fetch('/api/usage_units/all');
-            const units = await response.json();
-            
-            units.forEach(unit => {
-                const option = document.createElement('option');
-                option.value = unit.id;
-                option.textContent = unit.name;
-                unitSelect.appendChild(option);
-            });
-        } catch (error) {
-            console.error('Error loading all units:', error);
-        }
+        loadAllUsageUnits();
         return;
     }
     
@@ -350,6 +338,28 @@ async function loadUnitsForBatch() {
         updateConversionPreview();
     } catch (error) {
         console.error('Error loading units for batch:', error);
+    }
+}
+
+async function loadAllUsageUnits() {
+    const unitSelect = document.getElementById('par_unit_equals_unit_id');
+    
+    try {
+        const response = await fetch('/api/usage_units/all');
+        const units = await response.json();
+        
+        // Clear current options
+        unitSelect.innerHTML = '<option value="">Select Unit</option>';
+        
+        units.forEach(unit => {
+            const option = document.createElement('option');
+            option.value = unit.id;
+            option.textContent = unit.name;
+            unitSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading all units:', error);
+        unitSelect.innerHTML = '<option value="">Error loading units</option>';
     }
 }
 
