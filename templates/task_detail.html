@@ -172,55 +172,14 @@
                         </button>
                     </form>
                     {% elif task.status == "in_progress" %}
-                    {% if task.requires_manual_made %}
-                    <div class="alert alert-warning">
-                        <small><i class="fas fa-exclamation-triangle"></i> Manual "Made" amount required before completion</small>
-                    </div>
-                    {% endif %}
                     <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause">
                         <button type="submit" class="btn btn-warning w-100">
                             <i class="fas fa-pause"></i> Pause Task
                         </button>
                     </form>
-                    {% if task.can_be_completed %}
                     <button type="button" class="btn btn-success w-100" onclick="showFinishTaskModal({{ task.id }})">
                         <i class="fas fa-check"></i> Finish Task
                     </button>
-                    {% else %}
-                    <button type="button" class="btn btn-success w-100" onclick="showFinishTaskModal({{ task.id }})" disabled>
-                        <i class="fas fa-check"></i> Finish Task
-                    </button>
-                    {% endif %}
-                    
-                    {% if task.requires_manual_made %}
-                    <div class="alert alert-warning mt-2">
-                        <small><i class="fas fa-exclamation-triangle"></i> Manual "Made" amount required before completion</small>
-                    </div>
-                    
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/update_made" class="mt-2">
-                        <div class="mb-2">
-                            <label class="form-label">Amount Made</label>
-                            <div class="row">
-                                <div class="col-8">
-                                    <input type="number" class="form-control form-control-sm" name="made_amount" 
-                                           step="0.01" min="0" value="{{ task.made_amount or '' }}" required>
-                                </div>
-                                <div class="col-4">
-                                    {% if task.inventory_item and task.inventory_item.par_unit_equals_unit %}
-                                    <input type="text" class="form-control form-control-sm" 
-                                           value="{{ task.inventory_item.par_unit_equals_unit.name }}" readonly>
-                                    <input type="hidden" name="made_unit_id" value="{{ task.inventory_item.par_unit_equals_unit_id }}">
-                                    {% else %}
-                                    <input type="text" class="form-control form-control-sm" value="units" readonly>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-sm btn-info w-100">
-                            <i class="fas fa-save"></i> Update Made Amount
-                        </button>
-                    </form>
-                    {% endif %}
                     {% elif task.status == "paused" %}
                     <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume">
                         <button type="submit" class="btn btn-info w-100">

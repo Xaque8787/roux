@@ -1740,7 +1740,7 @@ async def finish_task(
         
         if day_item:
             current_inventory = day_item.quantity
-            made_in_par_units = task.get_made_amount_in_par_units(db)
+            made_in_par_units = task.get_made_amount_in_par_units()
             
             if made_in_par_units is not None:
                 task.final_inventory_amount = current_inventory + made_in_par_units
