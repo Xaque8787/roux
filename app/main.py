@@ -1067,7 +1067,9 @@ async def dish_detail(
     ).filter(DishBatchPortion.dish_id == dish_id).all()
     
     expected_total_cost = sum(portion.expected_cost for portion in dish_batch_portions)
+    expected_total_cost = sum(portion.expected_cost or 0 for portion in dish_batch_portions)
     actual_total_cost = sum(portion.actual_cost for portion in dish_batch_portions)
+    actual_total_cost = sum(portion.actual_cost or 0 for portion in dish_batch_portions)
     
     expected_profit = dish.sale_price - expected_total_cost
     expected_profit_margin = (expected_profit / dish.sale_price * 100) if dish.sale_price > 0 else 0
