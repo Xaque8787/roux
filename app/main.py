@@ -2037,3 +2037,17 @@ async def api_inventory_conversion_preview(
         return {"error": "No batch associated with this inventory item"}
     
     return preview_conversion(db, item.batch, item, amount)
+
+# API endpoint for vendor unit conversions
+@app.get("/api/vendor_units/{vendor_unit_id}/conversions")
+async def get_vendor_unit_conversions(vendor_unit_id: int, db: Session = Depends(get_db)):
+    """Get conversion factors for a vendor unit to usage units"""
+    conversions = db.query(VendorUnitConversion).filter(
+        VendorUnitConversion.vendor_unit_id == vendor_unit_id
+    ).all()
+    
+    result = {}
+    for conv in conversions:
+        result[conv.usage_unit_id] = conv.conversion_factor
+    
+    return result
