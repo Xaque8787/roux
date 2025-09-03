@@ -1958,11 +1958,11 @@ async def get_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db)):
     usage_units = set()
     for recipe_ingredient in recipe.ingredients:
         for ingredient_usage_unit in recipe_ingredient.ingredient.usage_units:
-    
+            usage_units.add(ingredient_usage_unit.usage_unit)
     # Return in the expected format
     return [
-        {"id": unit_id, "name": unit_name, "source": source, "priority": 1 if source == 'recipe' else 2}
-        for unit_id, unit_name, source in sorted(usage_units, key=lambda x: (x[2] == 'batch', x[1]))
+        {"id": unit.id, "name": unit.name}
+        for unit in sorted(usage_units, key=lambda x: x.name)
     ]
 
 @app.get("/api/recipes/{recipe_id}/usage_units")
