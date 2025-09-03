@@ -1639,6 +1639,48 @@ async def update_task_made_amount(
     
     return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=303)
 
+@app.get("/api/tasks/{task_id}/finish_requirements")
+async def get_task_finish_requirements(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    requirements = {
+        "requires_manual_made": task.requires_manual_made,
+        "scale_options": [],
+        "expected_yield": None,
+        "batch_unit_name": "",
+        "made_unit_name": "",
+        "made_unit_id": None,
+        "conversion_preview": None
+    }
+    
+    if task.requires_manual_made and task.inventory_item and task.inventory_item.par_unit_equals_unit:
+        requirements["made_unit_name"] = task.inventory_item.par_unit_equals_unit.name
+        requirements["made_unit_id"] = task.inventory_item.par_unit_equals_unit_id
+    elif task.batch and task.batch.can_be_scaled and not task.batch.is_variable:
+        # Get scale options for scalable batches
+        from .conversion_utils import get_scale_options_for_batch
+        requirements["scale_options"] = get_scale_options_for_batch(task.batch)
+        requirements["batch_unit_name"] = task.batch.yield_unit.name if task.batch.yield_unit else "units"
+    elif task.batch and not task.batch.is_variable:
+        # Fixed yield batch
+        requirements["expected_yield"] = task.batch.yield_amount
+        requirements["batch_unit_name"] = task.batch.yield_unit.name if task.batch.yield_unit else "units"
+        
+        # Add conversion preview if inventory item is linked
+        if task.inventory_item:
+            from .conversion_utils import preview_conversion
+            preview = preview_conversion(db, task.batch, task.inventory_item, task.batch.yield_amount)
+            if preview["available"]:
+                requirements["conversion_preview"] = preview["preview_text"]
+    
+    return requirements
+
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/finish")
 async def finish_task(
     day_id: int,
@@ -1658,9 +1700,26 @@ async def finish_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Validation
-    if task.requires_manual_made and not made_amount:
-        raise HTTPException(status_code=400, detail="Manual made amount required")
+    # Handle different completion scenarios
+    if task.requires_manual_made:
+        # For variable yield tasks, we need manual input
+        if made_amount is None:
+            if not task.made_amount:
+                raise HTTPException(status_code=400, detail="Manual made amount required")
+        else:
+            # Update made amount from form
+            task.made_amount = made_amount
+            if made_unit_id:
+                task.made_unit_id = made_unit_id
+    elif task.batch and task.batch.can_be_scaled and not task.batch.is_variable:
+        # For scalable batches, we need scale selection
+        if not selected_scale:
+            raise HTTPException(status_code=400, detail="Batch scale selection required")
+        task.selected_scale = selected_scale
+    elif task.batch and not task.batch.is_variable:
+        # Fixed yield batch - use batch yield amount
+        task.made_amount = task.batch.yield_amount
+        task.made_unit_id = task.batch.yield_unit_id
     
     if task.batch and task.batch.can_be_scaled and not selected_scale and not made_amount:
         raise HTTPException(status_code=400, detail="Scale selection required for scalable batch")
