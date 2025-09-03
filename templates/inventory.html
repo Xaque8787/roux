@@ -283,6 +283,9 @@ async function loadUnitsForBatch() {
         // No batch selected - load all usage units
         try {
             const response = await fetch('/api/usage_units/all');
+            if (!response.ok) {
+                throw new Error('Failed to load units');
+            }
             const units = await response.json();
             
             units.forEach(unit => {
@@ -296,12 +299,16 @@ async function loadUnitsForBatch() {
             });
         } catch (error) {
             console.error('Error loading all units:', error);
+            unitSelect.innerHTML = '<option value="">Error loading units</option>';
         }
         return;
     }
     
     try {
         const response = await fetch(`/api/inventory/batch/${batchId}/available_units`);
+        if (!response.ok) {
+            throw new Error('Failed to load batch units');
+        }
         const units = await response.json();
         
         // Group units by priority
@@ -380,6 +387,9 @@ async function updateConversionPreview() {
     
     try {
         const response = await fetch(`/api/inventory/conversion_preview?batch_id=${batchId}&unit_id=${unitId}`);
+        if (!response.ok) {
+            throw new Error('Failed to load conversion preview');
+        }
         const preview = await response.json();
         
         previewText.className = preview.indicator_class;
