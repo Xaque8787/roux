@@ -1,356 +1,581 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Date
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, date
+from .database import Base
 
-Base = declarative_base()
+class VendorUnit(Base):
+    __tablename__ = "vendor_units"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # lb, oz, gal, qt, etc.
+    description = Column(String)  # Optional description
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class VendorUnitConversion(Base):
+    __tablename__ = "vendor_unit_conversions"
+    id = Column(Integer, primary_key=True)
+    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
+    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    conversion_factor = Column(Float)  # how many usage units per vendor unit
+    
+    vendor_unit = relationship("VendorUnit")
+    usage_unit = relationship("UsageUnit")
 
 class User(Base):
     __tablename__ = "users"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    full_name = Column(String)
-    hashed_password = Column(String)
-    role = Column(String, default="user")  # admin, manager, user
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=False)
     hourly_wage = Column(Float, default=15.0)
-    work_schedule = Column(String)  # comma-separated days
+    work_schedule = Column(String)  # JSON string of days: "mon,tue,wed,thu,fri"
+    role = Column(String, default="user")  # admin, manager, user
+    is_admin = Column(Boolean, default=False)
+    is_user = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+class Vendor(Base):
+    __tablename__ = "vendors"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    contact_info = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Category(Base):
     __tablename__ = "categories"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    type = Column(String)  # ingredient, recipe, dish, inventory
-    
-    # Add unique constraint on name + type combination
-    __table_args__ = (
-        {'sqlite_autoincrement': True},
-    )
-
-class Vendor(Base):
-    __tablename__ = "vendors"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    contact_info = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-class VendorUnit(Base):
-    __tablename__ = "vendor_units"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    description = Column(String)
-    
-    # Relationships
-    conversions = relationship("VendorUnitConversion", back_populates="vendor_unit")
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True)
+    type = Column(String)  # 'ingredient', 'recipe', 'batch', 'dish', 'inventory'
 
 class UsageUnit(Base):
     __tablename__ = "usage_units"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    description = Column(String)
-    
-    # Relationships
-    vendor_conversions = relationship("VendorUnitConversion", back_populates="usage_unit")
-
-class VendorUnitConversion(Base):
-    __tablename__ = "vendor_unit_conversions"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
-    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    conversion_factor = Column(Float)  # How many usage units per vendor unit
-    
-    # Relationships
-    vendor_unit = relationship("VendorUnit", back_populates="conversions")
-    usage_unit = relationship("UsageUnit", back_populates="vendor_conversions")
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # lb, oz, tbsp, cup, can, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Ingredient(Base):
     __tablename__ = "ingredients"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
     vendor_id = Column(Integer, ForeignKey("vendors.id"))
-    
-    # Purchase level information
-    purchase_type = Column(String, default="single")  # single, case
-    purchase_unit_name = Column(String)  # Case, Bag, Sack, etc.
     vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
-    purchase_weight_volume = Column(Float)
+    
+    # Purchase Level
+    purchase_type = Column(String)  # 'case' or 'single'
+    purchase_unit_name = Column(String)  # Case, Bag, Sack, Box (container type)
+    purchase_weight_volume = Column(Float)  # Total weight/volume in vendor units
     purchase_total_cost = Column(Float)
     breakable_case = Column(Boolean, default=False)
     
-    # Case-specific fields
+    # Item Level (for cases)
     items_per_case = Column(Integer)
-    item_weight_volume = Column(Float)  # Calculated: purchase_weight_volume / items_per_case
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
     category = relationship("Category")
     vendor = relationship("Vendor")
     vendor_unit = relationship("VendorUnit")
     usage_units = relationship("IngredientUsageUnit", back_populates="ingredient")
+    
+    @property
+    def item_cost(self):
+        if self.purchase_type == 'case' and self.items_per_case:
+            return self.purchase_total_cost / self.items_per_case
+        return self.purchase_total_cost
+    
+    @property
+    def item_weight_volume(self):
+        """Weight/volume per individual item"""
+        if self.purchase_type == 'case' and self.items_per_case and self.purchase_weight_volume:
+            return self.purchase_weight_volume / self.items_per_case
+        return self.purchase_weight_volume
+    
+    @property
+    def item_description(self):
+        """Generate description for individual items in cases"""
+        if self.purchase_type == 'case' and self.vendor_unit and self.item_weight_volume:
+            return f"{self.item_weight_volume} {self.vendor_unit.name}"
+        return ""
 
 class IngredientUsageUnit(Base):
     __tablename__ = "ingredient_usage_units"
-    
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
     usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    conversion_factor = Column(Float)  # How many usage units per purchase unit
-    price_per_usage_unit = Column(Float)  # Calculated from ingredient cost and conversion
+    conversion_factor = Column(Float)  # how many usage units per item/case
     
-    # Relationships
     ingredient = relationship("Ingredient", back_populates="usage_units")
     usage_unit = relationship("UsageUnit")
 
+    @property
+    def price_per_usage_unit(self):
+        # Get the base cost per vendor unit
+        if self.ingredient.purchase_type == 'case':
+            # For cases, use individual item cost and weight
+            base_cost = self.ingredient.item_cost
+            base_weight_volume = self.ingredient.item_weight_volume
+        else:
+            # For single items, use total cost and weight
+            base_cost = self.ingredient.purchase_total_cost
+            base_weight_volume = self.ingredient.purchase_weight_volume
+        
+        if not base_weight_volume or not self.conversion_factor:
+            return 0
+            
+        # Calculate cost per vendor unit, then convert to usage unit
+        cost_per_vendor_unit = base_cost / base_weight_volume
+        return cost_per_vendor_unit / self.conversion_factor
+
 class Recipe(Base):
     __tablename__ = "recipes"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    instructions = Column(Text)
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
+    category = relationship("Category")
+    instructions = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Relationships
-    category = relationship("Category")
+    # Add relationship to recipe ingredients
     ingredients = relationship("RecipeIngredient", back_populates="recipe")
 
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
-    
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
     ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
     usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
     quantity = Column(Float)
-    cost = Column(Float)  # Calculated from quantity * price_per_usage_unit
     
-    # Relationships
     recipe = relationship("Recipe", back_populates="ingredients")
     ingredient = relationship("Ingredient")
     usage_unit = relationship("UsageUnit")
+    
+    @property
+    def cost(self):
+        """Calculate the cost of this recipe ingredient"""
+        # Find the ingredient usage unit for this combination
+        ingredient_usage = None
+        for iu in self.ingredient.usage_units:
+            if iu.usage_unit_id == self.usage_unit_id:
+                ingredient_usage = iu
+                break
+        
+        if ingredient_usage:
+            return self.quantity * ingredient_usage.price_per_usage_unit
+        return 0
 
 class Batch(Base):
     __tablename__ = "batches"
-    
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
-    
-    # Yield information - nullable for variable yields
-    is_variable = Column(Boolean, default=False)
-    yield_amount = Column(Float)  # Nullable for variable yields
-    yield_unit_id = Column(Integer, ForeignKey("usage_units.id"))  # Nullable for variable yields
-    
-    # Labor information
-    estimated_labor_minutes = Column(Integer)
-    hourly_labor_rate = Column(Float, default=16.75)
-    
-    # Scaling options
+    yield_amount = Column(Float)
+    yield_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    estimated_labor_minutes = Column(Integer)  # Average estimated time
+    hourly_labor_rate = Column(Float, default=16.75)  # Configurable labor rate
     can_be_scaled = Column(Boolean, default=False)
     scale_double = Column(Boolean, default=False)
     scale_half = Column(Boolean, default=False)
     scale_quarter = Column(Boolean, default=False)
     scale_eighth = Column(Boolean, default=False)
     scale_sixteenth = Column(Boolean, default=False)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Relationships
     recipe = relationship("Recipe")
     yield_unit = relationship("UsageUnit")
     
     @property
     def estimated_labor_cost(self):
+        """Calculate estimated labor cost based on average time and hourly rate"""
         return (self.estimated_labor_minutes / 60) * self.hourly_labor_rate
+    
+    @property
+    def actual_labor_cost(self):
+        """Calculate actual labor cost from most recent completed task"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            # Get most recent completed task for this batch
+            from .models import Task
+            recent_task = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None)
+            ).order_by(Task.finished_at.desc()).first()
+            
+            if recent_task:
+                return recent_task.labor_cost
+            return self.estimated_labor_cost  # Fallback to estimated
+        finally:
+            db.close()
+    
+    @property
+    def average_labor_cost_week(self):
+        """Average labor cost from past week's completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        from datetime import datetime, timedelta
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            week_ago = datetime.utcnow() - timedelta(days=7)
+            
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None),
+                Task.finished_at >= week_ago
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
+    
+    @property
+    def average_labor_cost_month(self):
+        """Average labor cost from past month's completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        from datetime import datetime, timedelta
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            month_ago = datetime.utcnow() - timedelta(days=30)
+            
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None),
+                Task.finished_at >= month_ago
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
+
+    @property
+    def average_labor_cost_all_time(self):
+        """Average labor cost from all completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None)
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
 
 class Dish(Base):
     __tablename__ = "dishes"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
-    sale_price = Column(Float)
-    description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
     category = relationship("Category")
-    batch_portions = relationship("DishBatchPortion", back_populates="dish")
+    sale_price = Column(Float, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class DishBatchPortion(Base):
     __tablename__ = "dish_batch_portions"
-    
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     dish_id = Column(Integer, ForeignKey("dishes.id"))
     batch_id = Column(Integer, ForeignKey("batches.id"))
-    portion_unit_id = Column(Integer, ForeignKey("usage_units.id"))
     portion_size = Column(Float)
-    expected_cost = Column(Float)  # Calculated cost
-    actual_cost = Column(Float)  # Based on actual labor data
+    portion_unit_id = Column(Integer, ForeignKey("usage_units.id"), nullable=True)
     
-    # Relationships
-    dish = relationship("Dish", back_populates="batch_portions")
     batch = relationship("Batch")
     portion_unit = relationship("UsageUnit")
+    
+    @property
+    def cost(self):
+        """Calculate the cost of this dish batch portion"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        # Calculate ingredient cost per unit
+        recipe_ingredients = []
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            # If portion unit is same as yield unit, simple calculation
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                # For different units, assume 1:1 conversion for now
+                # In full implementation, you'd need proper unit conversion
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def expected_cost(self):
+        """Calculate expected cost using estimated labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        # Calculate ingredient cost per unit with ESTIMATED labor
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.estimated_labor_cost
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            # If portion unit is same as yield unit, simple calculation
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                # For different units, assume 1:1 conversion for now
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def actual_cost(self):
+        """Calculate actual cost using most recent actual labor from completed tasks"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        # This is the same as the cost property - uses most recent actual labor
+        return self.cost
+    
+    @property
+    def actual_cost_week_avg(self):
+        """Calculate actual cost using week average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_week
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def actual_cost_month_avg(self):
+        """Calculate actual cost using month average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_month
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    @property
+    def actual_cost_all_time_avg(self):
+        """Calculate actual cost using all-time average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+
+    
+    @property
+    def actual_cost_all_time_avg(self):
+        """Calculate actual cost using all-time average labor"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
-    par_level = Column(Float)
-    
-    # Par unit equals system
-    par_unit_equals_amount = Column(Float, default=1.0)
-    par_unit_equals_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    
-    # Conversion system
-    manual_conversion_factor = Column(Float)  # Override automatic conversion
-    conversion_notes = Column(String)  # User notes about conversion
-    
-    # Batch linking
-    batch_id = Column(Integer, ForeignKey("batches.id"))
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Link to batch
     category = relationship("Category")
     batch = relationship("Batch")
-    par_unit_equals_unit = relationship("UsageUnit")
+    par_level = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class InventoryDay(Base):
     __tablename__ = "inventory_days"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    date = Column(Date, unique=True, index=True)
-    employees_working = Column(String)  # comma-separated employee IDs
-    global_notes = Column(Text)
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, default=date.today)
     finalized = Column(Boolean, default=False)
+    employees_working = Column(String)
+    global_notes = Column(Text)  # Global notes for the day
     created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    items = relationship("InventoryDayItem", back_populates="day")
-    tasks = relationship("Task", back_populates="day")
 
 class InventoryDayItem(Base):
     __tablename__ = "inventory_day_items"
-    
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     day_id = Column(Integer, ForeignKey("inventory_days.id"))
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"))
-    quantity = Column(Float)
-    override_create_task = Column(Boolean, default=False)
-    override_no_task = Column(Boolean, default=False)
+    quantity = Column(Float, default=0)
+    override_create_task = Column(Boolean, default=False)  # Override to create task for above par items
+    override_no_task = Column(Boolean, default=False)  # Override to NOT create task for below par items
     
-    # Relationships
-    day = relationship("InventoryDay", back_populates="items")
     inventory_item = relationship("InventoryItem")
+    day = relationship("InventoryDay")
 
 class Task(Base):
     __tablename__ = "tasks"
-    
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     day_id = Column(Integer, ForeignKey("inventory_days.id"))
     assigned_to_id = Column(Integer, ForeignKey("users.id"))
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Inherited from inventory item
     description = Column(String)
-    status = Column(String, default="not_started")  # not_started, in_progress, paused, completed
-    auto_generated = Column(Boolean, default=False)
-    
-    # Batch and inventory linking
-    batch_id = Column(Integer, ForeignKey("batches.id"))
-    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"))
-    
-    # Task completion data
-    requires_manual_made = Column(Boolean, default=False)
-    made_amount = Column(Float)  # Manual input for variable yields
-    made_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    selected_scale = Column(String)  # For scalable batches: "double", "half", etc.
-    final_inventory_amount = Column(Float)  # Calculated final inventory
-    
-    # Time tracking
-    started_at = Column(DateTime)
-    finished_at = Column(DateTime)
-    paused_at = Column(DateTime)
-    is_paused = Column(Boolean, default=False)
-    total_pause_time = Column(Integer, default=0)  # seconds
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    paused_at = Column(DateTime, nullable=True)
+    total_pause_time = Column(Integer, default=0)  # in seconds
     notes = Column(Text)
+    auto_generated = Column(Boolean, default=False)  # True if generated from below-par items
+    is_paused = Column(Boolean, default=False)
     
-    # Relationships
-    day = relationship("InventoryDay", back_populates="tasks")
     assigned_to = relationship("User")
-    batch = relationship("Batch")
+    day = relationship("InventoryDay")
     inventory_item = relationship("InventoryItem")
-    made_unit = relationship("UsageUnit")
+    batch = relationship("Batch")
     
     @property
     def total_time_minutes(self):
-        if not self.started_at:
+        if not self.started_at or not self.finished_at:
+            if self.started_at and not self.finished_at:
+                # Task is in progress
+                current_time = datetime.utcnow()
+                if self.is_paused and self.paused_at:
+                    total_seconds = (self.paused_at - self.started_at).total_seconds()
+                else:
+                    total_seconds = (current_time - self.started_at).total_seconds()
+                return int(total_seconds / 60) - int(self.total_pause_time / 60)
             return 0
-        
-        end_time = self.finished_at or datetime.utcnow()
-        total_seconds = (end_time - self.started_at).total_seconds()
-        total_seconds -= self.total_pause_time
-        return max(0, int(total_seconds / 60))
+        total_seconds = (self.finished_at - self.started_at).total_seconds()
+        return int(total_seconds / 60) - int(self.total_pause_time / 60)
     
     @property
     def labor_cost(self):
-        if not self.assigned_to or not self.started_at:
-            return 0.0
-        return (self.total_time_minutes / 60) * self.assigned_to.hourly_wage
+        """Calculate labor cost for this task"""
+        if self.assigned_to and self.total_time_minutes > 0:
+            return (self.total_time_minutes / 60) * self.assigned_to.hourly_wage
+        return 0
     
     @property
-    def can_be_completed(self):
-        """Check if task can be completed based on requirements"""
-        if self.status == "completed":
-            return False
-        if self.requires_manual_made and not self.made_amount:
-            return False
-        return True
-    
-    def get_made_amount_in_par_units(self):
-        """Get the made amount converted to par units"""
-        if not self.inventory_item or not self.inventory_item.par_unit_equals_unit_id:
-            return None
-        
-        if self.made_amount and self.made_unit_id:
-            # Manual made amount - convert if needed
-            if self.made_unit_id == self.inventory_item.par_unit_equals_unit_id:
-                return self.made_amount
-            # TODO: Add conversion logic here
-            return self.made_amount
-        
-        if self.selected_scale and self.batch and not self.batch.is_variable:
-            # Scaled batch - calculate from batch yield
-            scale_factors = {
-                "double": 2.0,
-                "full": 1.0,
-                "half": 0.5,
-                "quarter": 0.25,
-                "eighth": 0.125,
-                "sixteenth": 0.0625
-            }
-            scale_factor = scale_factors.get(self.selected_scale, 1.0)
-            batch_yield = self.batch.yield_amount * scale_factor
-            
-            # TODO: Convert batch yield to par units using conversion system
-            return batch_yield
-        
-        return None
+    def status(self):
+        if not self.started_at:
+            return "not_started"
+        elif self.finished_at:
+            return "completed"
+        elif self.is_paused:
+            return "paused"
+        else:
+            return "in_progress"
 
 class UtilityCost(Base):
     __tablename__ = "utility_costs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    monthly_cost = Column(Float)
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    monthly_cost = Column(Float, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow)

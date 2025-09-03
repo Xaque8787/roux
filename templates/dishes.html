@@ -250,24 +250,18 @@ function selectBatch(batch) {
 }
 
 function showPortionSizeSelection(batch) {
-    // Load available portion units for this batch - only from recipe ingredients
+    // First load available portion units for this batch
     console.log('Loading portion units for batch:', batch.id);
-    fetch(`/api/batches/${batch.id}/available_units`)
+    fetch(`/api/batches/${batch.id}/portion_units`)
         .then(response => response.json())
         .then(units => {
             console.log('Loaded units:', units);
-            // Convert to expected format
-            const unitOptions = units.map(u => ({id: u.id, name: u.name}));
-            showPortionModal(batch, unitOptions);
+            showPortionModal(batch, units);
         })
         .catch(error => {
             console.error('Error loading portion units:', error);
-            // Fallback to just yield unit if available
-            if (batch.yield_unit_id && batch.yield_unit) {
-                showPortionModal(batch, [{id: batch.yield_unit_id, name: batch.yield_unit}]);
-            } else {
-                alert('No units available for this batch. Please ensure the recipe has ingredients with usage units.');
-            }
+            // Fallback to just yield unit
+            showPortionModal(batch, [{id: batch.yield_unit_id, name: batch.yield_unit}]);
         });
 }
 

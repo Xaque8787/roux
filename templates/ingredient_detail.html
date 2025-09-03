@@ -21,34 +21,54 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
+                        <h6>Basic Information</h6>
                         <p><strong>Name:</strong> {{ ingredient.name }}</p>
                         <p><strong>Category:</strong> {{ ingredient.category.name if ingredient.category else 'None' }}</p>
                         <p><strong>Vendor:</strong> {{ ingredient.vendor.name if ingredient.vendor else 'None' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Purchase Information</h6>
                         <p><strong>Purchase Type:</strong> 
                             <span class="badge {% if ingredient.purchase_type == 'case' %}bg-info{% else %}bg-secondary{% endif %}">
                                 {{ ingredient.purchase_type.title() }}
                             </span>
                         </p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Container:</strong> {{ ingredient.purchase_unit_name }}</p>
+                        <p><strong>Purchase Unit:</strong> {{ ingredient.purchase_unit_name }}</p>
+                        <p><strong>Total Cost:</strong> ${{ "%.2f"|format(ingredient.purchase_total_cost) }}</p>
+                        {% if ingredient.vendor_unit %}
+                        <p><strong>Vendor Unit:</strong> {{ ingredient.vendor_unit.name }} ({{ ingredient.vendor_unit.description }})</p>
+                        {% endif %}
+                        {% if ingredient.purchase_weight_volume %}
                         <p><strong>Total Weight/Volume:</strong> {{ ingredient.purchase_weight_volume }} {{ ingredient.vendor_unit.name if ingredient.vendor_unit else '' }}</p>
-                        <p><strong>Total Cost:</strong> <span class="text-success">${{ "%.2f"|format(ingredient.purchase_total_cost) }}</span></p>
-                        {% if ingredient.purchase_type == 'case' and ingredient.items_per_case %}
-                        <p><strong>Items per Case:</strong> {{ ingredient.items_per_case }}</p>
-                        <p><strong>Weight per Item:</strong> {{ "%.3f"|format(ingredient.item_weight_volume) }} {{ ingredient.vendor_unit.name if ingredient.vendor_unit else '' }}</p>
+                        {% endif %}
+                        {% if ingredient.breakable_case %}
+                        <p><span class="badge bg-success">Breakable Case</span></p>
                         {% endif %}
                     </div>
                 </div>
+                
+                {% if ingredient.purchase_type == 'case' and ingredient.items_per_case %}
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Item Information</h6>
+                        <p><strong>Items per Case:</strong> {{ ingredient.items_per_case }}</p>
+                        {% if ingredient.item_weight_volume and ingredient.vendor_unit %}
+                        <p><strong>Weight/Volume per Item:</strong> {{ "%.3f"|format(ingredient.item_weight_volume) }} {{ ingredient.vendor_unit.name }}</p>
+                        {% endif %}
+                        <p><strong>Cost per Item:</strong> ${{ "%.2f"|format(ingredient.item_cost) }}</p>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         
+        {% if usage_units %}
         <div class="card mt-3">
             <div class="card-header">
-                <h5><i class="fas fa-calculator"></i> Usage Units & Pricing</h5>
+                <h5><i class="fas fa-balance-scale"></i> Usage Units & Pricing</h5>
             </div>
             <div class="card-body">
-                {% if ingredient.usage_units %}
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
@@ -56,32 +76,22 @@
                                 <th>Usage Unit</th>
                                 <th>Conversion Factor</th>
                                 <th>Price per Unit</th>
-                                <th>Cost Calculation</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for iu in ingredient.usage_units %}
+                            {% for usage in usage_units %}
                             <tr>
-                                <td><strong>{{ iu.usage_unit.name }}</strong></td>
-                                <td>{{ iu.conversion_factor }}</td>
-                                <td>${{ "%.4f"|format(iu.price_per_usage_unit) }}</td>
-                                <td>
-                                    <small class="text-muted">
-                                        ${{ "%.2f"|format(ingredient.purchase_total_cost) }} ÷ 
-                                        ({{ ingredient.purchase_weight_volume }} × {{ iu.conversion_factor }}) = 
-                                        ${{ "%.4f"|format(iu.price_per_usage_unit) }}
-                                    </small>
-                                </td>
+                                <td>{{ usage.usage_unit.name }}</td>
+                                <td>{{ usage.conversion_factor }}</td>
+                                <td>${{ "%.4f"|format(usage.price_per_usage_unit) }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
-                {% else %}
-                <p class="text-muted">No usage units defined for this ingredient.</p>
-                {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
     
     <div class="col-md-4">
@@ -104,33 +114,16 @@
             </div>
         </div>
         
+        {% if ingredient.vendor %}
         <div class="card mt-3">
             <div class="card-header">
-                <h5><i class="fas fa-chart-pie"></i> Cost Breakdown</h5>
+                <h5><i class="fas fa-truck"></i> Vendor Information</h5>
             </div>
             <div class="card-body">
-                <p><strong>Purchase Cost:</strong> ${{ "%.2f"|format(ingredient.purchase_total_cost) }}</p>
-                <p><strong>Weight/Volume:</strong> {{ ingredient.purchase_weight_volume }} {{ ingredient.vendor_unit.name if ingredient.vendor_unit else '' }}</p>
-                {% if ingredient.purchase_type == 'case' and ingredient.items_per_case %}
-                <p><strong>Cost per Item:</strong> ${{ "%.2f"|format(ingredient.purchase_total_cost / ingredient.items_per_case) }}</p>
+                <p><strong>{{ ingredient.vendor.name }}</strong></p>
+                {% if ingredient.vendor.contact_info %}
+                <p class="text-muted">{{ ingredient.vendor.contact_info }}</p>
                 {% endif %}
-                <p><strong>Cost per {{ ingredient.vendor_unit.name if ingredient.vendor_unit else 'Unit' }}:</strong> 
-                   ${{ "%.4f"|format(ingredient.purchase_total_cost / ingredient.purchase_weight_volume) }}</p>
-            </div>
-        </div>
-        
-        {% if ingredient.usage_units %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5><i class="fas fa-utensils"></i> Recipe Usage</h5>
-            </div>
-            <div class="card-body">
-                <p class="text-muted">This ingredient can be used in recipes with the following units:</p>
-                <div class="d-flex flex-wrap gap-1">
-                    {% for iu in ingredient.usage_units %}
-                    <span class="badge bg-primary">{{ iu.usage_unit.name }}</span>
-                    {% endfor %}
-                </div>
             </div>
         </div>
         {% endif %}

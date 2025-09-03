@@ -28,34 +28,22 @@
                         </select>
                     </div>
                     
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="is_variable" name="is_variable" onchange="toggleYieldFields()">
-                            <label class="form-check-label" for="is_variable">
-                                Variable Yield
-                            </label>
-                            <small class="form-text text-muted">Check if this batch produces an undetermined amount</small>
-                        </div>
-                    </div>
-                    
-                    <div id="yieldFields">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3" id="yieldAmountField">
-                                    <label for="yield_amount" class="form-label">Yield Amount</label>
-                                    <input type="number" class="form-control" id="yield_amount" name="yield_amount" step="0.01" required>
-                                </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="yield_amount" class="form-label">Yield Amount</label>
+                                <input type="number" class="form-control" id="yield_amount" name="yield_amount" step="0.01" required>
                             </div>
-                            <div class="col-md-6">
-                                <div class="mb-3" id="yieldUnitField">
-                                    <label for="yield_unit_id" class="form-label">Yield Unit</label>
-                                    <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
-                                        <option value="">Select Unit</option>
-                                        {% for unit in usage_units %}
-                                        <option value="{{ unit.id }}">{{ unit.name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="yield_unit_id" class="form-label">Yield Unit</label>
+                                <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
+                                    <option value="">Select Unit</option>
+                                    {% for unit in usage_units %}
+                                    <option value="{{ unit.id }}">{{ unit.name }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -147,12 +135,6 @@
                                 </td>
                                 <td>
                                     {{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }}
-                                    {% if batch.is_variable %}
-                                    <br><span class="badge bg-info">Variable</span>
-                                    {% endif %}
-                                    {% if batch.is_variable %}
-                                    <br><span class="badge bg-info">Variable</span>
-                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ batch.estimated_labor_minutes }} min<br>
@@ -198,45 +180,6 @@
 </div>
 
 <script>
-function toggleYieldFields() {
-    const isVariableCheckbox = document.getElementById('is_variable');
-    const yieldFields = document.getElementById('yieldFields');
-    const yieldAmountInput = document.getElementById('yield_amount');
-    const yieldUnitInput = document.getElementById('yield_unit_id');
-    
-    if (isVariableCheckbox.checked) {
-        yieldFields.style.display = 'none';
-        yieldAmountInput.required = false;
-        yieldUnitInput.required = false;
-        yieldAmountInput.value = '';
-        yieldUnitInput.value = '';
-    } else {
-        yieldFields.style.display = 'block';
-        yieldAmountInput.required = true;
-        yieldUnitInput.required = true;
-    }
-}
-
-function toggleYieldFields() {
-    const isVariableCheckbox = document.getElementById('is_variable');
-    const yieldAmountField = document.getElementById('yieldAmountField');
-    const yieldUnitField = document.getElementById('yieldUnitField');
-    const yieldAmountInput = document.getElementById('yield_amount');
-    const yieldUnitInput = document.getElementById('yield_unit_id');
-    
-    if (isVariableCheckbox.checked) {
-        yieldAmountField.style.display = 'none';
-        yieldUnitField.style.display = 'none';
-        yieldAmountInput.required = false;
-        yieldUnitInput.required = false;
-    } else {
-        yieldAmountField.style.display = 'block';
-        yieldUnitField.style.display = 'block';
-        yieldAmountInput.required = true;
-        yieldUnitInput.required = true;
-    }
-}
-
 function toggleScalingOptions() {
     const checkbox = document.getElementById('can_be_scaled');
     const options = document.getElementById('scalingOptions');
@@ -257,8 +200,7 @@ async function loadRecipeUsageUnits() {
     const yieldUnitSelect = document.getElementById('yield_unit_id');
     
     if (!recipeSelect.value) {
-        // Clear options if no recipe selected
-        yieldUnitSelect.innerHTML = '<option value="">Select Recipe First</option>';
+        showAllUnits();
         return;
     }
     
@@ -274,14 +216,26 @@ async function loadRecipeUsageUnits() {
             yieldUnitSelect.appendChild(option);
         });
         
-        // If no units found from recipe ingredients
+        // If no units found from recipe, show all units
         if (usageUnits.length === 0) {
-            yieldUnitSelect.innerHTML = '<option value="">No units available - add ingredients to recipe first</option>';
+            showAllUnits();
         }
     } catch (error) {
         console.error('Error loading usage units:', error);
-        yieldUnitSelect.innerHTML = '<option value="">Error loading units</option>';
+        showAllUnits();
     }
+}
+
+function showAllUnits() {
+    const yieldUnitSelect = document.getElementById('yield_unit_id');
+    yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+    
+    {% for unit in usage_units %}
+    const option{{ unit.id }} = document.createElement('option');
+    option{{ unit.id }}.value = {{ unit.id }};
+    option{{ unit.id }}.textContent = '{{ unit.name }}';
+    yieldUnitSelect.appendChild(option{{ unit.id }});
+    {% endfor %}
 }
 </script>
 {% endblock %}

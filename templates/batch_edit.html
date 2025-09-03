@@ -125,25 +125,6 @@
 </div>
 
 <script>
-function toggleYieldFields() {
-    const isVariableCheckbox = document.getElementById('is_variable');
-    const yieldFields = document.getElementById('yieldFields');
-    const yieldAmountInput = document.getElementById('yield_amount');
-    const yieldUnitInput = document.getElementById('yield_unit_id');
-    
-    if (isVariableCheckbox.checked) {
-        yieldFields.style.display = 'none';
-        yieldAmountInput.required = false;
-        yieldUnitInput.required = false;
-        yieldAmountInput.value = '';
-        yieldUnitInput.value = '';
-    } else {
-        yieldFields.style.display = 'block';
-        yieldAmountInput.required = true;
-        yieldUnitInput.required = true;
-    }
-}
-
 function toggleScalingOptions() {
     const checkbox = document.getElementById('can_be_scaled');
     const options = document.getElementById('scalingOptions');
@@ -187,19 +168,31 @@ async function loadRecipeUsageUnits() {
         
         // If no units found from recipe, show all units
         if (usageUnits.length === 0) {
-            yieldUnitSelect.innerHTML = '<option value="">No units available - add ingredients to recipe first</option>';
+            showAllUnits(currentYieldUnitId);
         }
     } catch (error) {
         console.error('Error loading usage units:', error);
-        yieldUnitSelect.innerHTML = '<option value="">Error loading units</option>';
+        showAllUnits(currentYieldUnitId);
     }
+}
+
+function showAllUnits(currentYieldUnitId) {
+    const yieldUnitSelect = document.getElementById('yield_unit_id');
+    yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+    
+    {% for unit in usage_units %}
+    const option{{ unit.id }} = document.createElement('option');
+    option{{ unit.id }}.value = {{ unit.id }};
+    option{{ unit.id }}.textContent = '{{ unit.name }}';
+    if ({{ unit.id }} === currentYieldUnitId) {
+        option{{ unit.id }}.selected = true;
+    }
+    yieldUnitSelect.appendChild(option{{ unit.id }});
+    {% endfor %}
 }
 
 // Load usage units on page load if recipe is already selected
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize yield fields based on current state
-    toggleYieldFields();
-    
     if (document.getElementById('recipe_id').value) {
         loadRecipeUsageUnits();
     }
