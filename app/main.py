@@ -1020,6 +1020,143 @@ async def inventory_day_detail(
         "employees": employees
     })
 
+@app.post("/inventory/day/{day_id}/update")
+async def update_inventory_day(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    # Get the inventory day
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Cannot update finalized day")
+    
+    # Get form data
+    form_data = await request.form()
+    
+    # Update global notes
+    inventory_day.global_notes = form_data.get("global_notes", "")
+    
+    # Update inventory quantities and overrides
+    inventory_items = db.query(InventoryItem).all()
+    
+    for item in inventory_items:
+        # Get quantity
+        quantity_key = f"item_{item.id}"
+        if quantity_key in form_data:
+            quantity = float(form_data[quantity_key])
+            
+            # Find or create inventory day item
+            day_item = db.query(InventoryDayItem).filter(
+                InventoryDayItem.day_id == day_id,
+                InventoryDayItem.inventory_item_id == item.id
+            ).first()
+            
+            if not day_item:
+                day_item = InventoryDayItem(
+                    day_id=day_id,
+                    inventory_item_id=item.id,
+                    quantity=quantity
+                )
+                db.add(day_item)
+            else:
+                day_item.quantity = quantity
+            
+            # Update overrides
+            override_create_key = f"override_create_{item.id}"
+            override_no_task_key = f"override_no_task_{item.id}"
+            
+            day_item.override_create_task = override_create_key in form_data
+            day_item.override_no_task = override_no_task_key in form_data
+    
+    # Generate tasks based on inventory levels
+    generate_inventory_tasks(db, inventory_day)
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
+def generate_inventory_tasks(db: Session, inventory_day: InventoryDay):
+    """Generate tasks for items that are below par or have overrides"""
+    
+    # Get all inventory day items
+    day_items = db.query(InventoryDayItem).filter(
+        InventoryDayItem.day_id == inventory_day.id
+    ).all()
+    
+    # Get working employees
+    working_employee_ids = []
+    if inventory_day.employees_working:
+        working_employee_ids = [int(id.strip()) for id in inventory_day.employees_working.split(',') if id.strip()]
+    
+    for day_item in day_items:
+        item = day_item.inventory_item
+        
+        # Check if task should be created
+        should_create_task = False
+        
+        if day_item.override_no_task:
+            # Explicitly no task
+            continue
+        elif day_item.override_create_task:
+            # Force create task
+            should_create_task = True
+        elif day_item.quantity <= item.par_level:
+            # Below or at par level
+            should_create_task = True
+        
+        if should_create_task and item.batch:
+            # Check if task already exists for this item today
+            existing_task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.inventory_item_id == item.id,
+                Task.auto_generated == True
+            ).first()
+            
+            if not existing_task:
+                # Create new task
+                task_description = f"Make {item.name} (Below par: {day_item.quantity}/{item.par_level})"
+                
+                # Assign to first working employee or leave unassigned
+                assigned_to_id = working_employee_ids[0] if working_employee_ids else None
+                
+                new_task = Task(
+                    day_id=inventory_day.id,
+                    assigned_to_id=assigned_to_id,
+                    description=task_description,
+                    auto_generated=True,
+                    batch_id=item.batch_id,
+                    inventory_item_id=item.id,
+                    requires_manual_made=item.batch.is_variable if item.batch else False
+                )
+                
+                db.add(new_task)
+
+@app.post("/inventory/day/{day_id}/finalize")
+async def finalize_inventory_day(
+    day_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Day already finalized")
+    
+    inventory_day.finalized = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
 # Utility management routes
 @app.get("/utilities", response_class=HTMLResponse)
 async def utilities_page(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
