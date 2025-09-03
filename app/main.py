@@ -2193,3 +2193,18 @@ async def get_vendor_unit_conversions(vendor_unit_id: int, db: Session = Depends
         result[conv.usage_unit_id] = conv.conversion_factor
     
     return result
+
+@app.get("/api/recipes/{recipe_id}/usage_units")
+async def get_recipe_usage_units(recipe_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get usage units available for a recipe - ONLY from its ingredients"""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    # Get ONLY usage units that are actually used by ingredients in this recipe
+    usage_units = set()
+    for recipe_ingredient in recipe.ingredients:
+        for ingredient_usage_unit in recipe_ingredient.ingredient.usage_units:
+            usage_units.add((ingredient_usage_unit.usage_unit.id, ingredient_usage_unit.usage_unit.name))
+    
+    return [{"id": unit_id, "name": unit_name} for unit_id, unit_name in sorted(usage_units, key=lambda x: x[1])]
