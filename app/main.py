@@ -2093,6 +2093,59 @@ async def get_batch_labor_stats(batch_id: int, db: Session = Depends(get_db), cu
 @app.get("/api/inventory/batch/{batch_id}/available_units")
 async def get_inventory_batch_available_units(batch_id: int, db: Session = Depends(get_db)):
     """Get available units for inventory item par unit selection based on linked batch"""
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    from .conversion_utils import get_available_units_for_inventory_item
+    from .models import InventoryItem
+    
+    # Create a temporary inventory item to use the utility function
+    temp_item = InventoryItem(batch_id=batch_id, batch=batch)
+    units = get_available_units_for_inventory_item(db, temp_item)
+    
+    return units
+
+@app.get("/api/inventory/conversion_preview")
+async def get_inventory_conversion_preview(
+    batch_id: int, 
+    unit_id: int, 
+    manual_factor: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
+    """Preview conversion between batch yield and inventory par units"""
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    unit = db.query(UsageUnit).filter(UsageUnit.id == unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    
+    from .conversion_utils import preview_conversion
+    from .models import InventoryItem
+    
+    # Create a temporary inventory item for preview
+    temp_item = InventoryItem(
+        batch_id=batch_id, 
+        batch=batch,
+        par_unit_equals_unit_id=unit_id,
+        par_unit_equals_amount=1.0,
+        manual_conversion_factor=manual_factor
+    )
+    
+    preview = preview_conversion(db, batch, temp_item, 1.0)
+    return preview
+
+@app.get("/api/usage_units/all")
+async def get_all_usage_units(db: Session = Depends(get_db)):
+    """Get all usage units"""
+    units = db.query(UsageUnit).order_by(UsageUnit.name).all()
+    return [{"id": unit.id, "name": unit.name} for unit in units]
+
+@app.get("/api/inventory/batch/{batch_id}/available_units")
+async def get_inventory_batch_available_units(batch_id: int, db: Session = Depends(get_db)):
+    """Get available units for inventory item par unit selection based on linked batch"""
     from .conversion_utils import get_available_units_for_inventory_item
     from .models import InventoryItem
     
