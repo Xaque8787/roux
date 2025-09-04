@@ -381,6 +381,93 @@ async def ingredient_detail(ingredient_id: int, request: Request, current_user: 
         "ingredient": ingredient
     })
 
+@app.get("/ingredients/{ingredient_id}/edit", response_class=HTMLResponse)
+async def ingredient_edit(ingredient_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    categories = db.query(Category).filter(Category.type == "ingredient").all()
+    vendors = db.query(Vendor).all()
+    vendor_units = db.query(VendorUnit).all()
+    
+    return templates.TemplateResponse("ingredient_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "ingredient": ingredient,
+        "categories": categories,
+        "vendors": vendors,
+        "vendor_units": vendor_units,
+        "existing_conversions": {}  # Simplified for now
+    })
+
+@app.post("/ingredients/{ingredient_id}/edit")
+async def update_ingredient(
+    ingredient_id: int,
+    request: Request,
+    name: str = Form(...),
+    usage_type: str = Form(...),
+    category_id: int = Form(None),
+    vendor_id: int = Form(None),
+    purchase_type: str = Form(...),
+    purchase_unit_name: str = Form(...),
+    net_weight_volume_item: float = Form(...),
+    net_unit: str = Form(...),
+    purchase_total_cost: float = Form(...),
+    breakable_case: bool = Form(False),
+    items_per_case: int = Form(None),
+    net_weight_volume_case: float = Form(None),
+    has_baking_conversion: bool = Form(False),
+    baking_measurement_unit: str = Form(None),
+    baking_weight_amount: float = Form(None),
+    baking_weight_unit: str = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    # Update ingredient fields
+    ingredient.name = name
+    ingredient.usage_type = usage_type
+    ingredient.category_id = category_id if category_id else None
+    ingredient.vendor_id = vendor_id if vendor_id else None
+    ingredient.purchase_type = purchase_type
+    ingredient.purchase_unit_name = purchase_unit_name
+    ingredient.net_weight_volume_item = net_weight_volume_item
+    ingredient.net_unit = net_unit
+    ingredient.purchase_total_cost = purchase_total_cost
+    ingredient.breakable_case = breakable_case
+    ingredient.items_per_case = items_per_case
+    ingredient.net_weight_volume_case = net_weight_volume_case
+    ingredient.has_baking_conversion = has_baking_conversion
+    ingredient.baking_measurement_unit = baking_measurement_unit if has_baking_conversion else None
+    ingredient.baking_weight_amount = baking_weight_amount if has_baking_conversion else None
+    ingredient.baking_weight_unit = baking_weight_unit if has_baking_conversion else None
+    
+    db.commit()
+    return RedirectResponse(url=f"/ingredients/{ingredient_id}", status_code=302)
+
+@app.get("/ingredients/{ingredient_id}/delete")
+async def delete_ingredient(ingredient_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    db.delete(ingredient)
+    db.commit()
+    return RedirectResponse(url="/ingredients", status_code=302)
+
 # Recipes Management Routes
 @app.get("/recipes", response_class=HTMLResponse)
 async def recipes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -410,6 +497,41 @@ async def recipe_detail(recipe_id: int, request: Request, current_user: User = D
         "recipe_ingredients": recipe_ingredients,
         "total_cost": total_cost
     })
+
+@app.get("/recipes/{recipe_id}/edit", response_class=HTMLResponse)
+async def recipe_edit(recipe_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
+    categories = db.query(Category).filter(Category.type == "recipe").all()
+    
+    return templates.TemplateResponse("recipe_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "recipe": recipe,
+        "recipe_ingredients": recipe_ingredients,
+        "categories": categories
+    })
+
+@app.get("/recipes/{recipe_id}/delete")
+async def delete_recipe(recipe_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    # Delete recipe ingredients first
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
+    db.delete(recipe)
+    db.commit()
+    return RedirectResponse(url="/recipes", status_code=302)
 
 # Batches Management Routes
 @app.get("/batches", response_class=HTMLResponse)
@@ -444,6 +566,39 @@ async def batch_detail(batch_id: int, request: Request, current_user: User = Dep
         "total_batch_cost": total_batch_cost,
         "cost_per_yield_unit": cost_per_yield_unit
     })
+
+@app.get("/batches/{batch_id}/edit", response_class=HTMLResponse)
+async def batch_edit(batch_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    recipes = db.query(Recipe).all()
+    usage_units = []  # Simplified for now
+    
+    return templates.TemplateResponse("batch_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "batch": batch,
+        "recipes": recipes,
+        "usage_units": usage_units
+    })
+
+@app.get("/batches/{batch_id}/delete")
+async def delete_batch(batch_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    db.delete(batch)
+    db.commit()
+    return RedirectResponse(url="/batches", status_code=302)
 
 # Dishes Management Routes
 @app.get("/dishes", response_class=HTMLResponse)
@@ -494,6 +649,41 @@ async def dish_detail(dish_id: int, request: Request, current_user: User = Depen
         "actual_profit_all_time": actual_profit,
         "actual_profit_margin_all_time": actual_profit_margin
     })
+
+@app.get("/dishes/{dish_id}/edit", response_class=HTMLResponse)
+async def dish_edit(dish_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
+    categories = db.query(Category).filter(Category.type == "dish").all()
+    
+    return templates.TemplateResponse("dish_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "dish": dish,
+        "dish_batch_portions": dish_batch_portions,
+        "categories": categories
+    })
+
+@app.get("/dishes/{dish_id}/delete")
+async def delete_dish(dish_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
+    # Delete dish batch portions first
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
+    db.delete(dish)
+    db.commit()
+    return RedirectResponse(url="/dishes", status_code=302)
 
 # Inventory Management Routes
 @app.get("/inventory", response_class=HTMLResponse)
@@ -881,6 +1071,76 @@ async def get_recipe_available_units(
     
     return list(units)
 # Error handlers
+# API routes for search functionality
+@app.get("/api/batches/search")
+async def search_batches(q: str = "", current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    query = db.query(Batch).join(Recipe)
+    
+    if q:
+        query = query.filter(Recipe.name.ilike(f"%{q}%"))
+    
+    batches = query.limit(20).all()
+    
+    return [
+        {
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit,
+            "cost_per_unit": 0.0,  # Simplified calculation
+            "category": batch.recipe.category.name if batch.recipe.category else None
+        }
+        for batch in batches
+    ]
+
+@app.get("/api/batches/all")
+async def get_all_batches(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batches = db.query(Batch).join(Recipe).limit(50).all()
+    
+    return [
+        {
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit,
+            "cost_per_unit": 0.0,  # Simplified calculation
+            "category": batch.recipe.category.name if batch.recipe.category else None
+        }
+        for batch in batches
+    ]
+
+@app.get("/api/batches/{batch_id}/portion_units")
+async def get_batch_portion_units(batch_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Return available units for this batch
+    units = []
+    if batch.yield_unit:
+        units.append({"id": 1, "name": batch.yield_unit})
+    
+    return units
+
+@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
+async def get_batch_cost_per_unit(
+    batch_id: int, 
+    unit_id: int, 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Simplified cost calculation
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+    cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
+    
+    return {"expected_cost_per_unit": cost_per_unit}
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:
