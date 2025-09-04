@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for Food Cost Management System
-# Updated for GitHub integration
+# Updated for GitHub integration - Enhanced task summary calculations
 
 # Builder stage
 FROM python:3.11-slim as builder
