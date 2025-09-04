@@ -42,15 +42,9 @@
                         <div class="col-md-6 mb-3">
                             <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
                                 <div class="card-body p-2">
-                                        {% if task.requires_scale_selection %}
-                                        <button type="button" class="btn btn-xs btn-primary" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
-                                            Select Scale & Start
-                                        </button>
-                                        {% else %}
-                                        <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
-                                            <button type="submit" class="btn btn-xs btn-primary">Start</button>
-                                        </form>
-                                        {% endif %}
+                                    <label class="form-label mb-1">
+                                        <strong>{{ item.inventory_item.name }}</strong>
+                                        <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
                                         {% if item.inventory_item.batch %}
                                         <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
                                         {% endif %}
