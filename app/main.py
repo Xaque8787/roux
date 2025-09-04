@@ -639,6 +639,247 @@ async def create_par_unit_name(
     
     return RedirectResponse(url="/inventory", status_code=302)
 
+# Missing CRUD routes that were in the original
+@app.post("/recipes/new")
+async def create_recipe(
+    request: Request,
+    name: str = Form(...),
+    instructions: str = Form(""),
+    category_id: int = Form(None),
+    ingredients_data: str = Form("[]"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    import json
+    try:
+        ingredients = json.loads(ingredients_data)
+    except:
+        ingredients = []
+    
+    recipe = Recipe(
+        name=name,
+        instructions=instructions,
+        category_id=category_id if category_id else None
+    )
+    db.add(recipe)
+    db.flush()  # Get the ID
+    
+    # Add recipe ingredients
+    for ing_data in ingredients:
+        recipe_ingredient = RecipeIngredient(
+            recipe_id=recipe.id,
+            ingredient_id=ing_data['ingredient_id'],
+            unit=ing_data['unit'],
+            quantity=ing_data['quantity']
+        )
+        db.add(recipe_ingredient)
+    
+    db.commit()
+    return RedirectResponse(url="/recipes", status_code=302)
+
+@app.post("/batches/new")
+async def create_batch(
+    request: Request,
+    recipe_id: int = Form(...),
+    variable_yield: bool = Form(False),
+    yield_amount: float = Form(None),
+    yield_unit: str = Form(None),
+    estimated_labor_minutes: int = Form(...),
+    hourly_labor_rate: float = Form(16.75),
+    can_be_scaled: bool = Form(False),
+    scale_double: bool = Form(False),
+    scale_half: bool = Form(False),
+    scale_quarter: bool = Form(False),
+    scale_eighth: bool = Form(False),
+    scale_sixteenth: bool = Form(False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    batch = Batch(
+        recipe_id=recipe_id,
+        variable_yield=variable_yield,
+        yield_amount=yield_amount,
+        yield_unit=yield_unit,
+        estimated_labor_minutes=estimated_labor_minutes,
+        hourly_labor_rate=hourly_labor_rate,
+        can_be_scaled=can_be_scaled,
+        scale_double=scale_double,
+        scale_half=scale_half,
+        scale_quarter=scale_quarter,
+        scale_eighth=scale_eighth,
+        scale_sixteenth=scale_sixteenth
+    )
+    
+    db.add(batch)
+    db.commit()
+    return RedirectResponse(url="/batches", status_code=302)
+
+@app.post("/dishes/new")
+async def create_dish(
+    request: Request,
+    name: str = Form(...),
+    category_id: int = Form(None),
+    sale_price: float = Form(...),
+    description: str = Form(""),
+    batch_portions_data: str = Form("[]"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    import json
+    try:
+        batch_portions = json.loads(batch_portions_data)
+    except:
+        batch_portions = []
+    
+    dish = Dish(
+        name=name,
+        category_id=category_id if category_id else None,
+        sale_price=sale_price,
+        description=description
+    )
+    db.add(dish)
+    db.flush()  # Get the ID
+    
+    # Add dish batch portions
+    for portion_data in batch_portions:
+        dish_portion = DishBatchPortion(
+            dish_id=dish.id,
+            batch_id=portion_data['batch_id'],
+            portion_size=portion_data['portion_size'],
+            portion_unit=portion_data.get('portion_unit_name', '')
+        )
+        db.add(dish_portion)
+    
+    db.commit()
+    return RedirectResponse(url="/dishes", status_code=302)
+
+@app.post("/inventory/new_item")
+async def create_inventory_item(
+    request: Request,
+    name: str = Form(...),
+    par_unit_name_id: int = Form(None),
+    par_level: float = Form(...),
+    batch_id: int = Form(None),
+    par_unit_equals_type: str = Form(None),
+    par_unit_equals_amount: float = Form(None),
+    par_unit_equals_unit: str = Form(None),
+    category_id: int = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    inventory_item = InventoryItem(
+        name=name,
+        par_unit_name_id=par_unit_name_id if par_unit_name_id else None,
+        par_level=par_level,
+        batch_id=batch_id if batch_id else None,
+        par_unit_equals_type=par_unit_equals_type,
+        par_unit_equals_amount=par_unit_equals_amount,
+        par_unit_equals_unit=par_unit_equals_unit,
+        category_id=category_id if category_id else None
+    )
+    
+    db.add(inventory_item)
+    db.commit()
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@app.post("/inventory/new_day")
+async def create_inventory_day(
+    request: Request,
+    date: str = Form(...),
+    employees_working: list = Form([]),
+    global_notes: str = Form(""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    from datetime import datetime
+    date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+    
+    # Check if day already exists
+    existing_day = db.query(InventoryDay).filter(InventoryDay.date == date_obj).first()
+    if existing_day:
+        return RedirectResponse(url=f"/inventory/day/{existing_day.id}", status_code=302)
+    
+    employees_str = ','.join(map(str, employees_working)) if employees_working else ""
+    
+    inventory_day = InventoryDay(
+        date=date_obj,
+        employees_working=employees_str,
+        global_notes=global_notes
+    )
+    db.add(inventory_day)
+    db.flush()
+    
+    # Create inventory day items for all inventory items
+    inventory_items = db.query(InventoryItem).all()
+    for item in inventory_items:
+        day_item = InventoryDayItem(
+            day_id=inventory_day.id,
+            inventory_item_id=item.id,
+            quantity=0.0
+        )
+        db.add(day_item)
+    
+    db.commit()
+    return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
+
+# API routes for AJAX calls
+@app.get("/api/ingredients/all")
+async def get_all_ingredients(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).all()
+    return [
+        {
+            "id": ing.id,
+            "name": ing.name,
+            "category": ing.category.name if ing.category else None,
+            "available_units": ing.get_available_units()
+        }
+        for ing in ingredients
+    ]
+
+@app.get("/api/ingredients/{ingredient_id}/cost_per_unit/{unit}")
+async def get_ingredient_cost_per_unit(
+    ingredient_id: int, 
+    unit: str, 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    cost_per_unit = ingredient.get_cost_per_unit(unit)
+    return {"cost_per_unit": cost_per_unit}
+
+@app.get("/api/recipes/{recipe_id}/available_units")
+async def get_recipe_available_units(
+    recipe_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Get all units used by ingredients in this recipe
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
+    units = set()
+    
+    for ri in recipe_ingredients:
+        if ri.ingredient:
+            units.update(ri.ingredient.get_available_units())
+    
+    return list(units)
 # Error handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
