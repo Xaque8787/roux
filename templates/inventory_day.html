@@ -42,9 +42,15 @@
                         <div class="col-md-6 mb-3">
                             <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
                                 <div class="card-body p-2">
-                                    <label class="form-label mb-1">
-                                        <strong>{{ item.inventory_item.name }}</strong>
-                                        <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
+                                        {% if task.requires_scale_selection %}
+                                        <button type="button" class="btn btn-xs btn-primary" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
+                                            Select Scale & Start
+                                        </button>
+                                        {% else %}
+                                        <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
+                                            <button type="submit" class="btn btn-xs btn-primary">Start</button>
+                                        </form>
+                                        {% endif %}
                                         {% if item.inventory_item.batch %}
                                         <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
                                         {% endif %}
@@ -240,9 +246,15 @@
                                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
                                     <button type="submit" class="btn btn-xs btn-warning">Pause</button>
                                 </form>
+                                {% if task.requires_made_amount %}
+                                <button type="button" class="btn btn-xs btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                    Finish & Enter Amount
+                                </button>
+                                {% else %}
                                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
                                     <button type="submit" class="btn btn-xs btn-success">Finish</button>
                                 </form>
+                                {% endif %}
                                 {% endif %}
                                 <span class="badge bg-primary">In Progress</span>
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
@@ -259,6 +271,12 @@
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
                                 {% if task.assigned_to %}
                                 <br><small class="text-success">Cost: ${{ "%.2f"|format(task.labor_cost) }}</small>
+                                {% endif %}
+                                {% if task.selected_scale and task.selected_scale != 'full' %}
+                                <br><small class="text-info">Scale: {{ task.selected_scale.title() }}</small>
+                                {% endif %}
+                                {% if task.made_amount %}
+                                <br><small class="text-warning">Made: {{ task.made_amount }} {{ task.made_unit }}</small>
                                 {% endif %}
                             {% endif %}
                             
@@ -296,4 +314,165 @@
     border-radius: 0.2rem;
 }
 </style>
+
+<script>
+// Scale Selection Modal
+function showScaleSelection(taskId, recipeName) {
+    fetch(`/api/tasks/${taskId}/scale_options`)
+        .then(response => response.json())
+        .then(scales => {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Select Batch Scale - ${recipeName}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Select batch scale to make:</label>
+                                <select class="form-select" id="scaleSelect" required>
+                                    <option value="">Choose scale...</option>
+                                    ${scales.map(scale => 
+                                        `<option value="${scale.key}" data-yield="${scale.yield}">${scale.label} - ${scale.yield}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale(${taskId})">Start Task</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+            
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading scale options:', error);
+            alert('Error loading scale options');
+        });
+}
+
+function startTaskWithScale(taskId) {
+    const scaleSelect = document.getElementById('scaleSelect');
+    const selectedScale = scaleSelect.value;
+    
+    if (!selectedScale) {
+        alert('Please select a batch scale');
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
+    form.style.display = 'none';
+    
+    const scaleInput = document.createElement('input');
+    scaleInput.name = 'selected_scale';
+    scaleInput.value = selectedScale;
+    
+    form.appendChild(scaleInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Made Amount Input Modal
+function showMadeAmountInput(taskId, recipeName) {
+    fetch(`/api/tasks/${taskId}/finish_requirements`)
+        .then(response => response.json())
+        .then(data => {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Enter Amount Made - ${recipeName}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Amount Made:</label>
+                                <div class="row">
+                                    <div class="col-8">
+                                        <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
+                                    </div>
+                                    <div class="col-4">
+                                        <select class="form-select" id="madeUnit" required>
+                                            ${data.available_units.map(unit => 
+                                                `<option value="${unit}">${unit}</option>`
+                                            ).join('')}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            ${data.inventory_info ? `
+                            <div class="alert alert-info">
+                                <small>
+                                    <strong>Current Inventory:</strong> ${data.inventory_info.current} ${data.inventory_info.par_unit_name}<br>
+                                    <strong>Par Level:</strong> ${data.inventory_info.par_level} ${data.inventory_info.par_unit_name}
+                                </small>
+                            </div>
+                            ` : ''}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount(${taskId})">Finish Task</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+            
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading finish requirements:', error);
+            alert('Error loading task requirements');
+        });
+}
+
+function finishTaskWithAmount(taskId) {
+    const madeAmount = document.getElementById('madeAmount').value;
+    const madeUnit = document.getElementById('madeUnit').value;
+    
+    if (!madeAmount || !madeUnit) {
+        alert('Please enter amount made and select unit');
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
+    form.style.display = 'none';
+    
+    const amountInput = document.createElement('input');
+    amountInput.name = 'made_amount';
+    amountInput.value = madeAmount;
+    
+    const unitInput = document.createElement('input');
+    unitInput.name = 'made_unit';
+    unitInput.value = madeUnit;
+    
+    form.appendChild(amountInput);
+    form.appendChild(unitInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
 {% endblock %}
