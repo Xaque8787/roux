@@ -172,15 +172,26 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadAllIngredients() {
     try {
         const response = await fetch('/api/ingredients/all');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         allIngredients = await response.json();
+        console.log('Loaded ingredients:', allIngredients.length);
         filterIngredients(''); // Show all ingredients initially
     } catch (error) {
         console.error('Error loading ingredients:', error);
+        document.getElementById('ingredientDropdown').innerHTML = '<div class="dropdown-item-text text-danger">Error loading ingredients</div>';
     }
 }
 
 function filterIngredients(query) {
     const dropdown = document.getElementById('ingredientDropdown');
+    
+    if (!allIngredients || allIngredients.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No ingredients available</div>';
+        dropdown.style.display = 'block';
+        return;
+    }
     
     const filteredIngredients = allIngredients.filter(ingredient => 
         ingredient.name.toLowerCase().includes(query) ||
@@ -212,30 +223,31 @@ function filterIngredients(query) {
         });
     }
     
-    if (query || document.getElementById('ingredientSearch') === document.activeElement) {
-        dropdown.style.display = 'block';
-    }
+    dropdown.style.display = 'block';
 }
 
 function selectIngredient(ingredient) {
+    console.log('Selected ingredient:', ingredient);
+    
     // Check if ingredient already selected
     if (selectedIngredients.find(si => si.ingredient_id === ingredient.id)) {
         alert('This ingredient is already added to the recipe.');
         return;
     }
     
-    // Show unit selection with new system
-    showUnitSelection(ingredient);
-    currentSelectedIngredient = ingredient;
-}
-
-function showUnitSelection(ingredient) {
+    // Check if ingredient has available units
     if (!ingredient.available_units || ingredient.available_units.length === 0) {
         alert('This ingredient has no available units defined.');
         return;
     }
     
+    currentSelectedIngredient = ingredient;
+    showUnitSelection(ingredient);
+}
+
+function showUnitSelection(ingredient) {
     const availableUnits = ingredient.available_units;
+    console.log('Available units:', availableUnits);
     
     const modal = document.createElement('div');
     modal.className = 'modal fade';
@@ -251,8 +263,6 @@ function showUnitSelection(ingredient) {
                         <label class="form-label">Usage Unit</label>
                         <select class="form-select" id="usageUnitSelect">
                             ${availableUnits.map(unit => 
-                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${unit}</option>`
-                            ).join('')}
                                 `<option value="${unit}" data-ingredient-id="${ingredient.id}">${unit}</option>`
                             ).join('')}
                         </select>
