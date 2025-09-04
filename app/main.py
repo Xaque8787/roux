@@ -1109,9 +1109,30 @@ async def get_batch_portion_units(batch_id: int, current_user: User = Depends(ge
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    # Return available units for this batch
+    # Return all compatible units based on batch yield unit type
     units = []
-    if batch.yield_unit:
+    
+    # Weight units
+    weight_units = ["lb", "oz", "g", "kg"]
+    # Volume units  
+    volume_units = ["gal", "qt", "pt", "cup", "fl_oz", "l", "ml"]
+    # Count units
+    count_units = ["each", "dozen"]
+    
+    if batch.yield_unit in weight_units:
+        # If batch yield is weight, allow all weight units
+        for i, unit in enumerate(weight_units):
+            units.append({"id": i + 1, "name": unit})
+    elif batch.yield_unit in volume_units:
+        # If batch yield is volume, allow all volume units
+        for i, unit in enumerate(volume_units):
+            units.append({"id": i + 1, "name": unit})
+    elif batch.yield_unit in count_units:
+        # If batch yield is count, allow count units
+        for i, unit in enumerate(count_units):
+            units.append({"id": i + 1, "name": unit})
+    else:
+        # Fallback - just include the batch yield unit
         units.append({"id": 1, "name": batch.yield_unit})
     
     return units
@@ -1127,14 +1148,50 @@ async def get_batch_cost_per_unit(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    # Simplified cost calculation
+    # Calculate total batch cost
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
     total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-    cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
     
-    return {"expected_cost_per_unit": cost_per_unit}
-
+    if not batch.yield_amount or batch.yield_amount <= 0:
+        return {"expected_cost_per_unit": 0}
+    
+    # Get the target unit name from unit_id
+    weight_units = ["lb", "oz", "g", "kg"]
+    volume_units = ["gal", "qt", "pt", "cup", "fl_oz", "l", "ml"]
+    count_units = ["each", "dozen"]
+    
+    target_unit = None
+    if batch.yield_unit in weight_units:
+        if unit_id <= len(weight_units):
+            target_unit = weight_units[unit_id - 1]
+    elif batch.yield_unit in volume_units:
+        if unit_id <= len(volume_units):
+            target_unit = volume_units[unit_id - 1]
+    elif batch.yield_unit in count_units:
+        if unit_id <= len(count_units):
+            target_unit = count_units[unit_id - 1]
+    
+    if not target_unit:
+        target_unit = batch.yield_unit
+    
+    # Simple conversion factors (you can expand this)
+    conversion_factor = 1.0
+    if batch.yield_unit == "lb" and target_unit == "oz":
+        conversion_factor = 16.0  # 16 oz per lb
+    elif batch.yield_unit == "oz" and target_unit == "lb":
+        conversion_factor = 1.0 / 16.0
+    elif batch.yield_unit == "gal" and target_unit == "qt":
+        conversion_factor = 4.0  # 4 qt per gal
+    elif batch.yield_unit == "qt" and target_unit == "gal":
+        conversion_factor = 1.0 / 4.0
+    # Add more conversions as needed
+    
+    # Calculate cost per yield unit, then convert to target unit
+    cost_per_yield_unit = total_batch_cost / batch.yield_amount
+    cost_per_target_unit = cost_per_yield_unit / conversion_factor
+    
+    return {"expected_cost_per_unit": cost_per_target_unit}
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:

@@ -41,15 +41,10 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ ri.quantity }}</td>
-                                <td>{{ ri.usage_unit.name }}</td>
+                                <td>{{ ri.unit }}</td>
                                 <td>
                                     {% set unit_price = 0 %}
-                                    {% for iu in ri.ingredient.usage_units %}
-                                        {% if iu.usage_unit_id == ri.usage_unit_id %}
-                                            {% set unit_price = iu.price_per_usage_unit %}
-                                        {% endif %}
-                                    {% endfor %}
-                                    ${{ "%.4f"|format(unit_price) }}
+                                    ${{ "%.4f"|format(0.0) }}
                                 </td>
                                 <td>${{ "%.2f"|format(ri.cost) }}</td>
                             </tr>
