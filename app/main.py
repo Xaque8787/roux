@@ -48,11 +48,7 @@ async def setup_admin(
     request: Request,
     username: str = Form(...),
     full_name: str = Form(""),
-    password: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    # Check if any users exist
-    user_count = db.query(User).count()
+        return RedirectResponse(url="/login", status_code=302)
     if user_count > 0:
         return RedirectResponse(url="/login", status_code=302)
     
@@ -72,6 +68,12 @@ async def setup_admin(
         hourly_wage=20.0
     )
     db.add(admin_user)
+    
+    if not username or not password:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "error": "Username and password are required"
+        })
     
     try:
         default_categories = [
@@ -119,6 +121,7 @@ async def setup_admin(
         
         db.commit()
         
+        # Successful setup - redirect to login
         # Create JWT token and set cookie
         token = create_jwt({"sub": username})
         response = RedirectResponse(url="/home", status_code=302)
@@ -148,14 +151,26 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
+    print(f"Login attempt - Username: {username}")  # Debug log
+    
+    if not username or not password:
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Username and password are required"
+        })
+    
 ):
     user = db.query(User).filter(User.username == username).first()
+    print(f"User found: {user is not None}")  # Debug log
+    
     if not user or not verify_password(password, user.hashed_password) or not user.is_active:
+        print("User not found in database")  # Debug log
         return templates.TemplateResponse("login.html", {
             "request": request,
             "error": "Invalid username or password"
         })
     
+    print(f"User active: {user.is_active}")  # Debug log
     # Create JWT token and set cookie
     token = create_jwt({"sub": username})
     response = RedirectResponse(url="/home", status_code=302)
@@ -1582,6 +1597,7 @@ async def get_task_scale_options(
         
         result.append({
             "key": scale_key,
+        print("User is not active")  # Debug log
             "factor": scale_factor,
             "label": scale_label,
             "yield": yield_display
@@ -1661,12 +1677,16 @@ async def create_employee(
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
     
+    print("Verifying password...")  # Debug log
     hashed_password = hash_password(password)
+        print("Password verification failed")  # Debug log
     employee = User(
         full_name=full_name,
         username=username,
         hashed_password=hashed_password,
         hourly_wage=hourly_wage,
+    print("Login successful, creating JWT...")  # Debug log
+    
         work_schedule=work_schedule,
         role=role,
         is_admin=(role == "admin"),
@@ -1863,6 +1883,8 @@ async def create_vendor(
         name=name,
         contact_info=contact_info if contact_info else None
     )
+    
+    print("JWT cookie set, redirecting to /home")  # Debug log
     db.add(vendor)
     db.commit()
     
