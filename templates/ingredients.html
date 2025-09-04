@@ -23,6 +23,21 @@
                         <input type="text" class="form-control" id="name" name="name" required>
                     </div>
                     
+                    <!-- Usage Type Selection -->
+                    <div class="mb-3">
+                        <label class="form-label">Usage Type</label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="usage_type" id="weight" value="weight" checked onchange="updateAvailableUnits()">
+                                <label class="form-check-label" for="weight">Usage by Weight</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="usage_type" id="volume" value="volume" onchange="updateAvailableUnits()">
+                                <label class="form-check-label" for="volume">Usage by Volume</label>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -85,28 +100,30 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="vendor_unit_id" class="form-label">Vendor Unit</label>
-                                <div class="input-group">
-                                    <select class="form-select" id="vendor_unit_id" name="vendor_unit_id" onchange="loadVendorUnitConversions()">
+                                <select class="form-select" id="vendor_unit_id" name="vendor_unit_id">
                                         <option value="">Select Unit</option>
                                         {% for unit in vendor_units %}
                                         <option value="{{ unit.id }}">{{ unit.name }} ({{ unit.description }})</option>
                                         {% endfor %}
-                                    </select>
-                                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vendorUnitModal">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                </div>
+                                </select>
+                                <small class="text-muted">For reference only - used to help determine pricing</small>
                             </div>
                         </div>
                     </div>
                     
+                    <!-- Net Weight/Volume Section -->
+                    <h6 class="mt-3">Net Weight/Volume</h6>
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="purchase_weight_volume" class="form-label">Total Weight/Volume</label>
-                                <input type="number" class="form-control" id="purchase_weight_volume" name="purchase_weight_volume" 
-                                       step="0.01" placeholder="e.g. 25, 72, 5" required>
-                                <small class="text-muted">Total weight/volume in vendor units</small>
+                                <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
+                                           step="0.01" required onchange="calculateNetCase()">
+                                    <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase()">
+                                        <!-- Options populated by JavaScript -->
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -137,52 +154,370 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label class="form-label">Weight/Volume per Item</label>
-                                    <div class="form-control-plaintext" id="itemWeightDisplay">
-                                        <span class="text-muted">Enter items per case</span>
+                                    <label class="form-label">Net <span id="netTypeLabelCase">Weight</span> per Case</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="net_weight_volume_case" name="net_weight_volume_case" 
+                                               step="0.01" onchange="calculateNetItem()">
+                                        <span class="input-group-text" id="netUnitCase">lb</span>
                                     </div>
+                                    <small class="text-muted">Auto-calculated or enter manually</small>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Usage Level -->
-                    <h6 class="mt-3">Usage Units</h6>
-                    <div class="mb-3">
-                        <small class="text-muted">Select usage units and enter conversion factors. 
-                        <i class="fas fa-info-circle text-info" title="Conversion factors may be pre-populated based on vendor unit selection"></i>
-                        </small>
-                        <div class="input-group mb-2">
-                            <input type="text" class="form-control form-control-sm" id="newUsageUnit" placeholder="Add new usage unit">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addUsageUnit()">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
+                    <!-- Baking Measurements Conversion -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="has_baking_conversion" name="has_baking_conversion" onchange="toggleBakingConversion()">
+                        <label class="form-check-label" for="has_baking_conversion">
+                            Baking Measurements Conversion
+                        </label>
                     </div>
                     
-                    <div id="usageUnits">
-                        {% for unit in usage_units %}
-                        <div class="mb-2">
-                            <div class="input-group input-group-sm">
-                                <div class="input-group-text">
-                                    <input class="form-check-input" type="checkbox" id="unit_{{ unit.id }}" 
-                                           onchange="toggleConversion({{ unit.id }})">
+                    <div id="bakingConversionFields" style="display: none;">
+                        <h6 class="mt-3">Baking Conversion</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="baking_measurement_unit" class="form-label">Baking Measurement</label>
+                                    <select class="form-select" id="baking_measurement_unit" name="baking_measurement_unit">
+                                        <option value="cup">1 cup</option>
+                                        <option value="3/4_cup">3/4 cup</option>
+                                        <option value="2/3_cup">2/3 cup</option>
+                                        <option value="1/2_cup">1/2 cup</option>
+                                        <option value="1/3_cup">1/3 cup</option>
+                                        <option value="1/4_cup">1/4 cup</option>
+                                        <option value="1/8_cup">1/8 cup</option>
+                                        <option value="tbsp">1 tbsp</option>
+                                        <option value="tsp">1 tsp</option>
+                                    </select>
                                 </div>
-                                <span class="input-group-text">{{ unit.name }}</span>
-                                <input type="number" class="form-control" name="conversion_{{ unit.id }}" 
-                                       step="0.01" placeholder="Conversion factor" disabled>
-                                <span class="input-group-text" id="auto_{{ unit.id }}" style="display: none;">
-                                    <i class="fas fa-magic text-info" title="Auto-populated from vendor unit"></i>
-                                </span>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="baking_weight_amount" class="form-label">Equals</label>
+                                    <input type="number" class="form-control" id="baking_weight_amount" name="baking_weight_amount" step="0.01">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="baking_weight_unit" class="form-label">Weight Unit</label>
+                                    <select class="form-select" id="baking_weight_unit" name="baking_weight_unit">
+                                        <option value="oz">Ounces</option>
+                                        <option value="g">Grams</option>
+                                        <option value="lb">Pounds</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                        {% endfor %}
+                        <small class="text-muted">Example: 1 cup = 2 ounces. This allows conversion between all baking measurements.</small>
+                    </div>
+                    
+                    <!-- Preview Section -->
+                    <div class="mt-3">
+                        <h6>Cost Preview</h6>
+                        <div id="costPreview" class="alert alert-info">
+                            <small>Enter ingredient details to see cost per unit calculations</small>
+                        </div>
                     </div>
                     
                     <button type="submit" class="btn btn-success mt-3">
                         <i class="fas fa-plus"></i> Add Ingredient
                     </button>
                 </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Ingredients List</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Purchase Info</th>
+                                <th>Net Amount</th>
+                                <th>Total Cost</th>
+                                <th>Category</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ing in ingredients %}
+                            <tr>
+                                <td>
+                                    <strong>{{ ing.name }}</strong>
+                                    {% if ing.has_baking_conversion %}
+                                    <br><small class="badge bg-info">Baking</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge {% if ing.usage_type == 'weight' %}bg-success{% else %}bg-primary{% endif %}">
+                                        {{ ing.usage_type.title() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge {% if ing.purchase_type == 'case' %}bg-info{% else %}bg-secondary{% endif %}">
+                                        {{ ing.purchase_type.title() }}
+                                    </span>
+                                    <br>
+                                    <small class="text-muted">{{ ing.purchase_unit_name }}</small>
+                                </td>
+                                <td>
+                                    <small>
+                                        {% if ing.purchase_type == 'case' %}
+                                            {{ ing.net_weight_volume_case }} {{ ing.net_unit }} (case)
+                                            <br>{{ ing.net_weight_volume_item }} {{ ing.net_unit }} (item)
+                                        {% else %}
+                                            {{ ing.net_weight_volume_item }} {{ ing.net_unit }}
+                                        {% endif %}
+                                    </small>
+                                </td>
+                                <td>${{ "%.2f"|format(ing.purchase_total_cost) }}</td>
+                                <td>{{ ing.category.name if ing.category else '-' }}</td>
+                                <td>
+                                    <a href="/ingredients/{{ ing.id }}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if current_user.role == "admin" %}
+                                    <a href="/ingredients/{{ ing.id }}/edit" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="/ingredients/{{ ing.id }}/delete" class="btn btn-sm btn-danger" 
+                                       onclick="return confirm('Are you sure?')">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Category Modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/categories/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="categoryName" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="categoryName" name="name" required>
+                        <input type="hidden" name="type" value="ingredient">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Vendor Modal -->
+<div class="modal fade" id="vendorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Vendor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/vendors/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="vendorName" class="form-label">Vendor Name</label>
+                        <input type="text" class="form-control" id="vendorName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="vendorContact" class="form-label">Contact Information</label>
+                        <textarea class="form-control" id="vendorContact" name="contact_info" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Vendor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Weight and volume unit options
+const WEIGHT_UNITS = {
+    'lb': 'Pounds',
+    'oz': 'Ounces', 
+    'g': 'Grams',
+    'kg': 'Kilograms'
+};
+
+const VOLUME_UNITS = {
+    'gal': 'Gallons',
+    'qt': 'Quarts',
+    'pt': 'Pints',
+    'cup': 'Cups',
+    'fl_oz': 'Fluid Ounces',
+    'l': 'Liters',
+    'ml': 'Milliliters'
+};
+
+// Update available units based on usage type
+function updateAvailableUnits() {
+    const usageType = document.querySelector('input[name="usage_type"]:checked').value;
+    const netUnitSelect = document.getElementById('net_unit');
+    const netTypeLabel = document.getElementById('netTypeLabel');
+    const netTypeLabelCase = document.getElementById('netTypeLabelCase');
+    
+    // Update labels
+    if (usageType === 'weight') {
+        netTypeLabel.textContent = 'Weight';
+        netTypeLabelCase.textContent = 'Weight';
+    } else {
+        netTypeLabel.textContent = 'Volume';
+        netTypeLabelCase.textContent = 'Volume';
+    }
+    
+    // Clear and populate unit options
+    netUnitSelect.innerHTML = '';
+    const units = usageType === 'weight' ? WEIGHT_UNITS : VOLUME_UNITS;
+    
+    Object.entries(units).forEach(([value, label]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        netUnitSelect.appendChild(option);
+    });
+    
+    // Update case unit display
+    updateCaseUnitDisplay();
+    calculateCostPreview();
+}
+
+// Update case unit display
+function updateCaseUnitDisplay() {
+    const netUnit = document.getElementById('net_unit').value;
+    const netUnitCase = document.getElementById('netUnitCase');
+    if (netUnitCase) {
+        netUnitCase.textContent = WEIGHT_UNITS[netUnit] || VOLUME_UNITS[netUnit] || netUnit;
+    }
+}
+
+// Calculate net case from item
+function calculateNetCase() {
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    const netCaseInput = document.getElementById('net_weight_volume_case');
+    
+    if (netItem > 0 && itemsPerCase > 0) {
+        const netCase = (netItem * itemsPerCase).toFixed(2);
+        netCaseInput.value = netCase;
+    }
+    
+    calculateCostPreview();
+}
+
+// Calculate net item from case
+function calculateNetItem() {
+    const netCase = parseFloat(document.getElementById('net_weight_volume_case').value) || 0;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    const netItemInput = document.getElementById('net_weight_volume_item');
+    
+    if (netCase > 0 && itemsPerCase > 0) {
+        const netItem = (netCase / itemsPerCase).toFixed(2);
+        netItemInput.value = netItem;
+    }
+    
+    calculateCostPreview();
+}
+
+// Toggle case fields
+function toggleCaseFields() {
+    const caseRadio = document.getElementById('case');
+    const caseFields = document.getElementById('caseFields');
+    
+    if (caseRadio.checked) {
+        caseFields.style.display = 'block';
+    } else {
+        caseFields.style.display = 'none';
+    }
+    calculateCostPreview();
+}
+
+// Toggle baking conversion fields
+function toggleBakingConversion() {
+    const checkbox = document.getElementById('has_baking_conversion');
+    const fields = document.getElementById('bakingConversionFields');
+    
+    if (checkbox.checked) {
+        fields.style.display = 'block';
+    } else {
+        fields.style.display = 'none';
+    }
+}
+
+// Calculate cost preview
+function calculateCostPreview() {
+    const totalCost = parseFloat(document.getElementById('purchase_total_cost').value) || 0;
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const netCase = parseFloat(document.getElementById('net_weight_volume_case').value) || 0;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const netUnit = document.getElementById('net_unit').value;
+    const preview = document.getElementById('costPreview');
+    
+    if (totalCost > 0 && ((purchaseType === 'single' && netItem > 0) || (purchaseType === 'case' && netCase > 0))) {
+        const totalNet = purchaseType === 'case' ? netCase : netItem;
+        const costPerUnit = (totalCost / totalNet).toFixed(4);
+        const unitLabel = WEIGHT_UNITS[netUnit] || VOLUME_UNITS[netUnit] || netUnit;
+        
+        preview.innerHTML = `
+            <strong>Cost per ${unitLabel}:</strong> $${costPerUnit}<br>
+            <small class="text-muted">Total: $${totalCost.toFixed(2)} ÷ ${totalNet} ${unitLabel} = $${costPerUnit}/${netUnit}</small>
+        `;
+        preview.className = 'alert alert-success';
+    } else {
+        preview.innerHTML = '<small>Enter ingredient details to see cost per unit calculations</small>';
+        preview.className = 'alert alert-info';
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    const singleRadio = document.getElementById('single');
+    const caseRadio = document.getElementById('case');
+    
+    singleRadio.addEventListener('change', toggleCaseFields);
+    caseRadio.addEventListener('change', toggleCaseFields);
+    
+    // Initialize
+    updateAvailableUnits();
+    
+    // Add event listeners for cost calculation
+    document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_weight_volume_item').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_weight_volume_case').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_unit').addEventListener('change', function() {
+        updateCaseUnitDisplay();
+        calculateCostPreview();
+    });
+});
+</script>
+{% endblock %}
             </div>
         </div>
     </div>

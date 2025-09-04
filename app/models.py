@@ -3,22 +3,86 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from .database import Base
 
+# Standard conversion tables
+WEIGHT_CONVERSIONS = {
+    'lb': 1.0,      # Base unit: pounds
+    'oz': 16.0,     # 16 oz per lb
+    'g': 453.592,   # 453.592 g per lb
+    'kg': 0.453592, # 0.453592 kg per lb
+}
+
+VOLUME_CONVERSIONS = {
+    'gal': 1.0,     # Base unit: gallons
+    'qt': 4.0,      # 4 qt per gal
+    'pt': 8.0,      # 8 pt per gal
+    'cup': 16.0,    # 16 cups per gal
+    'fl_oz': 128.0, # 128 fl oz per gal
+    'l': 3.78541,   # 3.78541 L per gal
+    'ml': 3785.41,  # 3785.41 ml per gal
+}
+
+BAKING_MEASUREMENTS = {
+    'cup': 1.0,      # Base unit: cups
+    '3/4_cup': 0.75,
+    '2/3_cup': 0.667,
+    '1/2_cup': 0.5,
+    '1/3_cup': 0.333,
+    '1/4_cup': 0.25,
+    '1/8_cup': 0.125,
+    'tbsp': 16.0,    # 16 tbsp per cup
+    'tsp': 48.0,     # 48 tsp per cup
+}
+
+def convert_weight(amount, from_unit, to_unit):
+    """Convert between weight units"""
+    if from_unit not in WEIGHT_CONVERSIONS or to_unit not in WEIGHT_CONVERSIONS:
+        raise ValueError(f"Invalid weight units: {from_unit} or {to_unit}")
+    
+    # Convert to base unit (pounds) then to target unit
+    base_amount = amount / WEIGHT_CONVERSIONS[from_unit]
+    return round(base_amount * WEIGHT_CONVERSIONS[to_unit], 2)
+
+def convert_volume(amount, from_unit, to_unit):
+    """Convert between volume units"""
+    if from_unit not in VOLUME_CONVERSIONS or to_unit not in VOLUME_CONVERSIONS:
+        raise ValueError(f"Invalid volume units: {from_unit} or {to_unit}")
+    
+    # Convert to base unit (gallons) then to target unit
+    base_amount = amount / VOLUME_CONVERSIONS[from_unit]
+    return round(base_amount * VOLUME_CONVERSIONS[to_unit], 2)
+
+def convert_baking_measurement(amount, from_unit, to_unit, ingredient_density_oz_per_cup):
+    """Convert between baking measurements using ingredient density"""
+    if from_unit not in BAKING_MEASUREMENTS or to_unit not in BAKING_MEASUREMENTS:
+        raise ValueError(f"Invalid baking units: {from_unit} or {to_unit}")
+    
+    # Convert to base unit (cups)
+    cups = amount / BAKING_MEASUREMENTS[from_unit]
+    
+    # Convert to target unit
+    target_amount = cups * BAKING_MEASUREMENTS[to_unit]
+    
+    return round(target_amount, 2)
+
+def get_baking_weight(amount, baking_unit, ingredient_density_oz_per_cup):
+    """Convert baking measurement to weight using ingredient density"""
+    if baking_unit not in BAKING_MEASUREMENTS:
+        raise ValueError(f"Invalid baking unit: {baking_unit}")
+    
+    # Convert to cups first
+    cups = amount / BAKING_MEASUREMENTS[baking_unit]
+    
+    # Convert to weight using density
+    weight_oz = cups * ingredient_density_oz_per_cup
+    
+    return round(weight_oz, 2)
+
 class VendorUnit(Base):
     __tablename__ = "vendor_units"
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)  # lb, oz, gal, qt, etc.
     description = Column(String)  # Optional description
     created_at = Column(DateTime, default=datetime.utcnow)
-
-class VendorUnitConversion(Base):
-    __tablename__ = "vendor_unit_conversions"
-    id = Column(Integer, primary_key=True)
-    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
-    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    conversion_factor = Column(Float)  # how many usage units per vendor unit
-    
-    vendor_unit = relationship("VendorUnit")
-    usage_unit = relationship("UsageUnit")
 
 class User(Base):
     __tablename__ = "users"
@@ -47,10 +111,10 @@ class Category(Base):
     name = Column(String, unique=True)
     type = Column(String)  # 'ingredient', 'recipe', 'batch', 'dish', 'inventory'
 
-class UsageUnit(Base):
-    __tablename__ = "usage_units"
+class ParUnitName(Base):
+    __tablename__ = "par_unit_names"
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)  # lb, oz, tbsp, cup, can, etc.
+    name = Column(String, unique=True, nullable=False)  # Tub, Case, Container, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Ingredient(Base):
@@ -61,20 +125,33 @@ class Ingredient(Base):
     vendor_id = Column(Integer, ForeignKey("vendors.id"))
     vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
     
+    # New usage type system
+    usage_type = Column(String, nullable=False)  # 'weight' or 'volume'
+    
     # Purchase Level
     purchase_type = Column(String)  # 'case' or 'single'
     purchase_unit_name = Column(String)  # Case, Bag, Sack, Box (container type)
-    purchase_weight_volume = Column(Float)  # Total weight/volume in vendor units
     purchase_total_cost = Column(Float)
     breakable_case = Column(Boolean, default=False)
+    
+    # Net Weight/Volume (replaces purchase_weight_volume)
+    net_weight_volume_item = Column(Float)  # Net weight/volume per item
+    net_weight_volume_case = Column(Float)  # Net weight/volume per case (auto-calculated)
+    net_unit = Column(String)  # The unit for net weight/volume (lb, oz, gal, etc.)
     
     # Item Level (for cases)
     items_per_case = Column(Integer)
     
+    # Baking Measurements Conversion
+    has_baking_conversion = Column(Boolean, default=False)
+    baking_measurement_unit = Column(String)  # cup, tbsp, etc.
+    baking_measurement_amount = Column(Float)  # user entered amount
+    baking_weight_unit = Column(String)  # oz, g, etc.
+    baking_weight_amount = Column(Float)  # user entered weight
+    
     category = relationship("Category")
     vendor = relationship("Vendor")
     vendor_unit = relationship("VendorUnit")
-    usage_units = relationship("IngredientUsageUnit", back_populates="ingredient")
     
     @property
     def item_cost(self):
@@ -83,47 +160,64 @@ class Ingredient(Base):
         return self.purchase_total_cost
     
     @property
-    def item_weight_volume(self):
-        """Weight/volume per individual item"""
-        if self.purchase_type == 'case' and self.items_per_case and self.purchase_weight_volume:
-            return self.purchase_weight_volume / self.items_per_case
-        return self.purchase_weight_volume
+    def total_net_weight_volume(self):
+        """Total net weight/volume for the entire purchase"""
+        if self.purchase_type == 'case':
+            return self.net_weight_volume_case
+        return self.net_weight_volume_item
     
     @property
-    def item_description(self):
-        """Generate description for individual items in cases"""
-        if self.purchase_type == 'case' and self.vendor_unit and self.item_weight_volume:
-            return f"{self.item_weight_volume} {self.vendor_unit.name}"
-        return ""
-
-class IngredientUsageUnit(Base):
-    __tablename__ = "ingredient_usage_units"
-    id = Column(Integer, primary_key=True)
-    ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
-    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
-    conversion_factor = Column(Float)  # how many usage units per item/case
+    def cost_per_net_unit(self):
+        """Cost per net unit (lb, oz, gal, etc.)"""
+        if self.total_net_weight_volume and self.total_net_weight_volume > 0:
+            return round(self.purchase_total_cost / self.total_net_weight_volume, 4)
+        return 0
     
-    ingredient = relationship("Ingredient", back_populates="usage_units")
-    usage_unit = relationship("UsageUnit")
-
-    @property
-    def price_per_usage_unit(self):
-        # Get the base cost per vendor unit
-        if self.ingredient.purchase_type == 'case':
-            # For cases, use individual item cost and weight
-            base_cost = self.ingredient.item_cost
-            base_weight_volume = self.ingredient.item_weight_volume
-        else:
-            # For single items, use total cost and weight
-            base_cost = self.ingredient.purchase_total_cost
-            base_weight_volume = self.ingredient.purchase_weight_volume
+    def get_available_units(self):
+        """Get available units for this ingredient based on usage type"""
+        if self.usage_type == 'weight':
+            units = list(WEIGHT_CONVERSIONS.keys())
+        else:  # volume
+            units = list(VOLUME_CONVERSIONS.keys())
         
-        if not base_weight_volume or not self.conversion_factor:
+        # Add baking measurements if available
+        if self.has_baking_conversion:
+            units.extend(list(BAKING_MEASUREMENTS.keys()))
+        
+        return units
+    
+    def get_cost_per_unit(self, unit):
+        """Get cost per specified unit"""
+        if not self.total_net_weight_volume or self.total_net_weight_volume <= 0:
             return 0
+        
+        # Handle baking measurements
+        if unit in BAKING_MEASUREMENTS and self.has_baking_conversion:
+            # Convert from net unit to baking unit using density
+            if self.usage_type == 'weight':
+                # Convert net weight to cups using baking conversion
+                cups_per_net_unit = self.baking_measurement_amount / self.baking_weight_amount
+                if self.net_unit != 'oz':
+                    # Convert net unit to oz first
+                    net_in_oz = convert_weight(1, self.net_unit, 'oz')
+                    cups_per_net_unit = cups_per_net_unit / net_in_oz
+                
+                # Convert cups to target baking unit
+                target_per_cup = BAKING_MEASUREMENTS[unit]
+                target_per_net_unit = cups_per_net_unit * target_per_cup
+                
+                return round(self.cost_per_net_unit / target_per_net_unit, 4)
+        
+        # Handle standard weight/volume conversions
+        try:
+            if self.usage_type == 'weight':
+                conversion_factor = convert_weight(1, self.net_unit, unit)
+            else:  # volume
+                conversion_factor = convert_volume(1, self.net_unit, unit)
             
-        # Calculate cost per vendor unit, then convert to usage unit
-        cost_per_vendor_unit = base_cost / base_weight_volume
-        return cost_per_vendor_unit / self.conversion_factor
+            return round(self.cost_per_net_unit / conversion_factor, 4)
+        except ValueError:
+            return 0
 
 class Recipe(Base):
     __tablename__ = "recipes"
@@ -142,33 +236,30 @@ class RecipeIngredient(Base):
     id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
     ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
-    usage_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    unit = Column(String, nullable=False)  # Standard unit (lb, oz, cup, etc.)
     quantity = Column(Float)
     
     recipe = relationship("Recipe", back_populates="ingredients")
     ingredient = relationship("Ingredient")
-    usage_unit = relationship("UsageUnit")
     
     @property
     def cost(self):
         """Calculate the cost of this recipe ingredient"""
-        # Find the ingredient usage unit for this combination
-        ingredient_usage = None
-        for iu in self.ingredient.usage_units:
-            if iu.usage_unit_id == self.usage_unit_id:
-                ingredient_usage = iu
-                break
-        
-        if ingredient_usage:
-            return self.quantity * ingredient_usage.price_per_usage_unit
+        if self.ingredient and self.unit and self.quantity:
+            cost_per_unit = self.ingredient.get_cost_per_unit(self.unit)
+            return round(self.quantity * cost_per_unit, 2)
         return 0
 
 class Batch(Base):
     __tablename__ = "batches"
     id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    
+    # Variable yield option
+    variable_yield = Column(Boolean, default=False)
     yield_amount = Column(Float)
-    yield_unit_id = Column(Integer, ForeignKey("usage_units.id"))
+    yield_unit = Column(String)  # Standard unit (lb, oz, gal, etc.)
+    
     estimated_labor_minutes = Column(Integer)  # Average estimated time
     hourly_labor_rate = Column(Float, default=16.75)  # Configurable labor rate
     can_be_scaled = Column(Boolean, default=False)
@@ -180,12 +271,35 @@ class Batch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     recipe = relationship("Recipe")
-    yield_unit = relationship("UsageUnit")
     
     @property
     def estimated_labor_cost(self):
         """Calculate estimated labor cost based on average time and hourly rate"""
         return (self.estimated_labor_minutes / 60) * self.hourly_labor_rate
+    
+    def get_scaled_yield(self, scale_factor):
+        """Get yield amount for a specific scale factor"""
+        if self.variable_yield:
+            return None  # Variable yield batches don't have predetermined amounts
+        return round(self.yield_amount * scale_factor, 2)
+    
+    def get_available_scales(self):
+        """Get available scale options for this batch"""
+        scales = [('full', 1.0, 'Full Batch')]
+        
+        if self.can_be_scaled:
+            if self.scale_double:
+                scales.append(('double', 2.0, 'Double Batch'))
+            if self.scale_half:
+                scales.append(('half', 0.5, 'Half Batch'))
+            if self.scale_quarter:
+                scales.append(('quarter', 0.25, 'Quarter Batch'))
+            if self.scale_eighth:
+                scales.append(('eighth', 0.125, 'Eighth Batch'))
+            if self.scale_sixteenth:
+                scales.append(('sixteenth', 0.0625, 'Sixteenth Batch'))
+        
+        return scales
     
     @property
     def actual_labor_cost(self):
@@ -296,15 +410,18 @@ class DishBatchPortion(Base):
     dish_id = Column(Integer, ForeignKey("dishes.id"))
     batch_id = Column(Integer, ForeignKey("batches.id"))
     portion_size = Column(Float)
-    portion_unit_id = Column(Integer, ForeignKey("usage_units.id"), nullable=True)
+    portion_unit = Column(String)  # Standard unit
     
     batch = relationship("Batch")
-    portion_unit = relationship("UsageUnit")
     
     @property
     def cost(self):
         """Calculate the cost of this dish batch portion"""
         if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
+            # For variable yield batches, we can't calculate cost without knowing actual yield
             return 0
         
         # Calculate ingredient cost per unit
@@ -324,13 +441,25 @@ class DishBatchPortion(Base):
             total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            # If portion unit is same as yield unit, simple calculation
-            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+            # Convert portion to yield unit if different
+            if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                # For different units, assume 1:1 conversion for now
-                # In full implementation, you'd need proper unit conversion
-                return self.portion_size * cost_per_yield_unit
+                # Convert portion unit to yield unit
+                try:
+                    # Determine if we're dealing with weight or volume
+                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    else:
+                        # Can't convert, assume 1:1
+                        converted_portion = self.portion_size
+                    
+                    return converted_portion * cost_per_yield_unit
+                except ValueError:
+                    # Conversion failed, assume 1:1
+                    return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
     
@@ -338,6 +467,9 @@ class DishBatchPortion(Base):
     def expected_cost(self):
         """Calculate expected cost using estimated labor"""
         if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
             return 0
         
         # Calculate ingredient cost per unit with ESTIMATED labor
@@ -356,12 +488,20 @@ class DishBatchPortion(Base):
             total_batch_cost = total_recipe_cost + self.batch.estimated_labor_cost
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            # If portion unit is same as yield unit, simple calculation
-            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+            if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                # For different units, assume 1:1 conversion for now
-                return self.portion_size * cost_per_yield_unit
+                try:
+                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    else:
+                        converted_portion = self.portion_size
+                    
+                    return converted_portion * cost_per_yield_unit
+                except ValueError:
+                    return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
     
@@ -380,6 +520,9 @@ class DishBatchPortion(Base):
         if not self.batch or not self.portion_size:
             return 0
         
+        if self.batch.variable_yield:
+            return 0
+        
         from sqlalchemy.orm import sessionmaker
         from .database import engine
         Session = sessionmaker(bind=engine)
@@ -395,10 +538,20 @@ class DishBatchPortion(Base):
             total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_week
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+            if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                return self.portion_size * cost_per_yield_unit
+                try:
+                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    else:
+                        converted_portion = self.portion_size
+                    
+                    return converted_portion * cost_per_yield_unit
+                except ValueError:
+                    return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
     
@@ -406,6 +559,9 @@ class DishBatchPortion(Base):
     def actual_cost_month_avg(self):
         """Calculate actual cost using month average labor"""
         if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
             return 0
         
         from sqlalchemy.orm import sessionmaker
@@ -423,10 +579,20 @@ class DishBatchPortion(Base):
             total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_month
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+            if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                return self.portion_size * cost_per_yield_unit
+                try:
+                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    else:
+                        converted_portion = self.portion_size
+                    
+                    return converted_portion * cost_per_yield_unit
+                except ValueError:
+                    return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
     
@@ -434,6 +600,9 @@ class DishBatchPortion(Base):
     def actual_cost_all_time_avg(self):
         """Calculate actual cost using all-time average labor"""
         if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
             return 0
         
         from sqlalchemy.orm import sessionmaker
@@ -451,39 +620,20 @@ class DishBatchPortion(Base):
             total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
+            if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                return self.portion_size * cost_per_yield_unit
-        finally:
-            db.close()
-
-    
-    @property
-    def actual_cost_all_time_avg(self):
-        """Calculate actual cost using all-time average labor"""
-        if not self.batch or not self.portion_size:
-            return 0
-        
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import RecipeIngredient
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == self.batch.recipe_id
-            ).all()
-            
-            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
-            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
-            
-            if not self.portion_unit_id or self.portion_unit_id == self.batch.yield_unit_id:
-                return self.portion_size * cost_per_yield_unit
-            else:
-                return self.portion_size * cost_per_yield_unit
+                try:
+                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    else:
+                        converted_portion = self.portion_size
+                    
+                    return converted_portion * cost_per_yield_unit
+                except ValueError:
+                    return self.portion_size * cost_per_yield_unit
         finally:
             db.close()
 
@@ -493,10 +643,82 @@ class InventoryItem(Base):
     name = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
     batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Link to batch
+    
+    # New par unit system
+    par_unit_name_id = Column(Integer, ForeignKey("par_unit_names.id"), nullable=True)
+    par_unit_equals_type = Column(String)  # 'auto', 'par_unit_itself', 'custom'
+    par_unit_equals_amount = Column(Float)  # For custom type
+    par_unit_equals_unit = Column(String)  # For custom type
+    
     category = relationship("Category")
     batch = relationship("Batch")
+    par_unit_name = relationship("ParUnitName")
     par_level = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    @property
+    def par_unit_equals_calculated(self):
+        """Calculate par unit equals based on type and batch"""
+        if not self.batch:
+            return None
+        
+        if self.par_unit_equals_type == 'auto' and not self.batch.variable_yield:
+            # Auto: batch yield divided by par level
+            if self.par_level > 0:
+                return round(self.batch.yield_amount / self.par_level, 2)
+        elif self.par_unit_equals_type == 'par_unit_itself':
+            # Par unit itself is the amount
+            return 1.0
+        elif self.par_unit_equals_type == 'custom':
+            # Custom amount entered by user
+            return self.par_unit_equals_amount
+        
+        return None
+    
+    def convert_to_par_units(self, amount, unit):
+        """Convert an amount in given unit to par units"""
+        par_unit_equals = self.par_unit_equals_calculated
+        if not par_unit_equals:
+            return amount  # Can't convert, return as-is
+        
+        if self.par_unit_equals_type == 'par_unit_itself':
+            # Direct conversion - amount is already in par units
+            return amount
+        elif self.par_unit_equals_type == 'custom':
+            # Convert using custom conversion
+            if unit == self.par_unit_equals_unit:
+                return round(amount / par_unit_equals, 2)
+            else:
+                # Need to convert units first
+                try:
+                    if unit in WEIGHT_CONVERSIONS and self.par_unit_equals_unit in WEIGHT_CONVERSIONS:
+                        converted_amount = convert_weight(amount, unit, self.par_unit_equals_unit)
+                    elif unit in VOLUME_CONVERSIONS and self.par_unit_equals_unit in VOLUME_CONVERSIONS:
+                        converted_amount = convert_volume(amount, unit, self.par_unit_equals_unit)
+                    else:
+                        converted_amount = amount  # Can't convert
+                    
+                    return round(converted_amount / par_unit_equals, 2)
+                except ValueError:
+                    return amount
+        elif self.par_unit_equals_type == 'auto' and self.batch:
+            # Convert using batch yield unit
+            if unit == self.batch.yield_unit:
+                return round(amount / par_unit_equals, 2)
+            else:
+                try:
+                    if unit in WEIGHT_CONVERSIONS and self.batch.yield_unit in WEIGHT_CONVERSIONS:
+                        converted_amount = convert_weight(amount, unit, self.batch.yield_unit)
+                    elif unit in VOLUME_CONVERSIONS and self.batch.yield_unit in VOLUME_CONVERSIONS:
+                        converted_amount = convert_volume(amount, unit, self.batch.yield_unit)
+                    else:
+                        converted_amount = amount
+                    
+                    return round(converted_amount / par_unit_equals, 2)
+                except ValueError:
+                    return amount
+        
+        return amount
 
 class InventoryDay(Base):
     __tablename__ = "inventory_days"
@@ -535,6 +757,11 @@ class Task(Base):
     auto_generated = Column(Boolean, default=False)  # True if generated from below-par items
     is_paused = Column(Boolean, default=False)
     
+    # New fields for variable yield and scaling
+    selected_scale = Column(String)  # 'full', 'half', 'double', etc.
+    scale_factor = Column(Float, default=1.0)  # Numeric scale factor
+    made_amount = Column(Float)  # Amount made (for variable yield)
+    made_unit = Column(String)  # Unit for made amount
     assigned_to = relationship("User")
     day = relationship("InventoryDay")
     inventory_item = relationship("InventoryItem")
@@ -572,6 +799,28 @@ class Task(Base):
             return "paused"
         else:
             return "in_progress"
+    
+    @property
+    def requires_scale_selection(self):
+        """Check if task requires scale selection before starting"""
+        return (self.batch and self.batch.can_be_scaled and 
+                not self.selected_scale and self.status == "not_started")
+    
+    @property
+    def requires_made_amount(self):
+        """Check if task requires made amount input before completion"""
+        return (self.batch and self.batch.variable_yield and 
+                not self.made_amount and self.status in ["in_progress", "paused"])
+    
+    def get_actual_yield(self):
+        """Get the actual yield for this task"""
+        if self.batch:
+            if self.batch.variable_yield and self.made_amount:
+                return self.made_amount, self.made_unit
+            elif not self.batch.variable_yield and self.scale_factor:
+                scaled_yield = self.batch.get_scaled_yield(self.scale_factor)
+                return scaled_yield, self.batch.yield_unit
+        return None, None
 
 class UtilityCost(Base):
     __tablename__ = "utility_costs"
