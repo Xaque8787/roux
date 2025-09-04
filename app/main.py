@@ -1,16 +1,17 @@
 from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, or_, desc, func
 from datetime import datetime, date, timedelta
-import json
 from typing import List, Optional
+import json
 
-from .database import engine, get_db
-from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, VendorUnit, UsageUnit, VendorUnitConversion, IngredientUsageUnit, Vendor
-from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
+from .database import SessionLocal, engine
+from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, Vendor, VendorUnit, ParUnitName
+from .auth import get_current_user, require_admin, require_manager_or_admin, hash_password, create_jwt, verify_password
+from .schemas import UserCreate
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -18,6 +19,14 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+# Dependency to get database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # Helper function to check if setup is needed
 def needs_setup(db: Session):
@@ -386,12 +395,11 @@ async def create_usage_unit(
 
 # Ingredients
 @app.get("/ingredients", response_class=HTMLResponse)
-async def ingredients(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    ingredients = db.query(Ingredient).all()
+def ingredients_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).options(joinedload(Ingredient.category), joinedload(Ingredient.vendor)).all()
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
     vendor_units = db.query(VendorUnit).all()
-    usage_units = db.query(UsageUnit).all()
     
     return templates.TemplateResponse("ingredients.html", {
         "request": request,
@@ -399,59 +407,78 @@ async def ingredients(request: Request, current_user: User = Depends(get_current
         "ingredients": ingredients,
         "categories": categories,
         "vendors": vendors,
-        "vendor_units": vendor_units,
-        "usage_units": usage_units
+        "vendor_units": vendor_units
     })
 
 @app.post("/ingredients/new")
-async def create_ingredient(
+def create_ingredient(
     request: Request,
     name: str = Form(...),
+    usage_type: str = Form(...),
     category_id: Optional[int] = Form(None),
     vendor_id: Optional[int] = Form(None),
-    vendor_unit_id: Optional[int] = Form(None),
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
-    purchase_weight_volume: float = Form(...),
+    net_weight_volume_item: float = Form(...),
+    net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
+    net_weight_volume_case: Optional[float] = Form(None),
     breakable_case: bool = Form(False),
     items_per_case: Optional[int] = Form(None),
-    current_user: User = Depends(require_manager_or_admin),
+    has_baking_conversion: bool = Form(False),
+    baking_measurement_unit: Optional[str] = Form(None),
+    baking_weight_amount: Optional[float] = Form(None),
+    baking_weight_unit: Optional[str] = Form(None),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    # Create ingredient
     ingredient = Ingredient(
         name=name,
+        usage_type=usage_type,
         category_id=category_id if category_id else None,
         vendor_id=vendor_id if vendor_id else None,
-        vendor_unit_id=vendor_unit_id if vendor_unit_id else None,
         purchase_type=purchase_type,
         purchase_unit_name=purchase_unit_name,
-        purchase_weight_volume=purchase_weight_volume,
+        net_weight_volume_item=net_weight_volume_item,
+        net_unit=net_unit,
         purchase_total_cost=purchase_total_cost,
+        net_weight_volume_case=net_weight_volume_case,
         breakable_case=breakable_case,
-        items_per_case=items_per_case if purchase_type == 'case' else None
+        items_per_case=items_per_case,
+        has_baking_conversion=has_baking_conversion,
+        baking_measurement_unit=baking_measurement_unit,
+        baking_weight_amount=baking_weight_amount,
+        baking_weight_unit=baking_weight_unit
     )
+    
     db.add(ingredient)
-    db.flush()  # Get the ingredient ID
-    
-    # Process usage unit conversions
-    form_data = await request.form()
-    usage_units = db.query(UsageUnit).all()
-    
-    for usage_unit in usage_units:
-        conversion_key = f"conversion_{usage_unit.id}"
-        if conversion_key in form_data and form_data[conversion_key]:
-            conversion_factor = float(form_data[conversion_key])
-            ingredient_usage = IngredientUsageUnit(
-                ingredient_id=ingredient.id,
-                usage_unit_id=usage_unit.id,
-                conversion_factor=conversion_factor
-            )
-            db.add(ingredient_usage)
-    
     db.commit()
-    return RedirectResponse(url="/ingredients", status_code=302)
+    
+    return RedirectResponse(url="/ingredients", status_code=303)
+
+@app.get("/api/ingredients/all")
+def get_all_ingredients(db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).options(joinedload(Ingredient.category)).all()
+    
+    result = []
+    for ingredient in ingredients:
+        result.append({
+            "id": ingredient.id,
+            "name": ingredient.name,
+            "category": ingredient.category.name if ingredient.category else None,
+            "available_units": ingredient.get_available_units()
+        })
+    
+    return result
+
+@app.get("/api/ingredients/{ingredient_id}/cost_per_unit/{unit}")
+def get_ingredient_cost_per_unit(ingredient_id: int, unit: str, db: Session = Depends(get_db)):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    cost_per_unit = ingredient.get_cost_per_unit(unit)
+    return {"cost_per_unit": cost_per_unit}
 
 @app.get("/ingredients/{ingredient_id}", response_class=HTMLResponse)
 async def ingredient_detail(request: Request, ingredient_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -559,10 +586,10 @@ async def ingredient_delete(ingredient_id: int, current_user: User = Depends(req
     db.commit()
     return RedirectResponse(url="/ingredients", status_code=302)
 
-# Recipes
+# Recipe routes
 @app.get("/recipes", response_class=HTMLResponse)
-async def recipes(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    recipes = db.query(Recipe).all()
+def recipes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    recipes = db.query(Recipe).options(joinedload(Recipe.category)).all()
     categories = db.query(Category).filter(Category.type == "recipe").all()
     
     return templates.TemplateResponse("recipes.html", {
@@ -573,39 +600,50 @@ async def recipes(request: Request, current_user: User = Depends(get_current_use
     })
 
 @app.post("/recipes/new")
-async def create_recipe(
+def create_recipe(
+    request: Request,
     name: str = Form(...),
-    instructions: str = Form(""),
+    instructions: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
-    ingredients_data: str = Form("[]"),
+    ingredients_data: str = Form(...),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
-    # Create recipe
     recipe = Recipe(
         name=name,
-        instructions=instructions if instructions else None,
+        instructions=instructions,
         category_id=category_id if category_id else None
     )
+    
     db.add(recipe)
     db.flush()  # Get the recipe ID
     
-    # Process ingredients
-    try:
-        ingredients = json.loads(ingredients_data)
-        for ing_data in ingredients:
-            recipe_ingredient = RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ing_data['ingredient_id'],
-                usage_unit_id=ing_data['usage_unit_id'],
-                quantity=ing_data['quantity']
-            )
-            db.add(recipe_ingredient)
-    except (json.JSONDecodeError, KeyError):
-        pass  # Skip if invalid data
+    # Parse ingredients data
+    ingredients = json.loads(ingredients_data)
+    for ingredient_data in ingredients:
+        recipe_ingredient = RecipeIngredient(
+            recipe_id=recipe.id,
+            ingredient_id=ingredient_data['ingredient_id'],
+            unit=ingredient_data['unit'],
+            quantity=ingredient_data['quantity']
+        )
+        db.add(recipe_ingredient)
     
     db.commit()
-    return RedirectResponse(url="/recipes", status_code=302)
+    return RedirectResponse(url="/recipes", status_code=303)
+
+@app.get("/api/recipes/{recipe_id}/available_units")
+def get_recipe_available_units(recipe_id: int, db: Session = Depends(get_db)):
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == recipe_id
+    ).options(joinedload(RecipeIngredient.ingredient)).all()
+    
+    all_units = set()
+    for ri in recipe_ingredients:
+        if ri.ingredient:
+            all_units.update(ri.ingredient.get_available_units())
+    
+    return sorted(list(all_units))
 
 @app.get("/recipes/{recipe_id}", response_class=HTMLResponse)
 async def recipe_detail(request: Request, recipe_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -690,28 +728,30 @@ async def recipe_delete(recipe_id: int, current_user: User = Depends(require_adm
     db.commit()
     return RedirectResponse(url="/recipes", status_code=302)
 
-# Batches
+# Batch routes
 @app.get("/batches", response_class=HTMLResponse)
-async def batches(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    batches = db.query(Batch).all()
+def batches_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batches = db.query(Batch).options(
+        joinedload(Batch.recipe).joinedload(Recipe.category)
+    ).all()
     recipes = db.query(Recipe).all()
-    usage_units = db.query(UsageUnit).all()
     
     return templates.TemplateResponse("batches.html", {
         "request": request,
         "current_user": current_user,
         "batches": batches,
-        "recipes": recipes,
-        "usage_units": usage_units
+        "recipes": recipes
     })
 
 @app.post("/batches/new")
-async def create_batch(
+def create_batch(
+    request: Request,
     recipe_id: int = Form(...),
-    yield_amount: float = Form(...),
-    yield_unit_id: int = Form(...),
+    variable_yield: bool = Form(False),
+    yield_amount: Optional[float] = Form(None),
+    yield_unit: Optional[str] = Form(None),
     estimated_labor_minutes: int = Form(...),
-    hourly_labor_rate: float = Form(16.75),
+    hourly_labor_rate: float = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
     scale_half: bool = Form(False),
@@ -723,8 +763,9 @@ async def create_batch(
 ):
     batch = Batch(
         recipe_id=recipe_id,
+        variable_yield=variable_yield,
         yield_amount=yield_amount,
-        yield_unit_id=yield_unit_id,
+        yield_unit=yield_unit,
         estimated_labor_minutes=estimated_labor_minutes,
         hourly_labor_rate=hourly_labor_rate,
         can_be_scaled=can_be_scaled,
@@ -734,9 +775,33 @@ async def create_batch(
         scale_eighth=scale_eighth,
         scale_sixteenth=scale_sixteenth
     )
+    
     db.add(batch)
     db.commit()
-    return RedirectResponse(url="/batches", status_code=302)
+    
+    return RedirectResponse(url="/batches", status_code=303)
+
+@app.get("/api/batches/{batch_id}/available_units")
+def get_batch_available_units(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get units from recipe ingredients
+    recipe_ingredients = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == batch.recipe_id
+    ).options(joinedload(RecipeIngredient.ingredient)).all()
+    
+    all_units = set()
+    for ri in recipe_ingredients:
+        if ri.ingredient:
+            all_units.update(ri.ingredient.get_available_units())
+    
+    # Add batch yield unit if it exists
+    if batch.yield_unit:
+        all_units.add(batch.yield_unit)
+    
+    return sorted(list(all_units))
 
 @app.get("/batches/{batch_id}", response_class=HTMLResponse)
 async def batch_detail(request: Request, batch_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -993,55 +1058,86 @@ async def dish_delete(dish_id: int, current_user: User = Depends(require_admin),
     db.commit()
     return RedirectResponse(url="/dishes", status_code=302)
 
-# Inventory
+# Inventory routes
 @app.get("/inventory", response_class=HTMLResponse)
-async def inventory(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    inventory_items = db.query(InventoryItem).all()
+def inventory_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    inventory_items = db.query(InventoryItem).options(
+        joinedload(InventoryItem.category),
+        joinedload(InventoryItem.batch).joinedload(Batch.recipe),
+        joinedload(InventoryItem.par_unit_name)
+    ).all()
+    
+    batches = db.query(Batch).options(joinedload(Batch.recipe)).all()
     categories = db.query(Category).filter(Category.type == "inventory").all()
-    batches = db.query(Batch).all()
+    par_unit_names = db.query(ParUnitName).all()
     employees = db.query(User).filter(User.is_active == True).all()
     
-    # Get current day (today's inventory day if exists)
-    today = date.today()
-    current_day = db.query(InventoryDay).filter(InventoryDay.date == today).first()
+    # Get current day
+    current_day = db.query(InventoryDay).filter(
+        InventoryDay.finalized == False
+    ).order_by(InventoryDay.date.desc()).first()
     
-    # Get recent finalized days (last 30 days)
-    thirty_days_ago = today - timedelta(days=30)
+    # Get recent finalized days
     finalized_days = db.query(InventoryDay).filter(
         InventoryDay.finalized == True,
-        InventoryDay.date >= thirty_days_ago
+        InventoryDay.date >= date.today() - timedelta(days=30)
     ).order_by(InventoryDay.date.desc()).limit(10).all()
     
     return templates.TemplateResponse("inventory.html", {
         "request": request,
         "current_user": current_user,
         "inventory_items": inventory_items,
-        "categories": categories,
         "batches": batches,
+        "categories": categories,
+        "par_unit_names": par_unit_names,
         "employees": employees,
         "current_day": current_day,
         "finalized_days": finalized_days,
-        "today_date": today.isoformat()
+        "today_date": date.today().isoformat()
     })
 
 @app.post("/inventory/new_item")
-async def create_inventory_item(
+def create_inventory_item(
+    request: Request,
     name: str = Form(...),
+    par_unit_name_id: Optional[int] = Form(None),
     par_level: float = Form(...),
     batch_id: Optional[int] = Form(None),
+    par_unit_equals_type: Optional[str] = Form(None),
+    par_unit_equals_amount: Optional[float] = Form(None),
+    par_unit_equals_unit: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
     inventory_item = InventoryItem(
         name=name,
+        par_unit_name_id=par_unit_name_id if par_unit_name_id else None,
         par_level=par_level,
         batch_id=batch_id if batch_id else None,
+        par_unit_equals_type=par_unit_equals_type,
+        par_unit_equals_amount=par_unit_equals_amount,
+        par_unit_equals_unit=par_unit_equals_unit,
         category_id=category_id if category_id else None
     )
+    
     db.add(inventory_item)
     db.commit()
-    return RedirectResponse(url="/inventory", status_code=302)
+    
+    return RedirectResponse(url="/inventory", status_code=303)
+
+@app.post("/par_unit_names/new")
+def create_par_unit_name(
+    request: Request,
+    name: str = Form(...),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    par_unit_name = ParUnitName(name=name)
+    db.add(par_unit_name)
+    db.commit()
+    
+    return RedirectResponse(url="/inventory", status_code=303)
 
 @app.get("/inventory/items/{item_id}/edit", response_class=HTMLResponse)
 async def inventory_item_edit_form(request: Request, item_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -1472,6 +1568,45 @@ async def delete_utility(
     db.delete(utility)
     db.commit()
     return RedirectResponse(url="/utilities", status_code=302)
+
+# Vendor routes
+@app.post("/vendors/new")
+def create_vendor(
+    request: Request,
+    name: str = Form(...),
+    contact_info: Optional[str] = Form(None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    vendor = Vendor(name=name, contact_info=contact_info)
+    db.add(vendor)
+    db.commit()
+    
+    return RedirectResponse(url="/ingredients", status_code=303)
+
+# Category routes
+@app.post("/categories/new")
+def create_category(
+    request: Request,
+    name: str = Form(...),
+    type: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    category = Category(name=name, type=type)
+    db.add(category)
+    db.commit()
+    
+    # Redirect based on type
+    redirect_map = {
+        "ingredient": "/ingredients",
+        "recipe": "/recipes", 
+        "batch": "/batches",
+        "dish": "/dishes",
+        "inventory": "/inventory"
+    }
+    
+    return RedirectResponse(url=redirect_map.get(type, "/"), status_code=303)
 
 # API Endpoints for AJAX calls
 @app.get("/api/ingredients/all")
