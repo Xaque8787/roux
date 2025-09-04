@@ -44,7 +44,7 @@ async def setup_form(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("setup.html", {"request": request})
 
 @app.post("/setup")
-async def setup_admin(
+async def setup_admin(request: Request, db: Session = Depends(get_db)):
     request: Request,
     username: str = Form(...),
     full_name: str = Form(""),
