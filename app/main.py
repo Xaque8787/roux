@@ -1,53 +1,66 @@
 from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_, desc, func
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func
 from datetime import datetime, date, timedelta
-from typing import List, Optional
 import json
+from typing import List, Optional
 
-from .database import SessionLocal, engine
+from .database import SessionLocal, engine, get_db
 from .models import Base, User, Category, Ingredient, Recipe, RecipeIngredient, Batch, Dish, DishBatchPortion, InventoryItem, InventoryDay, InventoryDayItem, Task, UtilityCost, Vendor, VendorUnit, ParUnitName
-from .auth import get_current_user, require_admin, require_manager_or_admin, hash_password, create_jwt, verify_password
-from .schemas import UserCreate
+from .auth import hash_password, verify_password, create_jwt, get_current_user, require_admin, require_manager_or_admin, require_user_or_above
 
-# Create database tables
+# Create tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Dependency to get database session
-def get_db():
-    db = SessionLocal()
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
+    """Get current user if logged in, otherwise return None"""
     try:
-        yield db
-    finally:
-        db.close()
-
-# Helper function to check if setup is needed
-def needs_setup(db: Session):
-    return db.query(User).filter(User.role == "admin").first() is None
+        return get_current_user(request, db)
+    except HTTPException:
+        return None
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request, db: Session = Depends(get_db)):
-    if needs_setup(db):
-        return RedirectResponse(url="/setup", status_code=307)
-    return RedirectResponse(url="/home", status_code=307)
+    # Check if any users exist
+    user_count = db.query(User).count()
+    if user_count == 0:
+        return RedirectResponse(url="/setup", status_code=302)
+    
+    # Check if user is logged in
+    try:
+        current_user = get_current_user(request, db)
+        return RedirectResponse(url="/home", status_code=302)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
 
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_form(request: Request, db: Session = Depends(get_db)):
-    if not needs_setup(db):
-        return RedirectResponse(url="/home", status_code=307)
+    # Check if any users exist
+    user_count = db.query(User).count()
+    if user_count > 0:
+        return RedirectResponse(url="/login", status_code=302)
+    
     return templates.TemplateResponse("setup.html", {"request": request})
 
-@app.post("/setup", response_class=HTMLResponse)
-async def setup_admin(request: Request, username: str = Form(...), full_name: str = Form(""), password: str = Form(...), db: Session = Depends(get_db)):
-    if not needs_setup(db):
-        return RedirectResponse(url="/home", status_code=307)
+@app.post("/setup")
+async def setup_admin(
+    request: Request,
+    username: str = Form(...),
+    full_name: str = Form(""),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # Check if any users exist
+    user_count = db.query(User).count()
+    if user_count > 0:
+        return RedirectResponse(url="/login", status_code=302)
     
     # Use username as full_name if not provided
     if not full_name.strip():
@@ -57,11 +70,12 @@ async def setup_admin(request: Request, username: str = Form(...), full_name: st
     hashed_password = hash_password(password)
     admin_user = User(
         username=username,
-        full_name=full_name,
         hashed_password=hashed_password,
+        full_name=full_name,
         role="admin",
         is_admin=True,
-        is_user=True
+        is_user=True,
+        hourly_wage=20.0
     )
     db.add(admin_user)
     
@@ -72,95 +86,60 @@ async def setup_admin(request: Request, username: str = Form(...), full_name: st
         ("Dairy", "ingredient"),
         ("Grains", "ingredient"),
         ("Spices", "ingredient"),
+        ("Appetizers", "recipe"),
+        ("Entrees", "recipe"),
+        ("Desserts", "recipe"),
+        ("Prep Items", "batch"),
+        ("Sauces", "batch"),
         ("Appetizers", "dish"),
         ("Entrees", "dish"),
         ("Desserts", "dish"),
         ("Beverages", "dish"),
-        ("Prep Items", "batch"),
-        ("Sauces", "batch"),
-        ("Sides", "batch"),
-        ("Cold Storage", "inventory"),
-        ("Dry Storage", "inventory"),
-        ("Freezer", "inventory")
+        ("Prep", "inventory"),
+        ("Storage", "inventory")
     ]
     
-    for name, cat_type in default_categories:
-        existing_category = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
-        if not existing_category:
-            category = Category(name=name, type=cat_type)
+    for cat_name, cat_type in default_categories:
+        existing_cat = db.query(Category).filter(
+            and_(Category.name == cat_name, Category.type == cat_type)
+        ).first()
+        if not existing_cat:
+            category = Category(name=cat_name, type=cat_type)
             db.add(category)
     
     # Create default vendor units
     default_vendor_units = [
         ("lb", "Pound"),
         ("oz", "Ounce"),
+        ("g", "Gram"),
+        ("kg", "Kilogram"),
         ("gal", "Gallon"),
         ("qt", "Quart"),
         ("pt", "Pint"),
-        ("kg", "Kilogram"),
-        ("g", "Gram"),
-        ("L", "Liter"),
-        ("mL", "Milliliter")
+        ("cup", "Cup"),
+        ("fl_oz", "Fluid Ounce"),
+        ("l", "Liter"),
+        ("ml", "Milliliter"),
+        ("#10_can", "#10 Can"),
+        ("#5_can", "#5 Can"),
+        ("case", "Case"),
+        ("bag", "Bag"),
+        ("box", "Box")
     ]
     
-    for name, description in default_vendor_units:
-        existing_unit = db.query(VendorUnit).filter(VendorUnit.name == name).first()
+    for unit_name, unit_desc in default_vendor_units:
+        existing_unit = db.query(VendorUnit).filter(VendorUnit.name == unit_name).first()
         if not existing_unit:
-            vendor_unit = VendorUnit(name=name, description=description)
+            vendor_unit = VendorUnit(name=unit_name, description=unit_desc)
             db.add(vendor_unit)
     
-    # Create default usage units
-    default_usage_units = [
-        "lb", "oz", "cup", "tbsp", "tsp", "gal", "qt", "pt", "fl oz", 
-        "each", "can", "jar", "bag", "box", "bunch", "head", "clove", 
-        "slice", "piece", "portion", "serving"
-    ]
-    
-    for unit_name in default_usage_units:
-        existing_unit = db.query(UsageUnit).filter(UsageUnit.name == unit_name).first()
-        if not existing_unit:
-            usage_unit = UsageUnit(name=unit_name)
-            db.add(usage_unit)
-    
-    db.flush()  # Ensure units are created before conversions
-    
-    # Create some common vendor unit to usage unit conversions
-    conversions = [
-        ("lb", "lb", 1.0),
-        ("lb", "oz", 16.0),
-        ("oz", "oz", 1.0),
-        ("oz", "lb", 0.0625),
-        ("gal", "gal", 1.0),
-        ("gal", "qt", 4.0),
-        ("gal", "pt", 8.0),
-        ("gal", "cup", 16.0),
-        ("gal", "fl oz", 128.0),
-        ("qt", "qt", 1.0),
-        ("qt", "pt", 2.0),
-        ("qt", "cup", 4.0),
-        ("qt", "fl oz", 32.0),
-        ("pt", "pt", 1.0),
-        ("pt", "cup", 2.0),
-        ("pt", "fl oz", 16.0)
-    ]
-    
-    for vendor_unit_name, usage_unit_name, factor in conversions:
-        vendor_unit = db.query(VendorUnit).filter(VendorUnit.name == vendor_unit_name).first()
-        usage_unit = db.query(UsageUnit).filter(UsageUnit.name == usage_unit_name).first()
-        
-        if vendor_unit and usage_unit:
-            existing_conversion = db.query(VendorUnitConversion).filter(
-                VendorUnitConversion.vendor_unit_id == vendor_unit.id,
-                VendorUnitConversion.usage_unit_id == usage_unit.id
-            ).first()
-            
-            if not existing_conversion:
-                conversion = VendorUnitConversion(
-                    vendor_unit_id=vendor_unit.id,
-                    usage_unit_id=usage_unit.id,
-                    conversion_factor=factor
-                )
-                db.add(conversion)
+    # Create default par unit names
+    default_par_units = ["Tub", "Case", "Container", "Batch", "Portion"]
+    for par_unit_name in default_par_units:
+        existing_par_unit = db.query(ParUnitName).filter(ParUnitName.name == par_unit_name).first()
+        if not existing_par_unit:
+            par_unit = ParUnitName(name=par_unit_name)
+            db.add(par_unit)
     
     db.commit()
     
@@ -177,17 +156,20 @@ async def setup_admin(request: Request, username: str = Form(...), full_name: st
     return response
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_form(request: Request, db: Session = Depends(get_db)):
-    if needs_setup(db):
-        return RedirectResponse(url="/setup", status_code=307)
+async def login_form(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
-@app.post("/login", response_class=HTMLResponse)
-async def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+@app.post("/login")
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.hashed_password) or not user.is_active:
         return templates.TemplateResponse("login.html", {
-            "request": request, 
+            "request": request,
             "error": "Invalid username or password"
         })
     
@@ -205,7 +187,7 @@ async def login(request: Request, username: str = Form(...), password: str = For
 @app.get("/logout")
 async def logout():
     response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie("access_token")
+    response.delete_cookie(key="access_token")
     return response
 
 @app.get("/home", response_class=HTMLResponse)
@@ -215,188 +197,10 @@ async def home(request: Request, current_user: User = Depends(get_current_user))
         "current_user": current_user
     })
 
-# Employee Management (Admin only)
-@app.get("/employees", response_class=HTMLResponse)
-async def employees(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    employees = db.query(User).all()
-    return templates.TemplateResponse("employees.html", {
-        "request": request,
-        "current_user": current_user,
-        "employees": employees
-    })
-
-@app.post("/employees/new")
-async def create_employee(
-    full_name: str = Form(...),
-    username: str = Form(...),
-    password: str = Form(...),
-    hourly_wage: float = Form(...),
-    work_schedule: str = Form(""),
-    role: str = Form("user"),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    # Check if username already exists
-    existing_user = db.query(User).filter(User.username == username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    
-    hashed_password = hash_password(password)
-    new_user = User(
-        username=username,
-        full_name=full_name,
-        hashed_password=hashed_password,
-        hourly_wage=hourly_wage,
-        work_schedule=work_schedule,
-        role=role,
-        is_admin=(role == "admin"),
-        is_user=True
-    )
-    db.add(new_user)
-    db.commit()
-    return RedirectResponse(url="/employees", status_code=302)
-
-@app.get("/employees/{employee_id}", response_class=HTMLResponse)
-async def employee_detail(request: Request, employee_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    employee = db.query(User).filter(User.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    
-    return templates.TemplateResponse("employee_detail.html", {
-        "request": request,
-        "current_user": current_user,
-        "employee": employee
-    })
-
-@app.get("/employees/{employee_id}/edit", response_class=HTMLResponse)
-async def employee_edit_form(request: Request, employee_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    employee = db.query(User).filter(User.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    
-    return templates.TemplateResponse("employee_edit.html", {
-        "request": request,
-        "current_user": current_user,
-        "employee": employee
-    })
-
-@app.post("/employees/{employee_id}/edit")
-async def employee_edit(
-    employee_id: int,
-    full_name: str = Form(...),
-    username: str = Form(...),
-    password: str = Form(""),
-    hourly_wage: float = Form(...),
-    work_schedule: str = Form(""),
-    role: str = Form("user"),
-    is_active: bool = Form(False),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    employee = db.query(User).filter(User.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    
-    # Check if username is taken by another user
-    existing_user = db.query(User).filter(User.username == username, User.id != employee_id).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    
-    employee.full_name = full_name
-    employee.username = username
-    employee.hourly_wage = hourly_wage
-    employee.work_schedule = work_schedule
-    employee.role = role
-    employee.is_admin = (role == "admin")
-    employee.is_active = is_active
-    
-    if password:
-        employee.hashed_password = hash_password(password)
-    
-    db.commit()
-    return RedirectResponse(url=f"/employees/{employee_id}", status_code=302)
-
-@app.get("/employees/{employee_id}/delete")
-async def employee_delete(employee_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    employee = db.query(User).filter(User.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    
-    # Don't allow deleting yourself
-    if employee.id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-    
-    # Deactivate instead of delete to preserve task history
-    employee.is_active = False
-    db.commit()
-    return RedirectResponse(url="/employees", status_code=302)
-
-# Categories
-@app.post("/categories/new")
-async def create_category(
-    name: str = Form(...),
-    type: str = Form(...),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
-):
-    category = Category(name=name, type=type)
-    db.add(category)
-    db.commit()
-    
-    # Redirect based on type
-    if type == "ingredient":
-        return RedirectResponse(url="/ingredients", status_code=302)
-    elif type == "recipe":
-        return RedirectResponse(url="/recipes", status_code=302)
-    elif type == "dish":
-        return RedirectResponse(url="/dishes", status_code=302)
-    elif type == "inventory":
-        return RedirectResponse(url="/inventory", status_code=302)
-    else:
-        return RedirectResponse(url="/home", status_code=302)
-
-# Vendors
-@app.post("/vendors/new")
-async def create_vendor(
-    name: str = Form(...),
-    contact_info: str = Form(""),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
-):
-    vendor = Vendor(name=name, contact_info=contact_info)
-    db.add(vendor)
-    db.commit()
-    return RedirectResponse(url="/ingredients", status_code=302)
-
-# Vendor Units
-@app.post("/vendor_units/new")
-async def create_vendor_unit(
-    name: str = Form(...),
-    description: str = Form(""),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
-):
-    vendor_unit = VendorUnit(name=name, description=description)
-    db.add(vendor_unit)
-    db.commit()
-    return RedirectResponse(url="/ingredients", status_code=302)
-
-# Usage Units
-@app.post("/usage_units/new")
-async def create_usage_unit(
-    name: str = Form(...),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
-):
-    usage_unit = UsageUnit(name=name)
-    db.add(usage_unit)
-    db.commit()
-    return RedirectResponse(url="/ingredients", status_code=302)
-
 # Ingredients
 @app.get("/ingredients", response_class=HTMLResponse)
-def ingredients_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    ingredients = db.query(Ingredient).options(joinedload(Ingredient.category), joinedload(Ingredient.vendor)).all()
+async def ingredients_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).all()
     categories = db.query(Category).filter(Category.type == "ingredient").all()
     vendors = db.query(Vendor).all()
     vendor_units = db.query(VendorUnit).all()
@@ -411,20 +215,21 @@ def ingredients_page(request: Request, current_user: User = Depends(get_current_
     })
 
 @app.post("/ingredients/new")
-def create_ingredient(
+async def create_ingredient(
     request: Request,
     name: str = Form(...),
     usage_type: str = Form(...),
     category_id: Optional[int] = Form(None),
     vendor_id: Optional[int] = Form(None),
+    vendor_unit_id: Optional[int] = Form(None),
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
     net_weight_volume_item: float = Form(...),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
-    net_weight_volume_case: Optional[float] = Form(None),
     breakable_case: bool = Form(False),
     items_per_case: Optional[int] = Form(None),
+    net_weight_volume_case: Optional[float] = Form(None),
     has_baking_conversion: bool = Form(False),
     baking_measurement_unit: Optional[str] = Form(None),
     baking_weight_amount: Optional[float] = Form(None),
@@ -432,110 +237,56 @@ def create_ingredient(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
+    # Calculate net_weight_volume_case if not provided
+    if purchase_type == "case" and items_per_case and not net_weight_volume_case:
+        net_weight_volume_case = net_weight_volume_item * items_per_case
+    
     ingredient = Ingredient(
         name=name,
         usage_type=usage_type,
         category_id=category_id if category_id else None,
         vendor_id=vendor_id if vendor_id else None,
+        vendor_unit_id=vendor_unit_id if vendor_unit_id else None,
         purchase_type=purchase_type,
         purchase_unit_name=purchase_unit_name,
         net_weight_volume_item=net_weight_volume_item,
         net_unit=net_unit,
         purchase_total_cost=purchase_total_cost,
-        net_weight_volume_case=net_weight_volume_case,
         breakable_case=breakable_case,
         items_per_case=items_per_case,
+        net_weight_volume_case=net_weight_volume_case,
         has_baking_conversion=has_baking_conversion,
-        baking_measurement_unit=baking_measurement_unit,
-        baking_weight_amount=baking_weight_amount,
-        baking_weight_unit=baking_weight_unit
+        baking_measurement_unit=baking_measurement_unit if has_baking_conversion else None,
+        baking_weight_amount=baking_weight_amount if has_baking_conversion else None,
+        baking_weight_unit=baking_weight_unit if has_baking_conversion else None
     )
     
     db.add(ingredient)
     db.commit()
     
-    return RedirectResponse(url="/ingredients", status_code=303)
-
-@app.get("/api/ingredients/all")
-def get_all_ingredients(db: Session = Depends(get_db)):
-    ingredients = db.query(Ingredient).options(joinedload(Ingredient.category)).all()
-    
-    result = []
-    for ingredient in ingredients:
-        result.append({
-            "id": ingredient.id,
-            "name": ingredient.name,
-            "category": ingredient.category.name if ingredient.category else None,
-            "available_units": ingredient.get_available_units()
-        })
-    
-    return result
-
-@app.get("/api/ingredients/{ingredient_id}/cost_per_unit/{unit}")
-def get_ingredient_cost_per_unit(ingredient_id: int, unit: str, db: Session = Depends(get_db)):
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
-    if not ingredient:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
-    
-    cost_per_unit = ingredient.get_cost_per_unit(unit)
-    return {"cost_per_unit": cost_per_unit}
+    return RedirectResponse(url="/ingredients", status_code=302)
 
 @app.get("/ingredients/{ingredient_id}", response_class=HTMLResponse)
-async def ingredient_detail(request: Request, ingredient_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def ingredient_detail(
+    ingredient_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
-    
-    usage_units = db.query(IngredientUsageUnit).filter(IngredientUsageUnit.ingredient_id == ingredient_id).all()
     
     return templates.TemplateResponse("ingredient_detail.html", {
         "request": request,
         "current_user": current_user,
-        "ingredient": ingredient,
-        "usage_units": usage_units
+        "ingredient": ingredient
     })
 
 @app.get("/ingredients/{ingredient_id}/edit", response_class=HTMLResponse)
-async def ingredient_edit_form(request: Request, ingredient_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
-    if not ingredient:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
-    
-    categories = db.query(Category).filter(Category.type == "ingredient").all()
-    vendors = db.query(Vendor).all()
-    vendor_units = db.query(VendorUnit).all()
-    usage_units = db.query(UsageUnit).all()
-    
-    # Get existing conversions
-    existing_conversions = {}
-    for iu in ingredient.usage_units:
-        existing_conversions[iu.usage_unit_id] = iu.conversion_factor
-    
-    return templates.TemplateResponse("ingredient_edit.html", {
-        "request": request,
-        "current_user": current_user,
-        "ingredient": ingredient,
-        "categories": categories,
-        "vendors": vendors,
-        "vendor_units": vendor_units,
-        "usage_units": usage_units,
-        "existing_conversions": existing_conversions
-    })
-
-@app.post("/ingredients/{ingredient_id}/edit")
-async def ingredient_edit(
-    request: Request,
+async def ingredient_edit_form(
     ingredient_id: int,
-    name: str = Form(...),
-    category_id: Optional[int] = Form(None),
-    vendor_id: Optional[int] = Form(None),
-    vendor_unit_id: Optional[int] = Form(None),
-    purchase_type: str = Form(...),
-    purchase_unit_name: str = Form(...),
-    purchase_weight_volume: float = Form(...),
-    purchase_total_cost: float = Form(...),
-    breakable_case: bool = Form(False),
-    items_per_case: Optional[int] = Form(None),
+    request: Request,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -543,53 +294,123 @@ async def ingredient_edit(
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     
-    # Update ingredient
+    categories = db.query(Category).filter(Category.type == "ingredient").all()
+    vendors = db.query(Vendor).all()
+    vendor_units = db.query(VendorUnit).all()
+    
+    return templates.TemplateResponse("ingredient_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "ingredient": ingredient,
+        "categories": categories,
+        "vendors": vendors,
+        "vendor_units": vendor_units
+    })
+
+@app.post("/ingredients/{ingredient_id}/edit")
+async def update_ingredient(
+    ingredient_id: int,
+    request: Request,
+    name: str = Form(...),
+    usage_type: str = Form(...),
+    category_id: Optional[int] = Form(None),
+    vendor_id: Optional[int] = Form(None),
+    vendor_unit_id: Optional[int] = Form(None),
+    purchase_type: str = Form(...),
+    purchase_unit_name: str = Form(...),
+    net_weight_volume_item: float = Form(...),
+    net_unit: str = Form(...),
+    purchase_total_cost: float = Form(...),
+    breakable_case: bool = Form(False),
+    items_per_case: Optional[int] = Form(None),
+    net_weight_volume_case: Optional[float] = Form(None),
+    has_baking_conversion: bool = Form(False),
+    baking_measurement_unit: Optional[str] = Form(None),
+    baking_weight_amount: Optional[float] = Form(None),
+    baking_weight_unit: Optional[str] = Form(None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    # Calculate net_weight_volume_case if not provided
+    if purchase_type == "case" and items_per_case and not net_weight_volume_case:
+        net_weight_volume_case = net_weight_volume_item * items_per_case
+    
     ingredient.name = name
+    ingredient.usage_type = usage_type
     ingredient.category_id = category_id if category_id else None
     ingredient.vendor_id = vendor_id if vendor_id else None
     ingredient.vendor_unit_id = vendor_unit_id if vendor_unit_id else None
     ingredient.purchase_type = purchase_type
     ingredient.purchase_unit_name = purchase_unit_name
-    ingredient.purchase_weight_volume = purchase_weight_volume
+    ingredient.net_weight_volume_item = net_weight_volume_item
+    ingredient.net_unit = net_unit
     ingredient.purchase_total_cost = purchase_total_cost
     ingredient.breakable_case = breakable_case
-    ingredient.items_per_case = items_per_case if purchase_type == 'case' else None
-    
-    # Delete existing usage unit conversions
-    db.query(IngredientUsageUnit).filter(IngredientUsageUnit.ingredient_id == ingredient_id).delete()
-    
-    # Process new usage unit conversions
-    form_data = await request.form()
-    usage_units = db.query(UsageUnit).all()
-    
-    for usage_unit in usage_units:
-        conversion_key = f"conversion_{usage_unit.id}"
-        if conversion_key in form_data and form_data[conversion_key]:
-            conversion_factor = float(form_data[conversion_key])
-            ingredient_usage = IngredientUsageUnit(
-                ingredient_id=ingredient.id,
-                usage_unit_id=usage_unit.id,
-                conversion_factor=conversion_factor
-            )
-            db.add(ingredient_usage)
+    ingredient.items_per_case = items_per_case
+    ingredient.net_weight_volume_case = net_weight_volume_case
+    ingredient.has_baking_conversion = has_baking_conversion
+    ingredient.baking_measurement_unit = baking_measurement_unit if has_baking_conversion else None
+    ingredient.baking_weight_amount = baking_weight_amount if has_baking_conversion else None
+    ingredient.baking_weight_unit = baking_weight_unit if has_baking_conversion else None
     
     db.commit()
+    
     return RedirectResponse(url=f"/ingredients/{ingredient_id}", status_code=302)
 
 @app.get("/ingredients/{ingredient_id}/delete")
-async def ingredient_delete(ingredient_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+async def delete_ingredient(
+    ingredient_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
     ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     
     db.delete(ingredient)
     db.commit()
+    
     return RedirectResponse(url="/ingredients", status_code=302)
 
-# Recipe routes
+# API endpoint for ingredient cost per unit
+@app.get("/api/ingredients/{ingredient_id}/cost_per_unit/{unit}")
+async def get_ingredient_cost_per_unit(
+    ingredient_id: int,
+    unit: str,
+    db: Session = Depends(get_db)
+):
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    cost_per_unit = ingredient.get_cost_per_unit(unit)
+    return {"cost_per_unit": cost_per_unit}
+
+# API endpoint for all ingredients with available units
+@app.get("/api/ingredients/all")
+async def get_all_ingredients(db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).all()
+    result = []
+    
+    for ingredient in ingredients:
+        ingredient_data = {
+            "id": ingredient.id,
+            "name": ingredient.name,
+            "category": ingredient.category.name if ingredient.category else None,
+            "available_units": ingredient.get_available_units()
+        }
+        result.append(ingredient_data)
+    
+    return result
+
+# Recipes
 @app.get("/recipes", response_class=HTMLResponse)
-def recipes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    recipes = db.query(Recipe).options(joinedload(Recipe.category)).all()
+async def recipes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    recipes = db.query(Recipe).all()
     categories = db.query(Category).filter(Category.type == "recipe").all()
     
     return templates.TemplateResponse("recipes.html", {
@@ -600,10 +421,10 @@ def recipes_page(request: Request, current_user: User = Depends(get_current_user
     })
 
 @app.post("/recipes/new")
-def create_recipe(
+async def create_recipe(
     request: Request,
     name: str = Form(...),
-    instructions: Optional[str] = Form(None),
+    instructions: str = Form(""),
     category_id: Optional[int] = Form(None),
     ingredients_data: str = Form(...),
     current_user: User = Depends(require_manager_or_admin),
@@ -611,10 +432,9 @@ def create_recipe(
 ):
     recipe = Recipe(
         name=name,
-        instructions=instructions,
+        instructions=instructions if instructions else None,
         category_id=category_id if category_id else None
     )
-    
     db.add(recipe)
     db.flush()  # Get the recipe ID
     
@@ -623,30 +443,23 @@ def create_recipe(
     for ingredient_data in ingredients:
         recipe_ingredient = RecipeIngredient(
             recipe_id=recipe.id,
-            ingredient_id=ingredient_data['ingredient_id'],
-            unit=ingredient_data['unit'],
-            quantity=ingredient_data['quantity']
+            ingredient_id=ingredient_data["ingredient_id"],
+            unit=ingredient_data["unit"],
+            quantity=ingredient_data["quantity"]
         )
         db.add(recipe_ingredient)
     
     db.commit()
-    return RedirectResponse(url="/recipes", status_code=303)
-
-@app.get("/api/recipes/{recipe_id}/available_units")
-def get_recipe_available_units(recipe_id: int, db: Session = Depends(get_db)):
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == recipe_id
-    ).options(joinedload(RecipeIngredient.ingredient)).all()
     
-    all_units = set()
-    for ri in recipe_ingredients:
-        if ri.ingredient:
-            all_units.update(ri.ingredient.get_available_units())
-    
-    return sorted(list(all_units))
+    return RedirectResponse(url="/recipes", status_code=302)
 
 @app.get("/recipes/{recipe_id}", response_class=HTMLResponse)
-async def recipe_detail(request: Request, recipe_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def recipe_detail(
+    recipe_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
@@ -663,7 +476,12 @@ async def recipe_detail(request: Request, recipe_id: int, current_user: User = D
     })
 
 @app.get("/recipes/{recipe_id}/edit", response_class=HTMLResponse)
-async def recipe_edit_form(request: Request, recipe_id: int, current_user: User = Depends(require_manager_or_admin), db: Session = Depends(get_db)):
+async def recipe_edit_form(
+    recipe_id: int,
+    request: Request,
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
@@ -680,12 +498,13 @@ async def recipe_edit_form(request: Request, recipe_id: int, current_user: User 
     })
 
 @app.post("/recipes/{recipe_id}/edit")
-async def recipe_edit(
+async def update_recipe(
     recipe_id: int,
+    request: Request,
     name: str = Form(...),
     instructions: str = Form(""),
     category_id: Optional[int] = Form(None),
-    ingredients_data: str = Form("[]"),
+    ingredients_data: str = Form(...),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
@@ -693,47 +512,64 @@ async def recipe_edit(
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     
-    # Update recipe
     recipe.name = name
     recipe.instructions = instructions if instructions else None
     recipe.category_id = category_id if category_id else None
     
-    # Delete existing ingredients
+    # Delete existing recipe ingredients
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
     
-    # Process new ingredients
-    try:
-        ingredients = json.loads(ingredients_data)
-        for ing_data in ingredients:
-            recipe_ingredient = RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ing_data['ingredient_id'],
-                usage_unit_id=ing_data['usage_unit_id'],
-                quantity=ing_data['quantity']
-            )
-            db.add(recipe_ingredient)
-    except (json.JSONDecodeError, KeyError):
-        pass  # Skip if invalid data
+    # Add new recipe ingredients
+    ingredients = json.loads(ingredients_data)
+    for ingredient_data in ingredients:
+        recipe_ingredient = RecipeIngredient(
+            recipe_id=recipe.id,
+            ingredient_id=ingredient_data["ingredient_id"],
+            unit=ingredient_data["unit"],
+            quantity=ingredient_data["quantity"]
+        )
+        db.add(recipe_ingredient)
     
     db.commit()
+    
     return RedirectResponse(url=f"/recipes/{recipe_id}", status_code=302)
 
 @app.get("/recipes/{recipe_id}/delete")
-async def recipe_delete(recipe_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+async def delete_recipe(
+    recipe_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     
+    # Delete recipe ingredients first
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
     db.delete(recipe)
     db.commit()
+    
     return RedirectResponse(url="/recipes", status_code=302)
 
-# Batch routes
+# API endpoint for recipe available units
+@app.get("/api/recipes/{recipe_id}/available_units")
+async def get_recipe_available_units(
+    recipe_id: int,
+    db: Session = Depends(get_db)
+):
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
+    
+    all_units = set()
+    for ri in recipe_ingredients:
+        if ri.ingredient:
+            all_units.update(ri.ingredient.get_available_units())
+    
+    return list(all_units)
+
+# Batches
 @app.get("/batches", response_class=HTMLResponse)
-def batches_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    batches = db.query(Batch).options(
-        joinedload(Batch.recipe).joinedload(Recipe.category)
-    ).all()
+async def batches_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    batches = db.query(Batch).all()
     recipes = db.query(Recipe).all()
     
     return templates.TemplateResponse("batches.html", {
@@ -744,7 +580,7 @@ def batches_page(request: Request, current_user: User = Depends(get_current_user
     })
 
 @app.post("/batches/new")
-def create_batch(
+async def create_batch(
     request: Request,
     recipe_id: int = Form(...),
     variable_yield: bool = Form(False),
@@ -764,47 +600,30 @@ def create_batch(
     batch = Batch(
         recipe_id=recipe_id,
         variable_yield=variable_yield,
-        yield_amount=yield_amount,
-        yield_unit=yield_unit,
+        yield_amount=yield_amount if not variable_yield else None,
+        yield_unit=yield_unit if not variable_yield else None,
         estimated_labor_minutes=estimated_labor_minutes,
         hourly_labor_rate=hourly_labor_rate,
         can_be_scaled=can_be_scaled,
-        scale_double=scale_double,
-        scale_half=scale_half,
-        scale_quarter=scale_quarter,
-        scale_eighth=scale_eighth,
-        scale_sixteenth=scale_sixteenth
+        scale_double=scale_double if can_be_scaled else False,
+        scale_half=scale_half if can_be_scaled else False,
+        scale_quarter=scale_quarter if can_be_scaled else False,
+        scale_eighth=scale_eighth if can_be_scaled else False,
+        scale_sixteenth=scale_sixteenth if can_be_scaled else False
     )
     
     db.add(batch)
     db.commit()
     
-    return RedirectResponse(url="/batches", status_code=303)
-
-@app.get("/api/batches/{batch_id}/available_units")
-def get_batch_available_units(batch_id: int, db: Session = Depends(get_db)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Get units from recipe ingredients
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == batch.recipe_id
-    ).options(joinedload(RecipeIngredient.ingredient)).all()
-    
-    all_units = set()
-    for ri in recipe_ingredients:
-        if ri.ingredient:
-            all_units.update(ri.ingredient.get_available_units())
-    
-    # Add batch yield unit if it exists
-    if batch.yield_unit:
-        all_units.add(batch.yield_unit)
-    
-    return sorted(list(all_units))
+    return RedirectResponse(url="/batches", status_code=302)
 
 @app.get("/batches/{batch_id}", response_class=HTMLResponse)
-async def batch_detail(request: Request, batch_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def batch_detail(
+    batch_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
@@ -812,7 +631,10 @@ async def batch_detail(request: Request, batch_id: int, current_user: User = Dep
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
     total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-    cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
+    
+    cost_per_yield_unit = 0
+    if not batch.variable_yield and batch.yield_amount and batch.yield_amount > 0:
+        cost_per_yield_unit = total_batch_cost / batch.yield_amount
     
     return templates.TemplateResponse("batch_detail.html", {
         "request": request,
@@ -825,30 +647,35 @@ async def batch_detail(request: Request, batch_id: int, current_user: User = Dep
     })
 
 @app.get("/batches/{batch_id}/edit", response_class=HTMLResponse)
-async def batch_edit_form(request: Request, batch_id: int, current_user: User = Depends(require_manager_or_admin), db: Session = Depends(get_db)):
+async def batch_edit_form(
+    batch_id: int,
+    request: Request,
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
     recipes = db.query(Recipe).all()
-    usage_units = db.query(UsageUnit).all()
     
     return templates.TemplateResponse("batch_edit.html", {
         "request": request,
         "current_user": current_user,
         "batch": batch,
-        "recipes": recipes,
-        "usage_units": usage_units
+        "recipes": recipes
     })
 
 @app.post("/batches/{batch_id}/edit")
-async def batch_edit(
+async def update_batch(
     batch_id: int,
+    request: Request,
     recipe_id: int = Form(...),
-    yield_amount: float = Form(...),
-    yield_unit_id: int = Form(...),
+    variable_yield: bool = Form(False),
+    yield_amount: Optional[float] = Form(None),
+    yield_unit: Optional[str] = Form(None),
     estimated_labor_minutes: int = Form(...),
-    hourly_labor_rate: float = Form(16.75),
+    hourly_labor_rate: float = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
     scale_half: bool = Form(False),
@@ -863,33 +690,174 @@ async def batch_edit(
         raise HTTPException(status_code=404, detail="Batch not found")
     
     batch.recipe_id = recipe_id
-    batch.yield_amount = yield_amount
-    batch.yield_unit_id = yield_unit_id
+    batch.variable_yield = variable_yield
+    batch.yield_amount = yield_amount if not variable_yield else None
+    batch.yield_unit = yield_unit if not variable_yield else None
     batch.estimated_labor_minutes = estimated_labor_minutes
     batch.hourly_labor_rate = hourly_labor_rate
     batch.can_be_scaled = can_be_scaled
-    batch.scale_double = scale_double
-    batch.scale_half = scale_half
-    batch.scale_quarter = scale_quarter
-    batch.scale_eighth = scale_eighth
-    batch.scale_sixteenth = scale_sixteenth
+    batch.scale_double = scale_double if can_be_scaled else False
+    batch.scale_half = scale_half if can_be_scaled else False
+    batch.scale_quarter = scale_quarter if can_be_scaled else False
+    batch.scale_eighth = scale_eighth if can_be_scaled else False
+    batch.scale_sixteenth = scale_sixteenth if can_be_scaled else False
     
     db.commit()
+    
     return RedirectResponse(url=f"/batches/{batch_id}", status_code=302)
 
 @app.get("/batches/{batch_id}/delete")
-async def batch_delete(batch_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+async def delete_batch(
+    batch_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
     db.delete(batch)
     db.commit()
+    
     return RedirectResponse(url="/batches", status_code=302)
+
+# API endpoints for batches
+@app.get("/api/batches/all")
+async def get_all_batches(db: Session = Depends(get_db)):
+    batches = db.query(Batch).all()
+    result = []
+    
+    for batch in batches:
+        # Calculate cost per unit
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+        
+        cost_per_unit = 0
+        if not batch.variable_yield and batch.yield_amount and batch.yield_amount > 0:
+            cost_per_unit = total_batch_cost / batch.yield_amount
+        
+        batch_data = {
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "category": batch.recipe.category.name if batch.recipe.category else None,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit,
+            "cost_per_unit": cost_per_unit,
+            "variable_yield": batch.variable_yield
+        }
+        result.append(batch_data)
+    
+    return result
+
+@app.get("/api/batches/search")
+async def search_batches(q: str, db: Session = Depends(get_db)):
+    batches = db.query(Batch).join(Recipe).filter(
+        or_(
+            Recipe.name.ilike(f"%{q}%"),
+            Recipe.category.has(Category.name.ilike(f"%{q}%"))
+        )
+    ).all()
+    
+    result = []
+    for batch in batches:
+        # Calculate cost per unit
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+        
+        cost_per_unit = 0
+        if not batch.variable_yield and batch.yield_amount and batch.yield_amount > 0:
+            cost_per_unit = total_batch_cost / batch.yield_amount
+        
+        batch_data = {
+            "id": batch.id,
+            "recipe_name": batch.recipe.name,
+            "category": batch.recipe.category.name if batch.recipe.category else None,
+            "yield_amount": batch.yield_amount,
+            "yield_unit": batch.yield_unit,
+            "cost_per_unit": cost_per_unit,
+            "variable_yield": batch.variable_yield
+        }
+        result.append(batch_data)
+    
+    return result
+
+@app.get("/api/batches/{batch_id}/available_units")
+async def get_batch_available_units(
+    batch_id: int,
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get all units from recipe ingredients
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+    
+    all_units = set()
+    for ri in recipe_ingredients:
+        if ri.ingredient:
+            all_units.update(ri.ingredient.get_available_units())
+    
+    # Add batch yield unit if it exists
+    if batch.yield_unit:
+        all_units.add(batch.yield_unit)
+    
+    return list(all_units)
+
+@app.get("/api/batches/{batch_id}/labor_stats")
+async def get_batch_labor_stats(
+    batch_id: int,
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get completed tasks for this batch
+    completed_tasks = db.query(Task).filter(
+        Task.batch_id == batch_id,
+        Task.finished_at.isnot(None)
+    ).all()
+    
+    if not completed_tasks:
+        return {
+            "task_count": 0,
+            "most_recent_cost": batch.estimated_labor_cost,
+            "most_recent_date": None,
+            "average_week": batch.estimated_labor_cost,
+            "average_month": batch.estimated_labor_cost,
+            "average_all_time": batch.estimated_labor_cost,
+            "week_task_count": 0,
+            "month_task_count": 0
+        }
+    
+    # Most recent task
+    most_recent = max(completed_tasks, key=lambda t: t.finished_at)
+    
+    # Time-based filtering
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
+    month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
+    
+    return {
+        "task_count": len(completed_tasks),
+        "most_recent_cost": most_recent.labor_cost,
+        "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
+        "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else batch.estimated_labor_cost,
+        "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else batch.estimated_labor_cost,
+        "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
+        "week_task_count": len(week_tasks),
+        "month_task_count": len(month_tasks)
+    }
 
 # Dishes
 @app.get("/dishes", response_class=HTMLResponse)
-async def dishes(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def dishes_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     dishes = db.query(Dish).all()
     categories = db.query(Category).filter(Category.type == "dish").all()
     
@@ -902,15 +870,15 @@ async def dishes(request: Request, current_user: User = Depends(get_current_user
 
 @app.post("/dishes/new")
 async def create_dish(
+    request: Request,
     name: str = Form(...),
     category_id: Optional[int] = Form(None),
     sale_price: float = Form(...),
     description: str = Form(""),
-    batch_portions_data: str = Form("[]"),
+    batch_portions_data: str = Form(...),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
-    # Create dish
     dish = Dish(
         name=name,
         category_id=category_id if category_id else None,
@@ -920,25 +888,28 @@ async def create_dish(
     db.add(dish)
     db.flush()  # Get the dish ID
     
-    # Process batch portions
-    try:
-        batch_portions = json.loads(batch_portions_data)
-        for portion_data in batch_portions:
-            dish_batch_portion = DishBatchPortion(
-                dish_id=dish.id,
-                batch_id=portion_data['batch_id'],
-                portion_size=portion_data['portion_size'],
-                portion_unit_id=portion_data.get('portion_unit_id')
-            )
-            db.add(dish_batch_portion)
-    except (json.JSONDecodeError, KeyError):
-        pass  # Skip if invalid data
+    # Parse batch portions data
+    batch_portions = json.loads(batch_portions_data)
+    for portion_data in batch_portions:
+        dish_batch_portion = DishBatchPortion(
+            dish_id=dish.id,
+            batch_id=portion_data["batch_id"],
+            portion_size=portion_data["portion_size"],
+            portion_unit=portion_data["portion_unit_name"]
+        )
+        db.add(dish_batch_portion)
     
     db.commit()
+    
     return RedirectResponse(url="/dishes", status_code=302)
 
 @app.get("/dishes/{dish_id}", response_class=HTMLResponse)
-async def dish_detail(request: Request, dish_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def dish_detail(
+    dish_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     dish = db.query(Dish).filter(Dish.id == dish_id).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
@@ -991,7 +962,12 @@ async def dish_detail(request: Request, dish_id: int, current_user: User = Depen
     })
 
 @app.get("/dishes/{dish_id}/edit", response_class=HTMLResponse)
-async def dish_edit_form(request: Request, dish_id: int, current_user: User = Depends(require_manager_or_admin), db: Session = Depends(get_db)):
+async def dish_edit_form(
+    dish_id: int,
+    request: Request,
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
     dish = db.query(Dish).filter(Dish.id == dish_id).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
@@ -1008,13 +984,14 @@ async def dish_edit_form(request: Request, dish_id: int, current_user: User = De
     })
 
 @app.post("/dishes/{dish_id}/edit")
-async def dish_edit(
+async def update_dish(
     dish_id: int,
+    request: Request,
     name: str = Form(...),
     category_id: Optional[int] = Form(None),
     sale_price: float = Form(...),
     description: str = Form(""),
-    batch_portions_data: str = Form("[]"),
+    batch_portions_data: str = Form(...),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
@@ -1022,7 +999,6 @@ async def dish_edit(
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
     
-    # Update dish
     dish.name = name
     dish.category_id = category_id if category_id else None
     dish.sale_price = sale_price
@@ -1031,73 +1007,76 @@ async def dish_edit(
     # Delete existing batch portions
     db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
     
-    # Process new batch portions
-    try:
-        batch_portions = json.loads(batch_portions_data)
-        for portion_data in batch_portions:
-            dish_batch_portion = DishBatchPortion(
-                dish_id=dish.id,
-                batch_id=portion_data['batch_id'],
-                portion_size=portion_data['portion_size'],
-                portion_unit_id=portion_data.get('portion_unit_id')
-            )
-            db.add(dish_batch_portion)
-    except (json.JSONDecodeError, KeyError):
-        pass  # Skip if invalid data
+    # Add new batch portions
+    batch_portions = json.loads(batch_portions_data)
+    for portion_data in batch_portions:
+        dish_batch_portion = DishBatchPortion(
+            dish_id=dish.id,
+            batch_id=portion_data["batch_id"],
+            portion_size=portion_data["portion_size"],
+            portion_unit=portion_data["portion_unit_name"]
+        )
+        db.add(dish_batch_portion)
     
     db.commit()
+    
     return RedirectResponse(url=f"/dishes/{dish_id}", status_code=302)
 
 @app.get("/dishes/{dish_id}/delete")
-async def dish_delete(dish_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+async def delete_dish(
+    dish_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
     dish = db.query(Dish).filter(Dish.id == dish_id).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
     
+    # Delete dish batch portions first
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
     db.delete(dish)
     db.commit()
+    
     return RedirectResponse(url="/dishes", status_code=302)
 
-# Inventory routes
+# Inventory
 @app.get("/inventory", response_class=HTMLResponse)
-def inventory_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    inventory_items = db.query(InventoryItem).options(
-        joinedload(InventoryItem.category),
-        joinedload(InventoryItem.batch).joinedload(Batch.recipe),
-        joinedload(InventoryItem.par_unit_name)
-    ).all()
-    
-    batches = db.query(Batch).options(joinedload(Batch.recipe)).all()
+async def inventory_page(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    inventory_items = db.query(InventoryItem).all()
     categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).all()
     par_unit_names = db.query(ParUnitName).all()
     employees = db.query(User).filter(User.is_active == True).all()
     
     # Get current day
+    today = date.today()
     current_day = db.query(InventoryDay).filter(
+        InventoryDay.date == today,
         InventoryDay.finalized == False
-    ).order_by(InventoryDay.date.desc()).first()
+    ).first()
     
     # Get recent finalized days
+    thirty_days_ago = today - timedelta(days=30)
     finalized_days = db.query(InventoryDay).filter(
-        InventoryDay.finalized == True,
-        InventoryDay.date >= date.today() - timedelta(days=30)
+        InventoryDay.date >= thirty_days_ago,
+        InventoryDay.finalized == True
     ).order_by(InventoryDay.date.desc()).limit(10).all()
     
     return templates.TemplateResponse("inventory.html", {
         "request": request,
         "current_user": current_user,
         "inventory_items": inventory_items,
-        "batches": batches,
         "categories": categories,
+        "batches": batches,
         "par_unit_names": par_unit_names,
         "employees": employees,
         "current_day": current_day,
         "finalized_days": finalized_days,
-        "today_date": date.today().isoformat()
+        "today_date": today.isoformat()
     })
 
 @app.post("/inventory/new_item")
-def create_inventory_item(
+async def create_inventory_item(
     request: Request,
     name: str = Form(...),
     par_unit_name_id: Optional[int] = Form(None),
@@ -1124,93 +1103,27 @@ def create_inventory_item(
     db.add(inventory_item)
     db.commit()
     
-    return RedirectResponse(url="/inventory", status_code=303)
-
-@app.post("/par_unit_names/new")
-def create_par_unit_name(
-    request: Request,
-    name: str = Form(...),
-    current_user: User = Depends(require_manager_or_admin),
-    db: Session = Depends(get_db)
-):
-    par_unit_name = ParUnitName(name=name)
-    db.add(par_unit_name)
-    db.commit()
-    
-    return RedirectResponse(url="/inventory", status_code=303)
-
-@app.get("/inventory/items/{item_id}/edit", response_class=HTMLResponse)
-async def inventory_item_edit_form(request: Request, item_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
-    
-    categories = db.query(Category).filter(Category.type == "inventory").all()
-    batches = db.query(Batch).all()
-    
-    return templates.TemplateResponse("inventory_item_edit.html", {
-        "request": request,
-        "current_user": current_user,
-        "item": item,
-        "categories": categories,
-        "batches": batches
-    })
-
-@app.post("/inventory/items/{item_id}/edit")
-async def inventory_item_edit(
-    item_id: int,
-    name: str = Form(...),
-    par_level: float = Form(...),
-    batch_id: Optional[int] = Form(None),
-    category_id: Optional[int] = Form(None),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
-    
-    item.name = name
-    item.par_level = par_level
-    item.batch_id = batch_id if batch_id else None
-    item.category_id = category_id if category_id else None
-    
-    db.commit()
-    return RedirectResponse(url="/inventory", status_code=302)
-
-@app.get("/inventory/items/{item_id}/delete")
-async def inventory_item_delete(item_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
-    
-    db.delete(item)
-    db.commit()
     return RedirectResponse(url="/inventory", status_code=302)
 
 @app.post("/inventory/new_day")
 async def create_inventory_day(
     request: Request,
-    date: date = Form(...),
-    employees_working: List[int] = Form([]),
+    date: str = Form(...),
+    employees_working: List[str] = Form([]),
     global_notes: str = Form(""),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
+    inventory_date = datetime.strptime(date, "%Y-%m-%d").date()
+    
     # Check if day already exists
-    existing_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date).first()
     if existing_day:
         return RedirectResponse(url=f"/inventory/day/{existing_day.id}", status_code=302)
     
-    # Get employees_working from form data
-    form_data = await request.form()
-    employee_ids = form_data.getlist("employees_working")
-    employees_working_str = ",".join(employee_ids)
-    
-    # Create inventory day
     inventory_day = InventoryDay(
-        date=date,
-        employees_working=employees_working_str,
+        date=inventory_date,
+        employees_working=",".join(employees_working) if employees_working else "",
         global_notes=global_notes if global_notes else None
     )
     db.add(inventory_day)
@@ -1219,24 +1132,30 @@ async def create_inventory_day(
     # Create inventory day items for all inventory items
     inventory_items = db.query(InventoryItem).all()
     for item in inventory_items:
-        day_item = InventoryDayItem(
+        inventory_day_item = InventoryDayItem(
             day_id=inventory_day.id,
             inventory_item_id=item.id,
-            quantity=0  # Default to 0, will be updated by user
+            quantity=0.0
         )
-        db.add(day_item)
+        db.add(inventory_day_item)
     
     db.commit()
+    
     return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
 
 @app.get("/inventory/day/{day_id}", response_class=HTMLResponse)
-async def inventory_day_detail(request: Request, day_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def inventory_day_page(
+    day_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
-    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
     employees = db.query(User).filter(User.is_active == True).all()
     
     return templates.TemplateResponse("inventory_day.html", {
@@ -1250,8 +1169,8 @@ async def inventory_day_detail(request: Request, day_id: int, current_user: User
 
 @app.post("/inventory/day/{day_id}/update")
 async def update_inventory_day(
-    request: Request,
     day_id: int,
+    request: Request,
     global_notes: str = Form(""),
     current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
@@ -1260,13 +1179,12 @@ async def update_inventory_day(
     if not inventory_day or inventory_day.finalized:
         raise HTTPException(status_code=404, detail="Inventory day not found or finalized")
     
-    # Update global notes
     inventory_day.global_notes = global_notes if global_notes else None
     
     # Get form data
     form_data = await request.form()
     
-    # Update inventory quantities
+    # Update inventory quantities and overrides
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
     for item in inventory_day_items:
         quantity_key = f"item_{item.inventory_item.id}"
@@ -1279,32 +1197,277 @@ async def update_inventory_day(
         item.override_create_task = override_create_key in form_data
         item.override_no_task = override_no_task_key in form_data
     
-    # Generate tasks for below-par items
+    # Delete existing auto-generated tasks
+    db.query(Task).filter(Task.day_id == day_id, Task.auto_generated == True).delete()
+    
+    # Generate new tasks based on inventory levels
     for item in inventory_day_items:
-        is_below_par = item.quantity <= item.inventory_item.par_level
-        should_create_task = (is_below_par and not item.override_no_task) or item.override_create_task
+        should_create_task = False
+        
+        if item.override_create_task:
+            should_create_task = True
+        elif not item.override_no_task and item.quantity <= item.inventory_item.par_level:
+            should_create_task = True
         
         if should_create_task:
-            # Check if task already exists for this item
-            existing_task = db.query(Task).filter(
-                Task.day_id == day_id,
-                Task.inventory_item_id == item.inventory_item.id,
-                Task.auto_generated == True
-            ).first()
-            
-            if not existing_task:
-                task_description = f"Prep {item.inventory_item.name} (Below Par: {item.quantity}/{item.inventory_item.par_level})"
-                task = Task(
-                    day_id=day_id,
-                    inventory_item_id=item.inventory_item.id,
-                    batch_id=item.inventory_item.batch_id,  # Link to batch if available
-                    description=task_description,
-                    auto_generated=True
-                )
-                db.add(task)
+            task = Task(
+                day_id=day_id,
+                inventory_item_id=item.inventory_item.id,
+                batch_id=item.inventory_item.batch_id,
+                description=f"Prep {item.inventory_item.name}",
+                auto_generated=True
+            )
+            db.add(task)
     
     db.commit()
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/new")
+async def create_manual_task(
+    day_id: int,
+    request: Request,
+    assigned_to_ids: List[str] = Form([]),
+    inventory_item_id: Optional[int] = Form(None),
+    description: str = Form(...),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day or inventory_day.finalized:
+        raise HTTPException(status_code=404, detail="Inventory day not found or finalized")
+    
+    # Create tasks for each assigned employee or one unassigned task
+    if assigned_to_ids:
+        for assigned_to_id in assigned_to_ids:
+            task = Task(
+                day_id=day_id,
+                assigned_to_id=int(assigned_to_id),
+                inventory_item_id=inventory_item_id if inventory_item_id else None,
+                description=description,
+                auto_generated=False
+            )
+            # Set batch_id from inventory item if available
+            if inventory_item_id:
+                inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+                if inventory_item and inventory_item.batch_id:
+                    task.batch_id = inventory_item.batch_id
+            db.add(task)
+    else:
+        # Create unassigned task
+        task = Task(
+            day_id=day_id,
+            inventory_item_id=inventory_item_id if inventory_item_id else None,
+            description=description,
+            auto_generated=False
+        )
+        # Set batch_id from inventory item if available
+        if inventory_item_id:
+            inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+            if inventory_item and inventory_item.batch_id:
+                task.batch_id = inventory_item.batch_id
+        db.add(task)
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/assign")
+async def assign_task(
+    day_id: int,
+    task_id: int,
+    assigned_to_id: int = Form(...),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.assigned_to_id = assigned_to_id
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/start")
+async def start_task(
+    day_id: int,
+    task_id: int,
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.started_at:
+        raise HTTPException(status_code=400, detail="Task already started")
+    
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/start_with_scale")
+async def start_task_with_scale(
+    day_id: int,
+    task_id: int,
+    selected_scale: str = Form(...),
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.started_at:
+        raise HTTPException(status_code=400, detail="Task already started")
+    
+    # Set scale information
+    scale_factors = {
+        'full': 1.0,
+        'double': 2.0,
+        'half': 0.5,
+        'quarter': 0.25,
+        'eighth': 0.125,
+        'sixteenth': 0.0625
+    }
+    
+    task.selected_scale = selected_scale
+    task.scale_factor = scale_factors.get(selected_scale, 1.0)
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/pause")
+async def pause_task(
+    day_id: int,
+    task_id: int,
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if not task.started_at or task.finished_at:
+        raise HTTPException(status_code=400, detail="Task not in progress")
+    
+    task.paused_at = datetime.utcnow()
+    task.is_paused = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/resume")
+async def resume_task(
+    day_id: int,
+    task_id: int,
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if not task.is_paused or not task.paused_at:
+        raise HTTPException(status_code=400, detail="Task not paused")
+    
+    # Add pause time to total
+    pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+    task.total_pause_time += int(pause_duration)
+    task.paused_at = None
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/finish")
+async def finish_task(
+    day_id: int,
+    task_id: int,
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if not task.started_at or task.finished_at:
+        raise HTTPException(status_code=400, detail="Task not started or already finished")
+    
+    task.finished_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/finish_with_amount")
+async def finish_task_with_amount(
+    day_id: int,
+    task_id: int,
+    made_amount: float = Form(...),
+    made_unit: str = Form(...),
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if not task.started_at or task.finished_at:
+        raise HTTPException(status_code=400, detail="Task not started or already finished")
+    
+    task.made_amount = made_amount
+    task.made_unit = made_unit
+    task.finished_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.get("/inventory/day/{day_id}/tasks/{task_id}", response_class=HTMLResponse)
+async def task_detail(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    return templates.TemplateResponse("task_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "task": task,
+        "inventory_day": inventory_day,
+        "employees": employees
+    })
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/notes")
+async def update_task_notes(
+    day_id: int,
+    task_id: int,
+    notes: str = Form(""),
+    current_user: User = Depends(require_user_or_above),
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.notes = notes if notes else None
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
 
 @app.post("/inventory/day/{day_id}/finalize")
 async def finalize_inventory_day(
@@ -1318,10 +1481,16 @@ async def finalize_inventory_day(
     
     inventory_day.finalized = True
     db.commit()
+    
     return RedirectResponse(url=f"/inventory/reports/{day_id}", status_code=302)
 
 @app.get("/inventory/reports/{day_id}", response_class=HTMLResponse)
-async def inventory_report(request: Request, day_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def inventory_report(
+    day_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
@@ -1347,267 +1516,279 @@ async def inventory_report(request: Request, day_id: int, current_user: User = D
         "below_par_items": below_par_items
     })
 
-# Task Management
-@app.post("/inventory/day/{day_id}/tasks/new")
-async def create_task(
+@app.get("/inventory/items/{item_id}/edit", response_class=HTMLResponse)
+async def inventory_item_edit_form(
+    item_id: int,
     request: Request,
-    day_id: int,
-    description: str = Form(...),
-    inventory_item_id: Optional[int] = Form(None),
-    current_user: User = Depends(require_manager_or_admin),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day or inventory_day.finalized:
-        raise HTTPException(status_code=404, detail="Inventory day not found or finalized")
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
     
-    # Get assigned employee IDs from form
-    form_data = await request.form()
-    assigned_to_ids = form_data.getlist("assigned_to_ids")
+    categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).all()
     
-    # Get batch_id if inventory item is linked to a batch
-    batch_id = None
-    if inventory_item_id:
-        inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
-        if inventory_item and inventory_item.batch_id:
-            batch_id = inventory_item.batch_id
+    return templates.TemplateResponse("inventory_item_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "item": item,
+        "categories": categories,
+        "batches": batches
+    })
+
+@app.post("/inventory/items/{item_id}/edit")
+async def update_inventory_item(
+    item_id: int,
+    name: str = Form(...),
+    par_level: float = Form(...),
+    batch_id: Optional[int] = Form(None),
+    category_id: Optional[int] = Form(None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
     
-    if assigned_to_ids:
-        # Create a task for each assigned employee
-        for assigned_to_id in assigned_to_ids:
-            task = Task(
-                day_id=day_id,
-                assigned_to_id=int(assigned_to_id),
-                inventory_item_id=inventory_item_id if inventory_item_id else None,
-                batch_id=batch_id,
-                description=description,
-                auto_generated=False
-            )
-            db.add(task)
-    else:
-        # Create unassigned task
-        task = Task(
-            day_id=day_id,
-            inventory_item_id=inventory_item_id if inventory_item_id else None,
-            batch_id=batch_id,
-            description=description,
-            auto_generated=False
-        )
-        db.add(task)
+    item.name = name
+    item.par_level = par_level
+    item.batch_id = batch_id if batch_id else None
+    item.category_id = category_id if category_id else None
     
     db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    
+    return RedirectResponse(url="/inventory", status_code=302)
 
-@app.get("/inventory/day/{day_id}/tasks/{task_id}", response_class=HTMLResponse)
-async def task_detail(request: Request, day_id: int, task_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+@app.get("/inventory/items/{item_id}/delete")
+async def delete_inventory_item(
+    item_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    db.delete(item)
+    db.commit()
+    
+    return RedirectResponse(url="/inventory", status_code=302)
+
+# API endpoints for tasks
+@app.get("/api/tasks/{task_id}/scale_options")
+async def get_task_scale_options(
+    task_id: int,
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task or not task.batch:
+        raise HTTPException(status_code=404, detail="Task or batch not found")
+    
+    scales = task.batch.get_available_scales()
+    result = []
+    
+    for scale_key, scale_factor, scale_label in scales:
+        if task.batch.variable_yield:
+            yield_display = "Variable"
+        else:
+            yield_amount = task.batch.get_scaled_yield(scale_factor)
+            yield_display = f"{yield_amount} {task.batch.yield_unit}"
+        
+        result.append({
+            "key": scale_key,
+            "factor": scale_factor,
+            "label": scale_label,
+            "yield": yield_display
+        })
+    
+    return result
+
+@app.get("/api/tasks/{task_id}/finish_requirements")
+async def get_task_finish_requirements(
+    task_id: int,
+    db: Session = Depends(get_db)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    employees = db.query(User).filter(User.is_active == True).all()
+    # Get available units from batch or recipe
+    available_units = []
+    if task.batch:
+        if task.batch.variable_yield:
+            # For variable yield, get units from recipe ingredients
+            recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == task.batch.recipe_id).all()
+            all_units = set()
+            for ri in recipe_ingredients:
+                if ri.ingredient:
+                    all_units.update(ri.ingredient.get_available_units())
+            available_units = list(all_units)
+        else:
+            # For fixed yield, use batch yield unit
+            available_units = [task.batch.yield_unit]
     
-    return templates.TemplateResponse("task_detail.html", {
+    # Get inventory info if available
+    inventory_info = None
+    if task.inventory_item:
+        # Get current inventory from most recent day
+        latest_day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.inventory_item_id == task.inventory_item.id
+        ).join(InventoryDay).order_by(InventoryDay.date.desc()).first()
+        
+        if latest_day_item:
+            inventory_info = {
+                "current": latest_day_item.quantity,
+                "par_level": task.inventory_item.par_level,
+                "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
+            }
+    
+    return {
+        "available_units": available_units,
+        "inventory_info": inventory_info
+    }
+
+# Employees (Admin only)
+@app.get("/employees", response_class=HTMLResponse)
+async def employees_page(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    employees = db.query(User).all()
+    
+    return templates.TemplateResponse("employees.html", {
         "request": request,
         "current_user": current_user,
-        "task": task,
-        "inventory_day": inventory_day,
         "employees": employees
     })
 
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/assign")
-async def assign_task(
-    day_id: int,
-    task_id: int,
-    assigned_to_id: int = Form(...),
-    current_user: User = Depends(require_manager_or_admin),
+@app.post("/employees/new")
+async def create_employee(
+    request: Request,
+    full_name: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    hourly_wage: float = Form(...),
+    work_schedule: str = Form(""),
+    role: str = Form(...),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    # Check if username already exists
+    existing_user = db.query(User).filter(User.username == username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
     
-    task.assigned_to_id = assigned_to_id
+    hashed_password = hash_password(password)
+    employee = User(
+        full_name=full_name,
+        username=username,
+        hashed_password=hashed_password,
+        hourly_wage=hourly_wage,
+        work_schedule=work_schedule,
+        role=role,
+        is_admin=(role == "admin"),
+        is_user=True
+    )
+    
+    db.add(employee)
     db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    
+    return RedirectResponse(url="/employees", status_code=302)
 
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/start")
-async def start_task(
-    day_id: int,
-    task_id: int,
-    current_user: User = Depends(require_user_or_above),
+@app.get("/employees/{employee_id}", response_class=HTMLResponse)
+async def employee_detail(
+    employee_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
     
-    # Check if task requires scale selection
-    if task.requires_scale_selection:
-        raise HTTPException(status_code=400, detail="Task requires scale selection")
-    
-    task.started_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    return templates.TemplateResponse("employee_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "employee": employee
+    })
 
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/start_with_scale")
-async def start_task_with_scale(
-    day_id: int, 
-    task_id: int, 
-    selected_scale: str = Form(...),
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if task.status != "not_started":
-        raise HTTPException(status_code=400, detail="Task already started")
-    
-    # Validate scale selection
-    if task.batch and task.batch.can_be_scaled:
-        available_scales = task.batch.get_available_scales()
-        valid_scales = [scale[0] for scale in available_scales]
-        if selected_scale not in valid_scales:
-            raise HTTPException(status_code=400, detail="Invalid scale selection")
-    
-    # Set scale information
-    task.selected_scale = selected_scale
-    if selected_scale == 'full':
-        task.scale_factor = 1.0
-    elif selected_scale == 'double':
-        task.scale_factor = 2.0
-    elif selected_scale == 'half':
-        task.scale_factor = 0.5
-    elif selected_scale == 'quarter':
-        task.scale_factor = 0.25
-    elif selected_scale == 'eighth':
-        task.scale_factor = 0.125
-    elif selected_scale == 'sixteenth':
-        task.scale_factor = 0.0625
-    
-    task.started_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
-
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/pause")
-async def pause_task(
-    day_id: int,
-    task_id: int,
-    current_user: User = Depends(require_user_or_above),
+@app.get("/employees/{employee_id}/edit", response_class=HTMLResponse)
+async def employee_edit_form(
+    employee_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
     
-    if task.started_at and not task.is_paused:
-        task.paused_at = datetime.utcnow()
-        task.is_paused = True
-        
-        # Calculate pause time if resuming from a previous pause
-        if task.paused_at and task.started_at:
-            current_session_time = (task.paused_at - task.started_at).total_seconds()
-            task.total_pause_time = task.total_pause_time or 0
-    
-    db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    return templates.TemplateResponse("employee_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "employee": employee
+    })
 
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/resume")
-async def resume_task(
-    day_id: int,
-    task_id: int,
-    current_user: User = Depends(require_user_or_above),
+@app.post("/employees/{employee_id}/edit")
+async def update_employee(
+    employee_id: int,
+    full_name: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(""),
+    hourly_wage: float = Form(...),
+    work_schedule: str = Form(""),
+    role: str = Form(...),
+    is_active: bool = Form(False),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
     
-    if task.is_paused and task.paused_at:
-        # Calculate pause duration and add to total
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
-        task.total_pause_time = (task.total_pause_time or 0) + pause_duration
-        
-        task.is_paused = False
-        task.paused_at = None
+    # Check if username is taken by another user
+    existing_user = db.query(User).filter(User.username == username, User.id != employee_id).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    employee.full_name = full_name
+    employee.username = username
+    if password:  # Only update password if provided
+        employee.hashed_password = hash_password(password)
+    employee.hourly_wage = hourly_wage
+    employee.work_schedule = work_schedule
+    employee.role = role
+    employee.is_admin = (role == "admin")
+    employee.is_active = is_active
     
     db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    
+    return RedirectResponse(url=f"/employees/{employee_id}", status_code=302)
 
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/finish")
-async def finish_task(
-    day_id: int,
-    task_id: int,
-    current_user: User = Depends(require_user_or_above),
+@app.get("/employees/{employee_id}/delete")
+async def delete_employee(
+    employee_id: int,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    employee = db.query(User).filter(User.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
     
-    # Check if task requires made amount input
-    if task.requires_made_amount:
-        raise HTTPException(status_code=400, detail="Task requires made amount input")
+    # Don't allow deleting self
+    if employee.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
     
-    task.finished_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/finish_with_amount")
-async def finish_task_with_amount(
-    day_id: int, 
-    task_id: int, 
-    made_amount: float = Form(...),
-    made_unit: str = Form(...),
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if task.status not in ["in_progress", "paused"]:
-        raise HTTPException(status_code=400, detail="Task not in progress")
-    
-    # Validate made amount
-    if made_amount <= 0:
-        raise HTTPException(status_code=400, detail="Made amount must be greater than 0")
-    
-    # Round to hundredths place
-    task.made_amount = round(made_amount, 2)
-    task.made_unit = made_unit
-    task.finished_at = datetime.utcnow()
-    task.is_paused = False
+    # Deactivate instead of delete to preserve task history
+    employee.is_active = False
     db.commit()
     
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
-
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/notes")
-async def update_task_notes(
-    day_id: int,
-    task_id: int,
-    notes: str = Form(""),
-    current_user: User = Depends(require_user_or_above),
-    db: Session = Depends(get_db)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task.notes = notes if notes else None
-    db.commit()
-    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
+    return RedirectResponse(url="/employees", status_code=302)
 
 # Utilities (Admin only)
 @app.get("/utilities", response_class=HTMLResponse)
-async def utilities(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+async def utilities_page(request: Request, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     utilities = db.query(UtilityCost).all()
+    
     return templates.TemplateResponse("utilities.html", {
         "request": request,
         "current_user": current_user,
@@ -1615,13 +1796,14 @@ async def utilities(request: Request, current_user: User = Depends(require_admin
     })
 
 @app.post("/utilities/new")
-async def create_utility(
+async def create_utility_cost(
+    request: Request,
     name: str = Form(...),
     monthly_cost: float = Form(...),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    # Check if utility with same name exists
+    # Check if utility with this name already exists
     existing_utility = db.query(UtilityCost).filter(UtilityCost.name == name).first()
     if existing_utility:
         # Update existing
@@ -1629,14 +1811,18 @@ async def create_utility(
         existing_utility.last_updated = datetime.utcnow()
     else:
         # Create new
-        utility = UtilityCost(name=name, monthly_cost=monthly_cost)
+        utility = UtilityCost(
+            name=name,
+            monthly_cost=monthly_cost
+        )
         db.add(utility)
     
     db.commit()
+    
     return RedirectResponse(url="/utilities", status_code=302)
 
 @app.post("/utilities/{utility_id}/delete")
-async def delete_utility(
+async def delete_utility_cost(
     utility_id: int,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
@@ -1647,304 +1833,101 @@ async def delete_utility(
     
     db.delete(utility)
     db.commit()
+    
     return RedirectResponse(url="/utilities", status_code=302)
 
-# Vendor routes
-@app.post("/vendors/new")
-def create_vendor(
-    request: Request,
-    name: str = Form(...),
-    contact_info: Optional[str] = Form(None),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    vendor = Vendor(name=name, contact_info=contact_info)
-    db.add(vendor)
-    db.commit()
-    
-    return RedirectResponse(url="/ingredients", status_code=303)
-
-# Category routes
+# Categories
 @app.post("/categories/new")
-def create_category(
+async def create_category(
     request: Request,
     name: str = Form(...),
     type: str = Form(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_manager_or_admin),
     db: Session = Depends(get_db)
 ):
-    category = Category(name=name, type=type)
-    db.add(category)
-    db.commit()
+    # Check if category already exists
+    existing_category = db.query(Category).filter(
+        and_(Category.name == name, Category.type == type)
+    ).first()
+    
+    if not existing_category:
+        category = Category(name=name, type=type)
+        db.add(category)
+        db.commit()
     
     # Redirect based on type
-    redirect_map = {
+    redirect_urls = {
         "ingredient": "/ingredients",
-        "recipe": "/recipes", 
+        "recipe": "/recipes",
         "batch": "/batches",
         "dish": "/dishes",
         "inventory": "/inventory"
     }
     
-    return RedirectResponse(url=redirect_map.get(type, "/"), status_code=303)
+    return RedirectResponse(url=redirect_urls.get(type, "/"), status_code=302)
 
-# API Endpoints for AJAX calls
-@app.get("/api/ingredients/all")
-async def api_ingredients_all(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    ingredients = db.query(Ingredient).all()
-    result = []
-    for ingredient in ingredients:
-        usage_units = []
-        for iu in ingredient.usage_units:
-            usage_units.append({
-                "usage_unit_id": iu.usage_unit_id,
-                "usage_unit_name": iu.usage_unit.name,
-                "price_per_usage_unit": iu.price_per_usage_unit
-            })
-        
-        result.append({
-            "id": ingredient.id,
-            "name": ingredient.name,
-            "category": ingredient.category.name if ingredient.category else None,
-            "usage_units": usage_units
-        })
+# Vendors
+@app.post("/vendors/new")
+async def create_vendor(
+    request: Request,
+    name: str = Form(...),
+    contact_info: str = Form(""),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    vendor = Vendor(
+        name=name,
+        contact_info=contact_info if contact_info else None
+    )
+    db.add(vendor)
+    db.commit()
     
-    return result
+    return RedirectResponse(url="/ingredients", status_code=302)
 
-@app.get("/api/vendor_units/{vendor_unit_id}/conversions")
-async def api_vendor_unit_conversions(vendor_unit_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    conversions = db.query(VendorUnitConversion).filter(VendorUnitConversion.vendor_unit_id == vendor_unit_id).all()
-    result = {}
-    for conversion in conversions:
-        result[conversion.usage_unit_id] = conversion.conversion_factor
-    return result
-
-@app.get("/api/recipes/{recipe_id}/usage_units")
-async def api_recipe_usage_units(recipe_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Get all usage units used in this recipe
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
-    usage_unit_ids = set(ri.usage_unit_id for ri in recipe_ingredients)
+# Par Unit Names
+@app.post("/par_unit_names/new")
+async def create_par_unit_name(
+    request: Request,
+    name: str = Form(...),
+    current_user: User = Depends(require_manager_or_admin),
+    db: Session = Depends(get_db)
+):
+    # Check if par unit name already exists
+    existing_par_unit = db.query(ParUnitName).filter(ParUnitName.name == name).first()
+    if not existing_par_unit:
+        par_unit = ParUnitName(name=name)
+        db.add(par_unit)
+        db.commit()
     
-    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
-    
-    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
-
-@app.get("/api/batches/search")
-async def api_batches_search(q: str = "", current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    query = db.query(Batch).join(Recipe)
-    
-    if q:
-        query = query.filter(Recipe.name.ilike(f"%{q}%"))
-    
-    batches = query.all()
-    result = []
-    
-    for batch in batches:
-        # Calculate cost per unit
-        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-        cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
-        
-        result.append({
-            "id": batch.id,
-            "recipe_name": batch.recipe.name,
-            "category": batch.recipe.category.name if batch.recipe.category else None,
-            "yield_amount": batch.yield_amount,
-            "yield_unit": batch.yield_unit.name if batch.yield_unit else "",
-            "yield_unit_id": batch.yield_unit_id,
-            "cost_per_unit": cost_per_unit
-        })
-    
-    return result
-
-@app.get("/api/batches/all")
-async def api_batches_all(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return await api_batches_search("", current_user, db)
-
-@app.get("/api/batches/{batch_id}/portion_units")
-async def api_batch_portion_units(batch_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Get usage units from recipe ingredients
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-    usage_unit_ids = set(ri.usage_unit_id for ri in recipe_ingredients)
-    
-    # Add the batch yield unit
-    if batch.yield_unit_id:
-        usage_unit_ids.add(batch.yield_unit_id)
-    
-    usage_units = db.query(UsageUnit).filter(UsageUnit.id.in_(usage_unit_ids)).all()
-    
-    return [{"id": unit.id, "name": unit.name} for unit in usage_units]
-
-@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
-async def api_batch_cost_per_unit(batch_id: int, unit_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Calculate total batch cost
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    
-    # Expected cost (with estimated labor)
-    expected_total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-    expected_cost_per_yield_unit = expected_total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
-    
-    # Actual cost (with actual labor from most recent task)
-    actual_total_batch_cost = total_recipe_cost + batch.actual_labor_cost
-    actual_cost_per_yield_unit = actual_total_batch_cost / batch.yield_amount if batch.yield_amount > 0 else 0
-    
-    # For now, assume 1:1 conversion between yield unit and requested unit
-    # In a full implementation, you'd need proper unit conversion logic
-    return {
-        "expected_cost_per_unit": expected_cost_per_yield_unit,
-        "actual_cost_per_unit": actual_cost_per_yield_unit
-    }
-
-@app.get("/api/batches/{batch_id}/labor_stats")
-async def api_batch_labor_stats(batch_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Get all completed tasks for this batch
-    completed_tasks = db.query(Task).filter(
-        Task.batch_id == batch_id,
-        Task.finished_at.isnot(None)
-    ).order_by(Task.finished_at.desc()).all()
-    
-    if not completed_tasks:
-        return {
-            "task_count": 0,
-            "most_recent_cost": batch.estimated_labor_cost,
-            "most_recent_date": "No tasks completed",
-            "average_week": batch.estimated_labor_cost,
-            "average_month": batch.estimated_labor_cost,
-            "average_all_time": batch.estimated_labor_cost,
-            "week_task_count": 0,
-            "month_task_count": 0
-        }
-    
-    # Most recent task
-    most_recent = completed_tasks[0]
-    
-    # Filter by time periods
-    week_ago = datetime.utcnow() - timedelta(days=7)
-    month_ago = datetime.utcnow() - timedelta(days=30)
-    
-    week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
-    month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
-    
-    return {
-        "task_count": len(completed_tasks),
-        "most_recent_cost": most_recent.labor_cost,
-        "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
-        "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else batch.estimated_labor_cost,
-        "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else batch.estimated_labor_cost,
-        "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
-        "week_task_count": len(week_tasks),
-        "month_task_count": len(month_tasks)
-    }
-
-# API endpoints for task management
-@app.get("/api/tasks/{task_id}/finish_requirements")
-async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Get available units based on batch or inventory item
-    available_units = []
-    inventory_info = None
-    
-    if task.batch:
-        if task.batch.variable_yield:
-            # For variable yield, get units from recipe ingredients
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == task.batch.recipe_id
-            ).all()
-            
-            # Get all unique units from recipe ingredients
-            units_set = set()
-            for ri in recipe_ingredients:
-                if ri.ingredient:
-                    units_set.update(ri.ingredient.get_available_units())
-            available_units = sorted(list(units_set))
-        else:
-            # For fixed yield, use batch yield unit
-            available_units = [task.batch.yield_unit] if task.batch.yield_unit else []
-    
-    # Get inventory information if linked
-    if task.inventory_item:
-        # Get current inventory from most recent day item
-        day_item = db.query(InventoryDayItem).filter(
-            InventoryDayItem.day_id == task.day_id,
-            InventoryDayItem.inventory_item_id == task.inventory_item.id
-        ).first()
-        
-        if day_item:
-            inventory_info = {
-                "current": day_item.quantity,
-                "par_level": task.inventory_item.par_level,
-                "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
-            }
-    
-    return {
-        "requires_made_amount": task.requires_made_amount,
-        "available_units": available_units,
-        "inventory_info": inventory_info
-    }
-
-@app.get("/api/tasks/{task_id}/scale_options")
-async def get_task_scale_options(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task or not task.batch:
-        raise HTTPException(status_code=404, detail="Task or batch not found")
-    
-    if not task.batch.can_be_scaled:
-        raise HTTPException(status_code=400, detail="Batch cannot be scaled")
-    
-    scales = task.batch.get_available_scales()
-    
-    # Format scales for frontend
-    scale_options = []
-    for scale_key, scale_factor, scale_label in scales:
-        if task.batch.variable_yield:
-            yield_display = "Variable Amount"
-        else:
-            scaled_yield = task.batch.get_scaled_yield(scale_factor)
-            yield_display = f"{scaled_yield} {task.batch.yield_unit}"
-        
-        scale_options.append({
-            "key": scale_key,
-            "factor": scale_factor,
-            "label": scale_label,
-            "yield": yield_display
-        })
-    
-    return scale_options
+    return RedirectResponse(url="/inventory", status_code=302)
 
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc: HTTPException):
+    current_user = get_current_user_optional(request, next(get_db()))
     return templates.TemplateResponse("error.html", {
         "request": request,
+        "current_user": current_user,
         "status_code": 404,
         "detail": "Page not found"
     }, status_code=404)
 
 @app.exception_handler(403)
 async def forbidden_handler(request: Request, exc: HTTPException):
+    current_user = get_current_user_optional(request, next(get_db()))
     return templates.TemplateResponse("error.html", {
         "request": request,
+        "current_user": current_user,
         "status_code": 403,
         "detail": "Access forbidden"
     }, status_code=403)
 
-@app.exception_handler(401)
-async def unauthorized_handler(request: Request, exc: HTTPException):
-    return RedirectResponse(url="/login", status_code=302)
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc: HTTPException):
+    current_user = get_current_user_optional(request, next(get_db()))
+    return templates.TemplateResponse("error.html", {
+        "request": request,
+        "current_user": current_user,
+        "status_code": 500,
+        "detail": "Internal server error"
+    }, status_code=500)
