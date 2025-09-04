@@ -224,21 +224,18 @@ function selectIngredient(ingredient) {
         return;
     }
     
-    // Show usage unit selection
-    showUsageUnitSelection(ingredient);
+    // Show unit selection with new system
+    showUnitSelection(ingredient);
     currentSelectedIngredient = ingredient;
 }
 
-function showUsageUnitSelection(ingredient) {
-    if (ingredient.usage_units.length === 0) {
-        alert('This ingredient has no usage units defined. Please edit the ingredient first.');
+function showUnitSelection(ingredient) {
+    if (!ingredient.available_units || ingredient.available_units.length === 0) {
+        alert('This ingredient has no available units defined.');
         return;
     }
     
-    let usageUnitOptions = '';
-    ingredient.usage_units.forEach(unit => {
-        usageUnitOptions += `<option value="${unit.usage_unit_id}" data-price="${unit.price_per_usage_unit}">${unit.usage_unit_name} ($${unit.price_per_usage_unit.toFixed(4)}/unit)</option>`;
-    });
+    const availableUnits = ingredient.available_units;
     
     const modal = document.createElement('div');
     modal.className = 'modal fade';
@@ -253,7 +250,11 @@ function showUsageUnitSelection(ingredient) {
                     <div class="mb-3">
                         <label class="form-label">Usage Unit</label>
                         <select class="form-select" id="usageUnitSelect">
-                            ${usageUnitOptions}
+                            ${availableUnits.map(unit => 
+                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${unit}</option>`
+                            ).join('')}
+                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${unit}</option>`
+                            ).join('')}
                         </select>
                     </div>
                     <div class="mb-3">
@@ -283,9 +284,24 @@ function showUsageUnitSelection(ingredient) {
     
     function updateCost() {
         const quantity = parseFloat(quantityInput.value) || 0;
-        const selectedOption = usageUnitSelect.selectedOptions[0];
-        const price = parseFloat(selectedOption.dataset.price) || 0;
-        estimatedCost.textContent = (quantity * price).toFixed(2);
+        const selectedUnit = usageUnitSelect.value;
+        const ingredientId = usageUnitSelect.selectedOptions[0]?.dataset.ingredientId;
+        
+        if (quantity > 0 && selectedUnit && ingredientId) {
+            // Calculate cost using ingredient's cost per unit method
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${selectedUnit}`)
+                .then(response => response.json())
+                .then(data => {
+                    const cost = quantity * data.cost_per_unit;
+                    estimatedCost.textContent = cost.toFixed(2);
+                })
+                .catch(error => {
+                    console.error('Error calculating cost:', error);
+                    estimatedCost.textContent = '0.00';
+                });
+        } else {
+            estimatedCost.textContent = '0.00';
+        }
     }
     
     quantityInput.addEventListener('input', updateCost);
@@ -307,19 +323,16 @@ function addIngredientToRecipe() {
         return;
     }
     
-    const selectedOption = usageUnitSelect.selectedOptions[0];
-    const usageUnitId = parseInt(selectedOption.value);
-    const usageUnitName = selectedOption.text.split(' (')[0]; // Remove price part
-    const price = parseFloat(selectedOption.dataset.price);
+    const selectedUnit = usageUnitSelect.value;
+    const estimatedCost = parseFloat(document.querySelector('#estimatedCost').textContent);
     
     // Add to selected ingredients
     selectedIngredients.push({
         ingredient_id: currentSelectedIngredient.id,
         ingredient_name: currentSelectedIngredient.name,
-        usage_unit_id: usageUnitId,
-        usage_unit_name: usageUnitName,
+        unit: selectedUnit,
         quantity: quantity,
-        estimated_cost: quantity * price
+        estimated_cost: estimatedCost
     });
     
     // Update display
@@ -354,7 +367,7 @@ function updateSelectedIngredientsDisplay() {
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <strong>${ingredient.ingredient_name}</strong><br>
-                            <small>${ingredient.quantity} ${ingredient.usage_unit_name} - $${ingredient.estimated_cost.toFixed(2)}</small>
+                            <small>${ingredient.quantity} ${ingredient.unit} - $${ingredient.estimated_cost.toFixed(2)}</small>
                         </div>
                         <button type="button" class="btn btn-sm btn-danger" onclick="removeIngredient(${index})">
                             <i class="fas fa-times"></i>
