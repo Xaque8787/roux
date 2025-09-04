@@ -54,7 +54,7 @@ async def setup_admin(
     request: Request,
     username: str = Form(...),
     full_name: str = Form(""),
-    password: str = Form(...),
+        return RedirectResponse(url="/login", status_code=302)
     db: Session = Depends(get_db)
 ):
     # Check if any users exist
@@ -87,51 +87,59 @@ async def setup_admin(
         ("Grains", "ingredient"),
         ("Spices", "ingredient"),
         ("Appetizers", "recipe"),
-        ("Entrees", "recipe"),
-        ("Desserts", "recipe"),
-        ("Prep Items", "batch"),
-        ("Sauces", "batch"),
-        ("Appetizers", "dish"),
-        ("Entrees", "dish"),
-        ("Desserts", "dish"),
-        ("Beverages", "dish"),
-        ("Prep", "inventory"),
-        ("Storage", "inventory")
-    ]
-    
-    for cat_name, cat_type in default_categories:
-        existing_cat = db.query(Category).filter(
-            and_(Category.name == cat_name, Category.type == cat_type)
-        ).first()
-        if not existing_cat:
-            category = Category(name=cat_name, type=cat_type)
-            db.add(category)
-    
-    # Create default vendor units
-    default_vendor_units = [
-        ("lb", "Pound"),
-        ("oz", "Ounce"),
-        ("g", "Gram"),
-        ("kg", "Kilogram"),
-        ("gal", "Gallon"),
-        ("qt", "Quart"),
-        ("pt", "Pint"),
-        ("cup", "Cup"),
-        ("fl_oz", "Fluid Ounce"),
-        ("l", "Liter"),
-        ("ml", "Milliliter"),
-        ("#10_can", "#10 Can"),
-        ("#5_can", "#5 Can"),
-        ("case", "Case"),
-        ("bag", "Bag"),
-        ("box", "Box")
-    ]
-    
-    for unit_name, unit_desc in default_vendor_units:
-        existing_unit = db.query(VendorUnit).filter(VendorUnit.name == unit_name).first()
-        if not existing_unit:
-            vendor_unit = VendorUnit(name=unit_name, description=unit_desc)
-            db.add(vendor_unit)
+    try:
+        default_categories = [
+            ("Proteins", "ingredient"), ("Vegetables", "ingredient"), ("Dairy", "ingredient"),
+            ("Grains", "ingredient"), ("Spices", "ingredient"), ("Oils", "ingredient"),
+            ("Appetizers", "dish"), ("Entrees", "dish"), ("Desserts", "dish"),
+            ("Beverages", "dish"), ("Sides", "dish"),
+            ("Prep", "recipe"), ("Sauces", "recipe"), ("Doughs", "recipe"),
+            ("Stocks", "recipe"), ("Marinades", "recipe"),
+            ("Production", "batch"), ("Prep Work", "batch"),
+            ("Proteins", "inventory"), ("Vegetables", "inventory"), ("Prepared Items", "inventory")
+        ]
+        
+        for cat_name, cat_type in default_categories:
+            existing_cat = db.query(Category).filter(
+                Category.name == cat_name, 
+                Category.type == cat_type
+            ).first()
+            if not existing_cat:
+                category = Category(name=cat_name, type=cat_type)
+                db.add(category)
+        
+        # Create default vendor units
+        default_vendor_units = [
+            ("lb", "Pound"), ("oz", "Ounce"), ("g", "Gram"), ("kg", "Kilogram"),
+            ("gal", "Gallon"), ("qt", "Quart"), ("pt", "Pint"), ("cup", "Cup"),
+            ("fl_oz", "Fluid Ounce"), ("l", "Liter"), ("ml", "Milliliter"),
+            ("tbsp", "Tablespoon"), ("tsp", "Teaspoon")
+        ]
+        
+        for unit_name, unit_desc in default_vendor_units:
+            existing_unit = db.query(VendorUnit).filter(VendorUnit.name == unit_name).first()
+            if not existing_unit:
+                vendor_unit = VendorUnit(name=unit_name, description=unit_desc)
+                db.add(vendor_unit)
+        
+        # Create default par unit names
+        default_par_units = ["Tub", "Case", "Container", "Bag", "Box", "Pan", "Sheet"]
+        
+        for par_name in default_par_units:
+            existing_par = db.query(ParUnitName).filter(ParUnitName.name == par_name).first()
+            if not existing_par:
+                par_unit = ParUnitName(name=par_name)
+                db.add(par_unit)
+        
+        db.commit()
+        return RedirectResponse(url="/login", status_code=302)
+        
+    except Exception as e:
+        db.rollback()
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "error": f"Setup failed: {str(e)}"
+        })
     
     # Create default par unit names
     default_par_units = ["Tub", "Case", "Container", "Batch", "Portion"]
@@ -173,7 +181,19 @@ async def login(
             "error": "Invalid username or password"
         })
     
-    token = create_jwt({"sub": username})
+    if not user:
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Invalid username or password"
+        })
+    
+    if not user.is_active:
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Account is inactive"
+        })
+    
+    if not verify_password(password, user.hashed_password):
     response = RedirectResponse(url="/home", status_code=302)
     response.set_cookie(
         key="access_token",
