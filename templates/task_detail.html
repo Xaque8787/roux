@@ -47,6 +47,47 @@
                                 <span class="badge bg-success">Completed</span>
                             {% endif %}
                         </p>
+                        
+                        <!-- Task Summary Information -->
+                        {% if task.inventory_item and task.status == "completed" %}
+                        <div class="mt-3 p-3 bg-light border rounded">
+                            <h6>Task Summary</h6>
+                            <p><strong>Par Level:</strong> {{ task.inventory_item.par_level }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}</p>
+                            
+                            {% if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch %}
+                            <p><strong>Par Unit Equals:</strong> {{ "%.2f"|format(task.inventory_item.par_unit_equals_calculated) }} {{ task.inventory_item.batch.yield_unit }} per {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }}</p>
+                            {% elif task.inventory_item.par_unit_equals_type == 'custom' %}
+                            <p><strong>Par Unit Equals:</strong> {{ task.inventory_item.par_unit_equals_amount }} {{ task.inventory_item.par_unit_equals_unit }} per {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }}</p>
+                            {% elif task.inventory_item.par_unit_equals_type == 'par_unit_itself' %}
+                            <p><strong>Par Unit Equals:</strong> 1 {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }} = 1 {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }}</p>
+                            {% endif %}
+                            
+                            {% set day_item = None %}
+                            {% for item in inventory_day_items %}
+                                {% if item.inventory_item_id == task.inventory_item.id %}
+                                    {% set day_item = item %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if day_item %}
+                            <p><strong>Initial Inventory:</strong> {{ day_item.quantity - (task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) if task.made_amount else 0) }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}</p>
+                            {% if task.made_amount %}
+                            <p><strong>Amount Made:</strong> {{ task.made_amount }} {{ task.made_unit }} = {{ task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}</p>
+                            <p><strong>Final Inventory:</strong> {{ day_item.quantity }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}</p>
+                            
+                            {% if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch %}
+                            <small class="text-muted">
+                                Final in {{ task.inventory_item.batch.yield_unit }}: {{ "%.2f"|format(day_item.quantity * task.inventory_item.par_unit_equals_calculated) }} {{ task.inventory_item.batch.yield_unit }}
+                            </small>
+                            {% elif task.inventory_item.par_unit_equals_type == 'custom' %}
+                            <small class="text-muted">
+                                Final in {{ task.inventory_item.par_unit_equals_unit }}: {{ "%.2f"|format(day_item.quantity * task.inventory_item.par_unit_equals_amount) }} {{ task.inventory_item.par_unit_equals_unit }}
+                            </small>
+                            {% endif %}
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="col-md-6">
                         {% if task.started_at %}

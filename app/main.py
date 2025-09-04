@@ -1441,44 +1441,6 @@ async def assign_task(
 
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/start")
 async def start_task(
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Check if task requires scale selection
-    if task.batch and task.batch.can_be_scaled and not task.selected_scale:
-        # Redirect to scale selection - this should be handled by frontend
-        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-    
-    task.started_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@app.post("/inventory/day/{day_id}/tasks/{task_id}/start_with_scale")
-async def start_task_with_scale(day_id: int, task_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    form = await request.form()
-    selected_scale = form.get("selected_scale")
-    
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Set scale information
-    task.selected_scale = selected_scale
-    
-    # Calculate scale factor
-    scale_factors = {
-        'full': 1.0,
-        'double': 2.0,
-        'half': 0.5,
-        'quarter': 0.25,
-        'eighth': 0.125,
-        'sixteenth': 0.0625
-    }
-    task.scale_factor = scale_factors.get(selected_scale, 1.0)
-    
     day_id: int,
     task_id: int,
     current_user: User = Depends(get_current_user),
@@ -1488,8 +1450,10 @@ async def start_task_with_scale(day_id: int, task_id: int, request: Request, cur
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    if task.status != "not_started":
-        raise HTTPException(status_code=400, detail="Task already started")
+    # Check if task requires scale selection
+    if task.batch and task.batch.can_be_scaled and not task.selected_scale:
+        # Redirect to scale selection - this should be handled by frontend
+        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
     
     task.started_at = datetime.utcnow()
     task.is_paused = False
@@ -1616,6 +1580,7 @@ async def finish_task_with_amount(
     
     if task.status not in ["in_progress", "paused"]:
         raise HTTPException(status_code=400, detail="Task cannot be finished")
+    
     # Update inventory if linked to inventory item
     if task.inventory_item:
         inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
@@ -1628,7 +1593,6 @@ async def finish_task_with_amount(
             # Convert made amount to par units and add to inventory
             additional_par_units = task.inventory_item.convert_to_par_units(made_amount, made_unit)
             day_item.quantity += additional_par_units
-    
     
     # Handle pause time if currently paused
     if task.is_paused and task.paused_at:
@@ -2087,6 +2051,71 @@ async def api_get_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)
     except Exception as e:
         print(f"API Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# API endpoints for frontend JavaScript
+@app.get("/api/ingredients/all")
+async def get_all_ingredients(db: Session = Depends(get_db)):
+    ingredients = db.query(Ingredient).all()
+    return [
+        {
+            "id": ing.id,
+            "name": ing.name,
+            "category": ing.category.name if ing.category else None,
+            "available_units": ing.get_available_units()
+        }
+        for ing in ingredients
+    ]
+
+@app.get("/api/tasks/{task_id}/scale_options")
+async def get_task_scale_options(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task or not task.batch:
+        return []
+    
+    return [
+        {
+            "key": scale[0],
+            "label": scale[2],
+            "yield": f"{task.batch.get_scaled_yield(scale[1])} {task.batch.yield_unit}" if not task.batch.variable_yield else "Variable"
+        }
+        for scale in task.batch.get_available_scales()
+    ]
+
+@app.get("/api/tasks/{task_id}/finish_requirements")
+async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    available_units = []
+    inventory_info = None
+    
+    if task.batch:
+        if task.batch.variable_yield:
+            # For variable yield, get available units from batch recipe
+            available_units = task.batch.recipe.get_available_units() if hasattr(task.batch.recipe, 'get_available_units') else [task.batch.yield_unit]
+        else:
+            available_units = [task.batch.yield_unit]
+    
+    # Get inventory information if linked
+    if task.inventory_item:
+        inventory_day = db.query(InventoryDay).join(Task).filter(Task.id == task_id).first()
+        day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.inventory_item_id == task.inventory_item.id,
+            InventoryDayItem.day_id == inventory_day.id
+        ).first()
+        
+        if day_item:
+            inventory_info = {
+                "current": day_item.quantity,
+                "par_level": task.inventory_item.par_level,
+                "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
+            }
+    
+    return {
+        "available_units": available_units,
+        "inventory_info": inventory_info
+    }
 
 # Error handlers
 @app.exception_handler(HTTPException)

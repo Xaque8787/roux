@@ -272,6 +272,25 @@
                                 {% if task.made_amount %}
                                 <br><small class="text-warning">Made: {{ task.made_amount }} {{ task.made_unit }}</small>
                                 {% endif %}
+                                
+                                <!-- Task Summary Information -->
+                                {% if task.inventory_item and task.status == "completed" %}
+                                <div class="mt-2 p-2 bg-light border rounded">
+                                    <small>
+                                        <strong>Task Summary:</strong><br>
+                                        Par: {{ task.inventory_item.par_level }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}<br>
+                                        
+                                        {% set day_item = inventory_day_items|selectattr('inventory_item_id', 'equalto', task.inventory_item.id)|first %}
+                                        {% if day_item %}
+                                        Initial: {{ day_item.quantity - (task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) if task.made_amount else 0) }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}<br>
+                                        {% if task.made_amount %}
+                                        Made: {{ task.made_amount }} {{ task.made_unit }} ({{ task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }})<br>
+                                        Final: {{ day_item.quantity }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}
+                                        {% endif %}
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                {% endif %}
                             {% endif %}
                             
                             <div class="mt-1">
