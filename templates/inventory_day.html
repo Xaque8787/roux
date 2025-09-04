@@ -279,53 +279,40 @@
                                 <br><small class="text-warning">Made: {{ task.made_amount }} {{ task.made_unit }}</small>
                                 {% endif %}
                                 
-                                <!-- Task Summary Information -->
-                                {% if task.inventory_item and task.status == "completed" %}
+                                <!-- Enhanced Task Summary Information -->
+                                {% if task.id in task_summaries %}
+                                {% set summary = task_summaries[task.id] %}
                                 <div class="mt-2 p-2 bg-light border rounded">
                                     <small>
                                         <strong>Task Summary:</strong><br>
-                                        <strong>Par Level:</strong> {{ task.inventory_item.par_level }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}<br>
+                                        <strong>Par Level:</strong> {{ "%.1f"|format(summary.par_level) }} {{ summary.par_unit_name }}<br>
                                         
-                                        {% if task.inventory_item.par_unit_equals_calculated %}
-                                        <strong>Par Unit Equals:</strong> {{ "%.2f"|format(task.inventory_item.par_unit_equals_calculated) }} 
-                                        {% if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch %}
-                                            {{ task.inventory_item.batch.yield_unit }} per {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }}<br>
-                                        {% elif task.inventory_item.par_unit_equals_type == 'custom' %}
-                                            {{ task.inventory_item.par_unit_equals_unit }} per {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }}<br>
-                                        {% endif %}
-                                        {% elif task.inventory_item.par_unit_equals_type == 'par_unit_itself' %}
-                                        <strong>Par Unit Equals:</strong> 1 {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }} = 1 {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'unit' }}<br>
+                                        {% if summary.par_unit_equals %}
+                                        <strong>Par Unit Equals:</strong> {{ "%.2f"|format(summary.par_unit_equals) }} {{ summary.par_unit_equals_unit }} per {{ summary.par_unit_name }}<br>
+                                        {% elif summary.par_unit_equals_type == 'par_unit_itself' %}
+                                        <strong>Par Unit Equals:</strong> 1 {{ summary.par_unit_name }} = 1 {{ summary.par_unit_name }}<br>
                                         {% endif %}
                                         
-                                        {% set day_item = inventory_day_items|selectattr('inventory_item_id', 'equalto', task.inventory_item.id)|first %}
-                                        {% if day_item %}
-                                        <strong>Initial Inventory:</strong> {{ day_item.quantity - (task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) if task.made_amount else 0) }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}
-                                        {% if task.inventory_item.par_unit_equals_calculated and task.inventory_item.par_unit_equals_type != 'par_unit_itself' %}
-                                            ({{ "%.2f"|format((day_item.quantity - (task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) if task.made_amount else 0)) * task.inventory_item.par_unit_equals_calculated) }} 
-                                            {% if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch %}
-                                                {{ task.inventory_item.batch.yield_unit }}
-                                            {% elif task.inventory_item.par_unit_equals_type == 'custom' %}
-                                                {{ task.inventory_item.par_unit_equals_unit }}
-                                            {% endif %})
+                                        <strong>Initial Inventory:</strong> {{ "%.1f"|format(summary.initial_inventory) }} {{ summary.par_unit_name }}
+                                        {% if summary.initial_converted %}
+                                            ({{ "%.2f"|format(summary.initial_converted) }} {{ summary.par_unit_equals_unit }})
                                         {% endif %}<br>
                                         
-                                        {% if task.made_amount %}
-                                        <strong>Made Amount:</strong> {{ task.made_amount }} {{ task.made_unit }} = {{ task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit) }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}<br>
+                                        {% if summary.made_amount %}
+                                        <strong>Made Amount:</strong> {{ summary.made_amount }} {{ summary.made_unit }} = {{ "%.2f"|format(summary.made_par_units) }} {{ summary.par_unit_name }}
+                                        {% if summary.made_converted %}
+                                            ({{ "%.2f"|format(summary.made_converted) }} {{ summary.par_unit_equals_unit }})
+                                        {% endif %}<br>
+                                        {% endif %}
                                         
-                                        <strong>Final Inventory:</strong> {{ day_item.quantity }} {{ task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units' }}
-                                        {% if task.inventory_item.par_unit_equals_calculated and task.inventory_item.par_unit_equals_type != 'par_unit_itself' %}
-                                            ({{ "%.2f"|format(day_item.quantity * task.inventory_item.par_unit_equals_calculated) }} 
-                                            {% if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch %}
-                                                {{ task.inventory_item.batch.yield_unit }}
-                                            {% elif task.inventory_item.par_unit_equals_type == 'custom' %}
-                                                {{ task.inventory_item.par_unit_equals_unit }}
-                                            {% endif %})
-                                        {% endif %}
-                                        {% endif %}
+                                        <strong>Final Inventory:</strong> {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }}
+                                        {% if summary.final_converted %}
+                                            ({{ "%.2f"|format(summary.final_converted) }} {{ summary.par_unit_equals_unit }})
                                         {% endif %}
                                     </small>
                                 </div>
                                 {% endif %}
+                                
                             {% endif %}
                             
                             <div class="mt-1">
