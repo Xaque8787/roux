@@ -229,9 +229,15 @@
                             
                             {% if task.status == "not_started" %}
                                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                {% if task.requires_scale_selection %}
+                                <button type="button" class="btn btn-xs btn-primary" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                    Select Scale & Start
+                                </button>
+                                {% else %}
                                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
                                     <button type="submit" class="btn btn-xs btn-primary">Start</button>
                                 </form>
+                                {% endif %}
                                 {% else %}
                                 <span class="badge bg-secondary">Not Started</span>
                                 {% endif %}
