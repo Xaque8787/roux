@@ -1313,53 +1313,6 @@ async def update_inventory_day(
     form_data = await request.form()
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
     
-    # Calculate task summary if task is completed and has inventory item
-    task_summary = None
-    if task.status == "completed" and task.inventory_item:
-        # Find the current inventory day item
-        day_item = None
-        for item in inventory_day_items:
-            if item.inventory_item_id == task.inventory_item.id:
-                day_item = item
-                break
-        
-        if day_item:
-            task_summary = {
-                'par_level': task.inventory_item.par_level,
-                'par_unit_name': task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units',
-                'par_unit_equals_type': task.inventory_item.par_unit_equals_type,
-                'par_unit_equals': task.inventory_item.par_unit_equals_calculated,
-                'par_unit_equals_unit': None,
-                'initial_inventory': 0,
-                'initial_converted': None,
-                'made_amount': task.made_amount,
-                'made_unit': task.made_unit,
-                'made_par_units': 0,
-                'made_converted': None,
-                'final_inventory': day_item.quantity,
-                'final_converted': None
-            }
-            
-            # Set par unit equals unit based on type
-            if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch:
-                task_summary['par_unit_equals_unit'] = task.inventory_item.batch.yield_unit
-            elif task.inventory_item.par_unit_equals_type == 'custom':
-                task_summary['par_unit_equals_unit'] = task.inventory_item.par_unit_equals_unit
-            
-            # Calculate initial inventory (current - made)
-            if task.made_amount and task.made_unit:
-                made_par_units = task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
-                task_summary['made_par_units'] = made_par_units
-                task_summary['initial_inventory'] = day_item.quantity - made_par_units
-                
-                # Calculate converted amounts if we have par unit equals
-                if task.inventory_item.par_unit_equals_calculated and task.inventory_item.par_unit_equals_type != 'par_unit_itself':
-                    task_summary['initial_converted'] = task_summary['initial_inventory'] * task.inventory_item.par_unit_equals_calculated
-                    task_summary['made_converted'] = made_par_units * task.inventory_item.par_unit_equals_calculated
-                    task_summary['final_converted'] = day_item.quantity * task.inventory_item.par_unit_equals_calculated
-            else:
-                task_summary['initial_inventory'] = day_item.quantity
-    
     for item in inventory_day_items:
         quantity_key = f"item_{item.inventory_item.id}"
         override_create_key = f"override_create_{item.inventory_item.id}"
@@ -1720,15 +1673,64 @@ async def task_detail(
     
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     employees = db.query(User).filter(User.is_active == True).all()
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    
+    # Calculate task summary if task is completed and has inventory item
+    task_summary = None
+    if task.status == "completed" and task.inventory_item:
+        # Find the current inventory day item
+        day_item = None
+        for item in inventory_day_items:
+            if item.inventory_item_id == task.inventory_item.id:
+                day_item = item
+                break
+        
+        if day_item:
+            task_summary = {
+                'par_level': task.inventory_item.par_level,
+                'par_unit_name': task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units',
+                'par_unit_equals_type': task.inventory_item.par_unit_equals_type,
+                'par_unit_equals': task.inventory_item.par_unit_equals_calculated,
+                'par_unit_equals_unit': None,
+                'initial_inventory': 0,
+                'initial_converted': None,
+                'made_amount': task.made_amount,
+                'made_unit': task.made_unit,
+                'made_par_units': 0,
+                'made_converted': None,
+                'final_inventory': day_item.quantity,
+                'final_converted': None
+            }
+            
+            # Set par unit equals unit based on type
+            if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch:
+                task_summary['par_unit_equals_unit'] = task.inventory_item.batch.yield_unit
+            elif task.inventory_item.par_unit_equals_type == 'custom':
+                task_summary['par_unit_equals_unit'] = task.inventory_item.par_unit_equals_unit
+            
+            # Calculate initial inventory (current - made)
+            if task.made_amount and task.made_unit:
+                made_par_units = task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
+                task_summary['made_par_units'] = made_par_units
+                task_summary['initial_inventory'] = day_item.quantity - made_par_units
+                
+                # Calculate converted amounts if we have par unit equals
+                if task.inventory_item.par_unit_equals_calculated and task.inventory_item.par_unit_equals_type != 'par_unit_itself':
+                    task_summary['initial_converted'] = task_summary['initial_inventory'] * task.inventory_item.par_unit_equals_calculated
+                    task_summary['made_converted'] = made_par_units * task.inventory_item.par_unit_equals_calculated
+                    task_summary['final_converted'] = day_item.quantity * task.inventory_item.par_unit_equals_calculated
+            else:
+                task_summary['initial_inventory'] = day_item.quantity
     
     return templates.TemplateResponse("task_detail.html", {
         "request": request,
         "current_user": current_user,
         "task": task,
         "inventory_day": inventory_day,
-        "employees": employees
+        "employees": employees,
         "inventory_day_items": inventory_day_items,
         "task_summary": task_summary
+    })
 
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/notes")
 async def update_task_notes(
