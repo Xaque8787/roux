@@ -1232,42 +1232,51 @@ async def inventory_day_detail(day_id: int, request: Request, current_user: User
     task_summaries = {}
     for task in tasks:
         if task.status == "completed" and task.inventory_item:
-            # Find the day item for this inventory item
-            day_item = next((item for item in inventory_day_items if item.inventory_item_id == task.inventory_item.id), None)
+            summary = {}
+            
+            # Get the inventory day item for this task's inventory item
+            day_item = None
+            for item in inventory_day_items:
+                if item.inventory_item_id == task.inventory_item.id:
+                    day_item = item
+                    break
+            
             if day_item:
+                summary['par_level'] = task.inventory_item.par_level
+                summary['par_unit_name'] = task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units'
+                summary['par_unit_equals_type'] = task.inventory_item.par_unit_equals_type
+                summary['par_unit_equals'] = task.inventory_item.par_unit_equals_calculated
+                
+                # Determine par unit equals unit
+                if task.inventory_item.par_unit_equals_type == 'auto' and task.inventory_item.batch:
+                    summary['par_unit_equals_unit'] = task.inventory_item.batch.yield_unit
+                elif task.inventory_item.par_unit_equals_type == 'custom':
+                    summary['par_unit_equals_unit'] = task.inventory_item.par_unit_equals_unit
+                else:
+                    summary['par_unit_equals_unit'] = summary['par_unit_name']
+                
                 # Calculate initial inventory (current - made)
                 made_par_units = 0
-                if task.made_amount and task.made_unit:
+                if task.inventory_item and task.made_amount and task.made_unit:
                     made_par_units = task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
                 
-                initial_inventory = day_item.quantity - made_par_units
+                summary['initial_inventory'] = day_item.quantity - made_par_units
+                summary['final_inventory'] = day_item.quantity
                 
-                # Calculate conversions
-                initial_converted = None
-                final_converted = None
-                made_converted = None
+                # Add made amount info if available
+                if task.made_amount and task.made_unit:
+                    summary['made_amount'] = task.made_amount
+                    summary['made_unit'] = task.made_unit
+                    summary['made_par_units'] = made_par_units
                 
-                if task.inventory_item.par_unit_equals_calculated and task.inventory_item.par_unit_equals_type != 'par_unit_itself':
-                    initial_converted = initial_inventory * task.inventory_item.par_unit_equals_calculated
-                    final_converted = day_item.quantity * task.inventory_item.par_unit_equals_calculated
-                    if made_par_units > 0:
-                        made_converted = made_par_units * task.inventory_item.par_unit_equals_calculated
+                # Add converted amounts if par unit equals is available
+                if summary['par_unit_equals'] and summary['par_unit_equals_type'] != 'par_unit_itself':
+                    summary['initial_converted'] = summary['initial_inventory'] * summary['par_unit_equals']
+                    summary['final_converted'] = summary['final_inventory'] * summary['par_unit_equals']
+                    if 'made_par_units' in summary:
+                        summary['made_converted'] = summary['made_par_units'] * summary['par_unit_equals']
                 
-                task_summaries[task.id] = {
-                    'par_level': task.inventory_item.par_level,
-                    'par_unit_name': task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units',
-                    'par_unit_equals': task.inventory_item.par_unit_equals_calculated,
-                    'par_unit_equals_type': task.inventory_item.par_unit_equals_type,
-                    'par_unit_equals_unit': task.inventory_item.par_unit_equals_unit if task.inventory_item.par_unit_equals_type == 'custom' else (task.inventory_item.batch.yield_unit if task.inventory_item.batch else ''),
-                    'initial_inventory': initial_inventory,
-                    'initial_converted': initial_converted,
-                    'made_amount': task.made_amount,
-                    'made_unit': task.made_unit,
-                    'made_par_units': made_par_units,
-                    'made_converted': made_converted,
-                    'final_inventory': day_item.quantity,
-                    'final_converted': final_converted
-                }
+                task_summaries[task.id] = summary
     
     return templates.TemplateResponse("inventory_day.html", {
         "request": request,
@@ -1624,11 +1633,6 @@ async def finish_task_with_amount(
         raise HTTPException(status_code=400, detail="Task cannot be finished")
     
     # Update inventory if linked to inventory item
-    if task.inventory_item:
-        inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-        day_item = db.query(InventoryDayItem).filter(
-            InventoryDayItem.day_id == day_id,
-    # Update inventory if linked to inventory item
     if task.inventory_item and task.made_amount and task.made_unit:
         # Find the day item for this inventory item
         day_item = db.query(InventoryDayItem).filter(
@@ -1640,14 +1644,6 @@ async def finish_task_with_amount(
             # Convert made amount to par units and add to inventory
             par_units_made = task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
             day_item.quantity += par_units_made
-    
-            InventoryDayItem.inventory_item_id == task.inventory_item.id
-        ).first()
-        
-        if day_item:
-            # Convert made amount to par units and add to inventory
-            additional_par_units = task.inventory_item.convert_to_par_units(made_amount, made_unit)
-            day_item.quantity += additional_par_units
     
     # Handle pause time if currently paused
     if task.is_paused and task.paused_at:
