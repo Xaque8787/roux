@@ -28,17 +28,11 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request, db: Session = Depends(get_db)):
-    # Check if any users exist
-    user_count = db.query(User).count()
-    if user_count == 0:
+    # Check if any admin user exists
+    admin_exists = db.query(User).filter(User.role == "admin").first()
+    if not admin_exists:
         return RedirectResponse(url="/setup", status_code=302)
-    
-    # Check if user is logged in
-    try:
-        current_user = get_current_user(request, db)
-        return RedirectResponse(url="/login", status_code=302)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=302)
+    return RedirectResponse(url="/login", status_code=302)
 
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_form(request: Request, db: Session = Depends(get_db)):
@@ -54,7 +48,7 @@ async def setup_admin(
     request: Request,
     username: str = Form(...),
     full_name: str = Form(""),
-        return RedirectResponse(url="/login", status_code=302)
+    password: str = Form(...),
     db: Session = Depends(get_db)
 ):
     # Check if any users exist
@@ -79,14 +73,6 @@ async def setup_admin(
     )
     db.add(admin_user)
     
-    # Create default categories
-    default_categories = [
-        ("Proteins", "ingredient"),
-        ("Vegetables", "ingredient"),
-        ("Dairy", "ingredient"),
-        ("Grains", "ingredient"),
-        ("Spices", "ingredient"),
-        ("Appetizers", "recipe"),
     try:
         default_categories = [
             ("Proteins", "ingredient"), ("Vegetables", "ingredient"), ("Dairy", "ingredient"),
@@ -132,7 +118,18 @@ async def setup_admin(
                 db.add(par_unit)
         
         db.commit()
-        return RedirectResponse(url="/login", status_code=302)
+        
+        # Create JWT token and set cookie
+        token = create_jwt({"sub": username})
+        response = RedirectResponse(url="/home", status_code=302)
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax"
+        )
+        return response
         
     except Exception as e:
         db.rollback()
@@ -140,28 +137,6 @@ async def setup_admin(
             "request": request,
             "error": f"Setup failed: {str(e)}"
         })
-    
-    # Create default par unit names
-    default_par_units = ["Tub", "Case", "Container", "Batch", "Portion"]
-    for par_unit_name in default_par_units:
-        existing_par_unit = db.query(ParUnitName).filter(ParUnitName.name == par_unit_name).first()
-        if not existing_par_unit:
-            par_unit = ParUnitName(name=par_unit_name)
-            db.add(par_unit)
-    
-    db.commit()
-    
-    # Create JWT token and set cookie
-    token = create_jwt({"sub": username})
-    response = RedirectResponse(url="/home", status_code=302)
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax"
-    )
-    return response
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
@@ -181,19 +156,8 @@ async def login(
             "error": "Invalid username or password"
         })
     
-    if not user:
-        return templates.TemplateResponse("login.html", {
-            "request": request,
-            "error": "Invalid username or password"
-        })
-    
-    if not user.is_active:
-        return templates.TemplateResponse("login.html", {
-            "request": request,
-            "error": "Account is inactive"
-        })
-    
-    if not verify_password(password, user.hashed_password):
+    # Create JWT token and set cookie
+    token = create_jwt({"sub": username})
     response = RedirectResponse(url="/home", status_code=302)
     response.set_cookie(
         key="access_token",
