@@ -1027,6 +1027,215 @@ async def create_inventory_day(
     db.commit()
     return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
 
+@app.get("/inventory/items/{item_id}/edit", response_class=HTMLResponse)
+async def inventory_item_edit(item_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    categories = db.query(Category).filter(Category.type == "inventory").all()
+    batches = db.query(Batch).all()
+    
+    return templates.TemplateResponse("inventory_item_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "item": item,
+        "categories": categories,
+        "batches": batches
+    })
+
+@app.post("/inventory/items/{item_id}/edit")
+async def update_inventory_item(
+    item_id: int,
+    request: Request,
+    name: str = Form(...),
+    par_level: float = Form(...),
+    batch_id: int = Form(None),
+    category_id: int = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    item.name = name
+    item.par_level = par_level
+    item.batch_id = batch_id if batch_id else None
+    item.category_id = category_id if category_id else None
+    
+    db.commit()
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@app.get("/inventory/items/{item_id}/delete")
+async def delete_inventory_item(item_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+    
+    db.delete(item)
+    db.commit()
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@app.get("/inventory/day/{day_id}", response_class=HTMLResponse)
+async def inventory_day_detail(day_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    return templates.TemplateResponse("inventory_day.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "inventory_day_items": inventory_day_items,
+        "tasks": tasks,
+        "employees": employees
+    })
+
+@app.post("/inventory/day/{day_id}/update")
+async def update_inventory_day(
+    day_id: int,
+    request: Request,
+    global_notes: str = Form(""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Cannot update finalized day")
+    
+    # Update global notes
+    inventory_day.global_notes = global_notes
+    
+    # Update inventory quantities from form data
+    form_data = await request.form()
+    for key, value in form_data.items():
+        if key.startswith('item_'):
+            item_id = int(key.split('_')[1])
+            quantity = float(value) if value else 0.0
+            
+            day_item = db.query(InventoryDayItem).filter(
+                InventoryDayItem.day_id == day_id,
+                InventoryDayItem.inventory_item_id == item_id
+            ).first()
+            
+            if day_item:
+                day_item.quantity = quantity
+                
+                # Handle override checkboxes
+                override_create_key = f'override_create_{item_id}'
+                override_no_task_key = f'override_no_task_{item_id}'
+                
+                day_item.override_create_task = override_create_key in form_data
+                day_item.override_no_task = override_no_task_key in form_data
+    
+    # Generate tasks based on par levels and overrides
+    generate_tasks_for_day(db, inventory_day)
+    
+    db.commit()
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/finalize")
+async def finalize_inventory_day(
+    day_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
+    
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    inventory_day.finalized = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/reports/{day_id}", status_code=302)
+
+@app.get("/inventory/reports/{day_id}", response_class=HTMLResponse)
+async def inventory_report(day_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    # Calculate statistics
+    total_tasks = len(tasks)
+    completed_tasks = len([t for t in tasks if t.status == "completed"])
+    below_par_items = len([item for item in inventory_day_items if item.quantity <= item.inventory_item.par_level])
+    
+    return templates.TemplateResponse("inventory_report.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "inventory_day_items": inventory_day_items,
+        "tasks": tasks,
+        "employees": employees,
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "below_par_items": below_par_items
+    })
+
+def generate_tasks_for_day(db: Session, inventory_day: InventoryDay):
+    """Generate tasks for inventory items that are below par level"""
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == inventory_day.id).all()
+    
+    for day_item in inventory_day_items:
+        is_below_par = day_item.quantity <= day_item.inventory_item.par_level
+        
+        # Check if we should create a task
+        should_create_task = False
+        
+        if is_below_par and not day_item.override_no_task:
+            should_create_task = True
+        elif not is_below_par and day_item.override_create_task:
+            should_create_task = True
+        
+        if should_create_task:
+            # Check if task already exists
+            existing_task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.inventory_item_id == day_item.inventory_item_id,
+                Task.auto_generated == True
+            ).first()
+            
+            if not existing_task:
+                task_description = f"Prep {day_item.inventory_item.name}"
+                if is_below_par:
+                    task_description += f" (Below par: {day_item.quantity}/{day_item.inventory_item.par_level})"
+                
+                task = Task(
+                    day_id=inventory_day.id,
+                    inventory_item_id=day_item.inventory_item_id,
+                    batch_id=day_item.inventory_item.batch_id,
+                    description=task_description,
+                    auto_generated=True
+                )
+                db.add(task)
+
 # API routes for AJAX calls
 @app.get("/api/ingredients/all")
 async def get_all_ingredients(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1064,7 +1273,7 @@ async def get_recipe_available_units(
 ):
     # Return common units for now
     return ["lb", "oz", "gal", "qt", "cup", "each"]
-# Error handlers
+
 # API routes for search functionality
 @app.get("/api/batches/search")
 async def search_batches(q: str = "", current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1192,6 +1401,8 @@ async def get_batch_cost_per_unit(
     cost_per_target_unit = cost_per_yield_unit / conversion_factor
     
     return {"expected_cost_per_unit": cost_per_target_unit}
+
+# Error handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:
