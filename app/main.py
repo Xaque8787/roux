@@ -36,7 +36,7 @@ async def root(request: Request, db: Session = Depends(get_db)):
     # Check if user is logged in
     try:
         current_user = get_current_user(request, db)
-        return RedirectResponse(url="/home", status_code=302)
+        return RedirectResponse(url="/login", status_code=302)
     except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
 
@@ -131,6 +131,11 @@ async def setup_admin(
         existing_unit = db.query(VendorUnit).filter(VendorUnit.name == unit_name).first()
         if not existing_unit:
             vendor_unit = VendorUnit(name=unit_name, description=unit_desc)
+            existing_cat = db.query(Category).filter(
+                Category.name == cat_name,
+                Category.type == cat_type
+            ).first()
+            if not existing_cat:
             db.add(vendor_unit)
     
     # Create default par unit names
@@ -154,19 +159,23 @@ async def setup_admin(
         samesite="lax"
     )
     return response
+            existing_unit = db.query(VendorUnit).filter(VendorUnit.name == unit_name).first()
+            if not existing_unit:
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login")
+            existing_par_unit = db.query(ParUnitName).filter(ParUnitName.name == par_unit_name).first()
+            if not existing_par_unit:
 async def login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    db: Session = Depends(get_db)
+        return RedirectResponse(url="/login", status_code=302)
 ):
-    user = db.query(User).filter(User.username == username).first()
+    if not user or not user.is_active or not verify_password(password, user.hashed_password):
     if not user or not verify_password(password, user.hashed_password) or not user.is_active:
         return templates.TemplateResponse("login.html", {
             "request": request,
