@@ -1441,6 +1441,44 @@ async def assign_task(
 
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/start")
 async def start_task(
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Check if task requires scale selection
+    if task.batch and task.batch.can_be_scaled and not task.selected_scale:
+        # Redirect to scale selection - this should be handled by frontend
+        return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@app.post("/inventory/day/{day_id}/tasks/{task_id}/start_with_scale")
+async def start_task_with_scale(day_id: int, task_id: int, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    form = await request.form()
+    selected_scale = form.get("selected_scale")
+    
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Set scale information
+    task.selected_scale = selected_scale
+    
+    # Calculate scale factor
+    scale_factors = {
+        'full': 1.0,
+        'double': 2.0,
+        'half': 0.5,
+        'quarter': 0.25,
+        'eighth': 0.125,
+        'sixteenth': 0.0625
+    }
+    task.scale_factor = scale_factors.get(selected_scale, 1.0)
+    
     day_id: int,
     task_id: int,
     current_user: User = Depends(get_current_user),
@@ -1578,6 +1616,19 @@ async def finish_task_with_amount(
     
     if task.status not in ["in_progress", "paused"]:
         raise HTTPException(status_code=400, detail="Task cannot be finished")
+    # Update inventory if linked to inventory item
+    if task.inventory_item:
+        inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+        day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.day_id == day_id,
+            InventoryDayItem.inventory_item_id == task.inventory_item.id
+        ).first()
+        
+        if day_item:
+            # Convert made amount to par units and add to inventory
+            additional_par_units = task.inventory_item.convert_to_par_units(made_amount, made_unit)
+            day_item.quantity += additional_par_units
+    
     
     # Handle pause time if currently paused
     if task.is_paused and task.paused_at:
