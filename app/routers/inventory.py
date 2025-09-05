@@ -77,14 +77,15 @@ async def create_inventory_item(
 @router.post("/new_day")
 async def create_inventory_day(
     request: Request,
-    inventory_date: str = Form(...),
+    date: str = Form(...),
     employees_working: list = Form([]),
     global_notes: str = Form(""),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
     # Convert string date to date object
-    inventory_date_obj = date.fromisoformat(inventory_date)
+    from datetime import date as date_class
+    inventory_date_obj = date_class.fromisoformat(date)
     
     # Check if day already exists
     existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date_obj).first()
