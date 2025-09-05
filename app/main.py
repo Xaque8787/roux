@@ -1722,7 +1722,6 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    
     completed_tasks = db.query(Task).filter(
         or_(
             Task.batch_id == batch_id,
