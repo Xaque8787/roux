@@ -3,7 +3,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session, joinedload, or_, and_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, and_
 from datetime import datetime, timedelta
 import json
 
