@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Form, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, desc
 from datetime import datetime, date, timedelta, timezone
 from datetime import datetime, timedelta, date, timezone
 from typing import List, Optional, Dict, Any
@@ -1694,22 +1694,79 @@ async def api_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
     
     return result
 
-@app.get("/api/batches/{batch_id}/cost_per_unit/{unit_id}")
-async def api_batch_cost_per_unit(batch_id: int, unit_id: int, db: Session = Depends(get_db)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Calculate cost per unit
-    recipe_ingredients = db.query(RecipeIngredient).filter(
-        RecipeIngredient.recipe_id == batch.recipe_id
-    ).all()
-    
-    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-    expected_cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
-    
-    return {"expected_cost_per_unit": expected_cost_per_unit}
+@app.get("/api/batches/{batch_id}/cost_per_unit/{unit}")
+async def api_batch_cost_per_unit(batch_id: int, unit: str, db: Session = Depends(get_db)):
+    try:
+        batch = db.query(Batch).options(joinedload(Batch.recipe)).filter(Batch.id == batch_id).first()
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        
+        # Calculate total recipe cost and labor cost
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == batch.recipe_id
+        ).all()
+        
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+        
+        if not batch.yield_amount or batch.yield_amount <= 0:
+            return {"expected_cost_per_unit": 0, "actual_cost_per_unit": 0}
+        
+        # Calculate cost per yield unit
+        cost_per_yield_unit = total_batch_cost / batch.yield_amount
+        
+        # If the requested unit is the same as yield unit, return directly
+        if unit == batch.yield_unit:
+            return {
+                "expected_cost_per_unit": cost_per_yield_unit,
+                "actual_cost_per_unit": cost_per_yield_unit
+            }
+        
+        # Need to convert from yield unit to requested unit
+        # First, determine the usage type from recipe ingredients
+        usage_type = None
+        for ri in recipe_ingredients:
+            ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+            if ingredient and ingredient.usage_type:
+                usage_type = ingredient.usage_type
+                break
+        
+        if not usage_type:
+            # Fallback: try to determine from unit names
+            from .models import WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS
+            if batch.yield_unit in WEIGHT_CONVERSIONS and unit in WEIGHT_CONVERSIONS:
+                usage_type = 'weight'
+            elif batch.yield_unit in VOLUME_CONVERSIONS and unit in VOLUME_CONVERSIONS:
+                usage_type = 'volume'
+        
+        if usage_type:
+            try:
+                from .models import convert_weight, convert_volume
+                
+                if usage_type == 'weight':
+                    # Convert 1 unit of yield_unit to requested unit
+                    conversion_factor = convert_weight(1, batch.yield_unit, unit)
+                else:  # volume
+                    conversion_factor = convert_volume(1, batch.yield_unit, unit)
+                
+                # Cost per requested unit = cost per yield unit / conversion factor
+                cost_per_requested_unit = cost_per_yield_unit / conversion_factor
+                
+                return {
+                    "expected_cost_per_unit": cost_per_requested_unit,
+                    "actual_cost_per_unit": cost_per_requested_unit
+                }
+            except ValueError:
+                # Conversion failed, return yield unit cost
+                pass
+        
+        # If we can't convert, return the yield unit cost as fallback
+        return {
+            "expected_cost_per_unit": cost_per_yield_unit,
+            "actual_cost_per_unit": cost_per_yield_unit
+        }
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/batches/{batch_id}/available_units")
 async def api_batch_available_units(batch_id: int, db: Session = Depends(get_db)):
