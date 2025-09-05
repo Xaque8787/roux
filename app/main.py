@@ -2042,15 +2042,53 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
         
         if current_day_item:
             inventory_info = {
-                "current": current_day_item.quantity,
-                "par_level": task.inventory_item.par_level,
-                "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
-            }
-    return {
-        "available_units": [unit],
-        "request": request,
         "status_code": exc.status_code,
         "detail": exc.detail
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.get("/api/tasks/{task_id}/finish_requirements")
+async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Determine the appropriate unit for made amount input
+    unit = "units"  # Default fallback
+    
+    if task.batch and task.batch.variable_yield:
+        # For variable yield batches, use inventory item configuration if available
+        if task.inventory_item:
+            if task.inventory_item.par_unit_equals_type == 'par_unit_itself':
+                unit = task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
+            elif task.inventory_item.par_unit_equals_type == 'custom':
+                unit = task.inventory_item.par_unit_equals_unit or "units"
+            elif task.inventory_item.par_unit_equals_type == 'auto' and task.batch:
+                unit = task.batch.yield_unit or "units"
+        else:
+            # No inventory item, use batch yield unit
+            unit = task.batch.yield_unit or "units"
+    elif task.batch:
+        # Fixed yield batch, use batch yield unit
+        unit = task.batch.yield_unit or "units"
+    
+    # Get inventory info if available
+    inventory_info = None
+    if task.inventory_item:
+        day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.day_id == task.day_id,
+            InventoryDayItem.inventory_item_id == task.inventory_item.id
+        ).first()
+        
+        if day_item:
+            inventory_info = {
+                "current": day_item.quantity,
+                "par_level": task.inventory_item.par_level,
+                "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
+            }
+    
+    return {
+        "available_units": [unit],
+        "inventory_info": inventory_info
+    }
