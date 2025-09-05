@@ -50,6 +50,7 @@ def create_default_categories(db: Session):
         ("Vegetables", "inventory"),
         ("Dairy", "inventory"),
         ("Dry Goods", "inventory"),
+    ]
         # Check if category already exists
         existing = db.query(Category).filter(
             Category.name == name, 
