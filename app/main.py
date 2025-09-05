@@ -1725,15 +1725,17 @@ async def api_batch_available_units(batch_id: int, db: Session = Depends(get_db)
 async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    
-    # Get all completed tasks for this batch
-    completed_tasks = db.query(Task).filter(
-        Task.batch_id == batch_id,
-        Task.finished_at.isnot(None)
-    ).order_by(desc(Task.finished_at)).all()
-    
-    if not completed_tasks:
+        # Get all completed tasks for this batch (both direct batch link and inventory item batch link)
+        completed_tasks = db.query(Task).filter(
+            or_(
+                Task.batch_id == batch_id,
+                and_(
+                    Task.inventory_item_id.isnot(None),
+                    Task.inventory_item.has(InventoryItem.batch_id == batch_id)
+                )
+            ),
+            Task.finished_at.isnot(None)
+        ).all()
         return {
             "task_count": 0,
             "most_recent_cost": batch.estimated_labor_cost,
