@@ -7,6 +7,91 @@ from datetime import datetime, timedelta, date
 import os
 import json
 
+def calculate_task_summary(task, inventory_day_item):
+    """Calculate comprehensive task summary with formulas"""
+    if not task.inventory_item:
+        return None
+    
+    item = task.inventory_item
+    summary = {
+        'par_level': item.par_level,
+        'par_unit_name': item.par_unit_name.name if item.par_unit_name else 'units',
+        'par_unit_equals_type': item.par_unit_equals_type,
+        'par_unit_equals': item.par_unit_equals_calculated,
+        'par_unit_equals_unit': item.par_unit_equals_unit,
+        'initial_inventory': 0.0,
+        'initial_converted': None,
+        'made_amount': None,
+        'made_unit': None,
+        'made_par_units': 0.0,
+        'made_converted': None,
+        'final_inventory': inventory_day_item.quantity if inventory_day_item else 0.0,
+        'final_converted': None,
+        'formulas': {}
+    }
+    
+    # Calculate made amount based on batch and task type
+    made_amount_in_batch_units = 0.0
+    made_unit = None
+    
+    if task.batch:
+        if task.batch.variable_yield:
+            # Variable yield - use manual input
+            if task.made_amount and task.made_unit:
+                made_amount_in_batch_units = task.made_amount
+                made_unit = task.made_unit
+                summary['formulas']['made_amount'] = f"Manual input: {task.made_amount} {task.made_unit}"
+            else:
+                summary['formulas']['made_amount'] = "Variable yield - requires manual input"
+        else:
+            # Fixed yield - calculate from batch yield and scale
+            scale_factor = task.scale_factor or 1.0
+            made_amount_in_batch_units = task.batch.yield_amount * scale_factor
+            made_unit = task.batch.yield_unit
+            summary['formulas']['made_amount'] = f"Batch yield × scale: {task.batch.yield_amount} × {scale_factor} = {made_amount_in_batch_units} {made_unit}"
+    elif task.made_amount and task.made_unit:
+        # No batch but has manual input
+        made_amount_in_batch_units = task.made_amount
+        made_unit = task.made_unit
+        summary['formulas']['made_amount'] = f"Manual input: {task.made_amount} {task.made_unit}"
+    
+    summary['made_amount'] = made_amount_in_batch_units
+    summary['made_unit'] = made_unit
+    
+    # Convert made amount to par units
+    if made_amount_in_batch_units > 0 and item.par_unit_equals_calculated:
+        if item.par_unit_equals_type == 'auto' and task.batch and not task.batch.variable_yield:
+            # Auto: batch yield unit to par units
+            summary['made_par_units'] = made_amount_in_batch_units / item.par_unit_equals_calculated
+            summary['formulas']['made_par_units'] = f"{made_amount_in_batch_units} {made_unit} ÷ {item.par_unit_equals_calculated} = {summary['made_par_units']:.2f} {summary['par_unit_name']}"
+        elif item.par_unit_equals_type == 'custom':
+            # Custom conversion
+            if made_unit == item.par_unit_equals_unit:
+                summary['made_par_units'] = made_amount_in_batch_units / item.par_unit_equals_calculated
+                summary['formulas']['made_par_units'] = f"{made_amount_in_batch_units} {made_unit} ÷ {item.par_unit_equals_calculated} = {summary['made_par_units']:.2f} {summary['par_unit_name']}"
+            else:
+                # Need unit conversion - simplified for now
+                summary['made_par_units'] = made_amount_in_batch_units / item.par_unit_equals_calculated
+                summary['formulas']['made_par_units'] = f"~{made_amount_in_batch_units} {made_unit} ÷ {item.par_unit_equals_calculated} = {summary['made_par_units']:.2f} {summary['par_unit_name']} (approx)"
+        elif item.par_unit_equals_type == 'par_unit_itself':
+            # Direct conversion
+            summary['made_par_units'] = made_amount_in_batch_units
+            summary['formulas']['made_par_units'] = f"{made_amount_in_batch_units} {made_unit} = {summary['made_par_units']:.2f} {summary['par_unit_name']} (direct)"
+    
+    # Calculate initial inventory (final - made)
+    summary['initial_inventory'] = summary['final_inventory'] - summary['made_par_units']
+    summary['formulas']['initial_inventory'] = f"Final - Made: {summary['final_inventory']:.1f} - {summary['made_par_units']:.2f} = {summary['initial_inventory']:.2f} {summary['par_unit_name']}"
+    
+    # Convert to custom units if applicable
+    if item.par_unit_equals_calculated and item.par_unit_equals_type == 'custom':
+        summary['initial_converted'] = summary['initial_inventory'] * item.par_unit_equals_calculated
+        summary['made_converted'] = summary['made_par_units'] * item.par_unit_equals_calculated
+        summary['final_converted'] = summary['final_inventory'] * item.par_unit_equals_calculated
+        
+        summary['formulas']['conversions'] = f"1 {summary['par_unit_name']} = {item.par_unit_equals_calculated} {item.par_unit_equals_unit}"
+    
+    return summary
+
 from .database import SessionLocal, engine, Base
 from .models import (
     User, Category, VendorUnit, ParUnitName, Vendor, Ingredient, Recipe, 
@@ -1722,13 +1807,23 @@ async def task_detail(
             else:
                 task_summary['initial_inventory'] = day_item.quantity
     
+    # Calculate task summary
+    task_summary = None
+    if task.inventory_item:
+        inventory_day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.day_id == day_id,
+            InventoryDayItem.inventory_item_id == task.inventory_item.id
+        ).first()
+        task_summary = calculate_task_summary(task, inventory_day_item)
+    
     return templates.TemplateResponse("task_detail.html", {
         "request": request,
         "current_user": current_user,
         "task": task,
         "inventory_day": inventory_day,
         "employees": employees,
-        "inventory_day_items": inventory_day_items,
+        "employees": employees,
+        "task_summary": task_summary
         "task_summary": task_summary
     })
 
