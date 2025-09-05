@@ -1749,7 +1749,7 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     
     # Calculate statistics
     most_recent = completed_tasks[0]
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     
