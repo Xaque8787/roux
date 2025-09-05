@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import require_admin
+from ..dependencies import require_admin, get_current_user
 from ..models import UtilityCost
 
 router = APIRouter(prefix="/utilities", tags=["utilities"])

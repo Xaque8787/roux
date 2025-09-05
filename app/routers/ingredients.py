@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import require_admin, get_current_user
+from ..dependencies import require_admin, get_current_user, require_manager_or_admin
 from ..models import Ingredient, Category, Vendor, VendorUnit
 from ..utils.helpers import get_today_date
 

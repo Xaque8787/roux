@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 import json
 from ..database import get_db
-from ..dependencies import require_manager_or_admin, get_current_user
+from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import Recipe, Category, RecipeIngredient
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
