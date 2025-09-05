@@ -159,6 +159,325 @@ async def update_inventory_day(
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
+@router.post("/day/{day_id}/tasks/new")
+async def create_manual_task(
+    day_id: int,
+    request: Request,
+    assigned_to_ids: list = Form([]),
+    inventory_item_id: int = Form(None),
+    description: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day or inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Cannot add tasks to finalized day")
+    
+    # Create tasks for each assigned employee (or one unassigned task if none selected)
+    if not assigned_to_ids:
+        assigned_to_ids = [None]
+    
+    for assigned_to_id in assigned_to_ids:
+        task = Task(
+            day_id=day_id,
+            assigned_to_id=assigned_to_id if assigned_to_id else None,
+            inventory_item_id=inventory_item_id if inventory_item_id else None,
+            batch_id=None,  # Will be set from inventory item if linked
+            description=description,
+            auto_generated=False
+        )
+        
+        # Set batch_id from inventory item if linked
+        if inventory_item_id:
+            inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+            if inventory_item and inventory_item.batch_id:
+                task.batch_id = inventory_item.batch_id
+        
+        db.add(task)
+    
+    db.commit()
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/assign")
+async def assign_task(
+    day_id: int,
+    task_id: int,
+    assigned_to_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.assigned_to_id = assigned_to_id
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/start")
+async def start_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status != "not_started":
+        raise HTTPException(status_code=400, detail="Task already started")
+    
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/start_with_scale")
+async def start_task_with_scale(
+    day_id: int,
+    task_id: int,
+    selected_scale: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status != "not_started":
+        raise HTTPException(status_code=400, detail="Task already started")
+    
+    # Set scale information
+    task.selected_scale = selected_scale
+    
+    # Calculate scale factor
+    scale_factors = {
+        'full': 1.0,
+        'double': 2.0,
+        'half': 0.5,
+        'quarter': 0.25,
+        'eighth': 0.125,
+        'sixteenth': 0.0625
+    }
+    task.scale_factor = scale_factors.get(selected_scale, 1.0)
+    
+    # Start the task
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/pause")
+async def pause_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status != "in_progress":
+        raise HTTPException(status_code=400, detail="Task is not in progress")
+    
+    task.paused_at = datetime.utcnow()
+    task.is_paused = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/resume")
+async def resume_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status != "paused":
+        raise HTTPException(status_code=400, detail="Task is not paused")
+    
+    # Add pause time to total
+    if task.paused_at:
+        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        task.total_pause_time += int(pause_duration)
+    
+    task.paused_at = None
+    task.is_paused = False
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/finish")
+async def finish_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status not in ["in_progress", "paused"]:
+        raise HTTPException(status_code=400, detail="Task cannot be finished")
+    
+    # Handle paused task
+    if task.is_paused and task.paused_at:
+        # Don't add more pause time, just finish from paused state
+        pass
+    
+    task.finished_at = datetime.utcnow()
+    task.is_paused = False
+    task.paused_at = None
+    
+    # For non-variable yield batches, set made amount automatically
+    if task.batch and not task.batch.variable_yield and task.scale_factor:
+        task.made_amount = task.batch.yield_amount * task.scale_factor
+        task.made_unit = task.batch.yield_unit
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/finish_with_amount")
+async def finish_task_with_amount(
+    day_id: int,
+    task_id: int,
+    made_amount: float = Form(...),
+    made_unit: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status not in ["in_progress", "paused"]:
+        raise HTTPException(status_code=400, detail="Task cannot be finished")
+    
+    # Set made amount
+    task.made_amount = made_amount
+    task.made_unit = made_unit
+    
+    # Finish the task
+    task.finished_at = datetime.utcnow()
+    task.is_paused = False
+    task.paused_at = None
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/notes")
+async def update_task_notes(
+    day_id: int,
+    task_id: int,
+    notes: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.notes = notes if notes.strip() else None
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
+
+@router.get("/day/{day_id}/tasks/{task_id}")
+async def task_detail(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    # Calculate task summary if completed and linked to inventory item
+    task_summary = None
+    if task.status == "completed" and task.inventory_item:
+        task_summary = calculate_task_summary(task, db)
+    
+    return templates.TemplateResponse("task_detail.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "task": task,
+        "employees": employees,
+        "task_summary": task_summary
+    })
+
+@router.post("/day/{day_id}/finalize")
+async def finalize_inventory_day(
+    day_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Day is already finalized")
+    
+    inventory_day.finalized = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.get("/reports/{day_id}")
+async def inventory_report(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if not inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Day must be finalized to view report")
+    
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    employees = db.query(User).filter(User.is_active == True).all()
+    
+    # Calculate statistics
+    total_tasks = len(tasks)
+    completed_tasks = len([t for t in tasks if t.status == "completed"])
+    below_par_items = len([item for item in inventory_day_items if item.quantity <= item.inventory_item.par_level])
+    
+    return templates.TemplateResponse("inventory_report.html", {
+        "request": request,
+        "current_user": current_user,
+        "inventory_day": inventory_day,
+        "inventory_day_items": inventory_day_items,
+        "tasks": tasks,
+        "employees": employees,
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "below_par_items": below_par_items
+    })
 def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items):
     """Generate tasks for items that are below par level"""
     
