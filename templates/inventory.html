@@ -61,7 +61,7 @@
                         <small class="text-muted">Link to a batch for labor cost tracking</small>
                     </div>
                     
-                    <div id="parUnitEqualsSection" style="display: none;">
+                    <div id="parUnitEqualsSection">
                         <h6>Par Unit Equals</h6>
                         <div class="mb-3">
                             <div class="form-check">
@@ -344,35 +344,39 @@ function updateParUnitEquals() {
     const parUnitEqualsSection = document.getElementById('parUnitEqualsSection');
     const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
     
-    if (!batchSelect.value) {
-        parUnitEqualsSection.style.display = 'none';
-        return;
-    }
-    
-    const selectedOption = batchSelect.selectedOptions[0];
-    const isVariable = selectedOption.dataset.variable === 'true';
-    const yieldAmount = selectedOption.dataset.yield;
-    const yieldUnit = selectedOption.dataset.unit;
-    
+    // Always show par unit equals section
     parUnitEqualsSection.style.display = 'block';
     
-    // Load available units for the batch
-    if (yieldUnit) {
-        loadAvailableUnitsForBatch(batchSelect.value, yieldUnit);
-    }
-    
-    // Show/hide auto option based on variable yield
-    const autoOption = document.getElementById('auto');
-    if (isVariable) {
+    if (batchSelect.value) {
+        const selectedOption = batchSelect.selectedOptions[0];
+        const isVariable = selectedOption.dataset.variable === 'true';
+        const yieldAmount = selectedOption.dataset.yield;
+        const yieldUnit = selectedOption.dataset.unit;
+        
+        // Load available units for the batch
+        if (yieldUnit) {
+            loadAvailableUnitsForBatch(batchSelect.value, yieldUnit);
+        }
+        
+        // Show/hide auto option based on variable yield
+        const autoOption = document.getElementById('auto');
+        if (isVariable) {
+            autoOption.style.display = 'none';
+            autoOption.disabled = true;
+            // Default to par_unit_itself for variable yield
+            document.getElementById('par_unit_itself').checked = true;
+        } else {
+            autoOption.style.display = 'block';
+            autoOption.disabled = false;
+            // Default to auto for fixed yield
+            autoOption.checked = true;
+        }
+    } else {
+        // No batch selected - default to par_unit_itself
+        document.getElementById('par_unit_itself').checked = true;
+        const autoOption = document.getElementById('auto');
         autoOption.style.display = 'none';
         autoOption.disabled = true;
-        // Default to par_unit_itself for variable yield
-        document.getElementById('par_unit_itself').checked = true;
-    } else {
-        autoOption.style.display = 'block';
-        autoOption.disabled = false;
-        // Default to auto for fixed yield
-        autoOption.checked = true;
     }
     
     updateParUnitEqualsPreview();
