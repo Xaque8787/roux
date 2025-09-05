@@ -2035,19 +2035,19 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
             available_units = [task.batch.yield_unit] if task.batch.yield_unit else []
     
     # Get inventory information if linked
+    inventory_info = None
     if task.inventory_item:
-        # Find the inventory day item for current quantity
-        inventory_day_item = db.query(InventoryDayItem).filter(
+        # Find the current inventory day item
+        current_day_item = db.query(InventoryDayItem).filter(
             InventoryDayItem.day_id == task.day_id,
             InventoryDayItem.inventory_item_id == task.inventory_item.id
         ).first()
         
-        if inventory_day_item:
-            par_unit_name = task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
+        if current_day_item:
             inventory_info = {
-                "current": inventory_day_item.quantity,
+                "current": current_day_item.quantity,
                 "par_level": task.inventory_item.par_level,
-                "par_unit_name": par_unit_name
+                "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
             }
     
     return {
