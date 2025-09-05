@@ -1767,12 +1767,6 @@ async def finish_task_with_amount(
     if task.status not in ["in_progress", "paused"]:
         raise HTTPException(status_code=400, detail="Task cannot be finished")
     
-    # Update inventory if linked to inventory item
-    if task.inventory_item and task.made_amount and task.made_unit:
-        # Find the day item for this inventory item
-        day_item = db.query(InventoryDayItem).filter(
-            InventoryDayItem.day_id == day_id,
-            InventoryDayItem.inventory_item_id == task.inventory_item.id
     # Update inventory if task has inventory item
     if task.inventory_item:
         inventory_day_item = db.query(InventoryDayItem).filter(
@@ -1793,13 +1787,6 @@ async def finish_task_with_amount(
                     made_par_units = made_amount
             
             inventory_day_item.quantity += made_par_units
-    
-        ).first()
-        
-        if day_item:
-            # Convert made amount to par units and add to inventory
-            par_units_made = task.inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
-            day_item.quantity += par_units_made
     
     # Handle pause time if currently paused
     if task.is_paused and task.paused_at:
@@ -1893,8 +1880,6 @@ async def task_detail(
         "task": task,
         "inventory_day": inventory_day,
         "employees": employees,
-        "employees": employees,
-        "task_summary": task_summary
         "task_summary": task_summary
     })
 
