@@ -1912,10 +1912,10 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
         return {
             "task_count": 0,
             "most_recent_cost": batch.estimated_labor_cost,
-            "most_recent_date": "No tasks completed",
-            "average_week": batch.estimated_labor_cost,
-            "average_month": batch.estimated_labor_cost,
-            "average_all_time": batch.estimated_labor_cost,
+        # Convert to list and ensure we have at least one unit
+        available_units = list(units_set) if units_set else ["units"]
+        
+        return {
             "week_task_count": 0,
             "month_task_count": 0
         }
