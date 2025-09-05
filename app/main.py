@@ -1990,8 +1990,8 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
         joinedload(Task.batch),
         joinedload(Task.inventory_item)
     ).filter(Task.id == task_id).first()
-    # Determine the correct unit based on task configuration
-    unit = "units"  # Default fallback
+    # Determine unit based on task configuration
+    unit = "units"
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     # Determine the correct unit based on inventory item configuration
@@ -2023,23 +2023,18 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
     if task.inventory_item:
         # Get current inventory day item
         current_day_item = None
-        if task.day:
             current_day_item = db.query(InventoryDayItem).filter(
-                InventoryDayItem.day_id == task.day.id,
                 InventoryDayItem.inventory_item_id == task.inventory_item.id
             ).first()
     
     # Return single unit (not a dropdown)
     available_units = [unit_to_use]
             available_units = list(units_set)
-        else:
             # Fixed yield - use yield unit
             available_units = [task.batch.yield_unit] if task.batch.yield_unit else []
     
-    # Get inventory information if linked
     inventory_info = None
     if task.inventory_item:
-        # Find the current inventory day item
         current_day_item = db.query(InventoryDayItem).filter(
             InventoryDayItem.day_id == task.day_id,
             InventoryDayItem.inventory_item_id == task.inventory_item.id
@@ -2051,14 +2046,11 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
                 "par_level": task.inventory_item.par_level,
                 "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
             }
-    
     return {
         "available_units": [unit],
         "request": request,
         "status_code": exc.status_code,
         "detail": exc.detail
-    }, status_code=exc.status_code)
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
