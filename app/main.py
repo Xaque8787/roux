@@ -1746,7 +1746,7 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
             "average_all_time": batch.estimated_labor_cost,
             "week_task_count": 0,
             "month_task_count": 0
-        }
+        })
     
     # Calculate statistics
     most_recent = completed_tasks[0]
