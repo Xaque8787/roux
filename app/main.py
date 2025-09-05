@@ -22,34 +22,46 @@ templates = Jinja2Templates(directory="templates")
 
 def create_default_categories(db: Session):
     """Create default categories if they don't exist"""
-    default_categories = [
-        ("Proteins", "ingredient"),
-        ("Vegetables", "ingredient"),
-        ("Dairy", "ingredient"),
-        ("Grains", "ingredient"),
-        ("Spices", "ingredient"),
-        ("Appetizers", "recipe"),
-        ("Main Courses", "recipe"),
-        ("Desserts", "recipe"),
-        ("Beverages", "recipe"),
-        ("Prep Items", "batch"),
-        ("Sauces", "batch"),
-        ("Sides", "batch"),
-        ("Appetizers", "dish"),
-        ("Entrees", "dish"),
-        ("Desserts", "dish"),
-        ("Beverages", "dish"),
-        ("Proteins", "inventory"),
-        ("Vegetables", "inventory"),
-        ("Prepared Items", "inventory"),
-        ("Supplies", "inventory"),
-    ]
-    
-    for name, cat_type in default_categories:
-        existing = db.query(Category).filter(Category.name == name, Category.type == cat_type).first()
-        if not existing:
-            category = Category(name=name, type=cat_type)
-            db.add(category)
+    try:
+        default_categories = [
+            ("Proteins", "ingredient"),
+            ("Vegetables", "ingredient"),
+            ("Dairy", "ingredient"),
+            ("Grains", "ingredient"),
+            ("Spices", "ingredient"),
+            ("Appetizers", "recipe"),
+            ("Main Courses", "recipe"),
+            ("Desserts", "recipe"),
+            ("Beverages", "recipe"),
+            ("Prep Items", "batch"),
+            ("Hot Items", "batch"),
+            ("Cold Items", "batch"),
+            ("Appetizers", "dish"),
+            ("Entrees", "dish"),
+            ("Desserts", "dish"),
+            ("Beverages", "dish"),
+            ("Proteins", "inventory"),
+            ("Vegetables", "inventory"),
+            ("Prep Items", "inventory"),
+            ("Finished Items", "inventory")
+        ]
+        
+        for name, category_type in default_categories:
+            # Check if category already exists
+            existing = db.query(Category).filter(
+                Category.name == name, 
+                Category.type == category_type
+            ).first()
+            
+            if not existing:
+                category = Category(name=name, type=category_type)
+                db.add(category)
+        
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating default categories: {e}")
+        # Continue anyway - categories might already exist
     
     db.commit()
 
