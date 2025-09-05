@@ -61,10 +61,14 @@ async def create_admin_user(
     db.commit()
     
     # Create default data
-    create_default_categories(db)
-    create_default_vendor_units(db)
-    create_default_vendors(db)
-    create_default_par_unit_names(db)
+    try:
+        create_default_categories(db)
+        create_default_vendor_units(db)
+        create_default_vendors(db)
+        create_default_par_unit_names(db)
+    except Exception as e:
+        # If default data creation fails, log it but don't prevent setup completion
+        print(f"Warning: Could not create some default data: {e}")
     
     # Auto-login the admin user
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -77,7 +81,7 @@ async def create_admin_user(
         key="access_token", 
         value=access_token, 
         httponly=True,
-        secure=False,
+        secure=False,  # Set to True in production with HTTPS
         samesite="lax"
     )
     return response
