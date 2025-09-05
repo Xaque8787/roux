@@ -8,6 +8,7 @@ from ..dependencies import require_manager_or_admin, get_current_user, require_a
 from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay, 
                      InventoryDayItem, Task, User)
 from ..utils.helpers import get_today_date
+from datetime import datetime
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 templates = Jinja2Templates(directory="templates")
@@ -116,6 +117,84 @@ async def create_inventory_day(
     
     return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
 
+@router.post("/day/{day_id}/update")
+async def update_inventory_day(
+    day_id: int,
+    request: Request,
+    global_notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    if inventory_day.finalized:
+        raise HTTPException(status_code=400, detail="Cannot update finalized day")
+    
+    # Update day notes
+    inventory_day.global_notes = global_notes if global_notes else None
+    
+    # Get all form data to process inventory items
+    form_data = await request.form()
+    
+    # Process inventory item quantities
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    
+    for day_item in inventory_day_items:
+        item_key = f"item_{day_item.inventory_item_id}"
+        override_create_key = f"override_create_{day_item.inventory_item_id}"
+        override_no_task_key = f"override_no_task_{day_item.inventory_item_id}"
+        
+        if item_key in form_data:
+            day_item.quantity = float(form_data[item_key]) if form_data[item_key] else 0.0
+        
+        day_item.override_create_task = override_create_key in form_data
+        day_item.override_no_task = override_no_task_key in form_data
+    
+    # Generate tasks based on inventory levels
+    generate_tasks_for_day(db, inventory_day, inventory_day_items)
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items):
+    """Generate tasks for items that are below par level"""
+    
+    # Delete existing auto-generated tasks for this day
+    db.query(Task).filter(
+        Task.day_id == inventory_day.id,
+        Task.auto_generated == True
+    ).delete()
+    
+    for day_item in inventory_day_items:
+        item = day_item.inventory_item
+        is_below_par = day_item.quantity <= item.par_level
+        
+        # Create task if:
+        # 1. Item is below par and not overridden to skip
+        # 2. Item is above par but overridden to create task
+        should_create_task = (
+            (is_below_par and not day_item.override_no_task) or
+            (not is_below_par and day_item.override_create_task)
+        )
+        
+        if should_create_task:
+            # Create task description
+            if item.batch:
+                description = f"Make {item.name} - {item.batch.recipe.name}"
+            else:
+                description = f"Restock {item.name}"
+            
+            task = Task(
+                day_id=inventory_day.id,
+                inventory_item_id=item.id,
+                batch_id=item.batch_id if item.batch else None,
+                description=description,
+                auto_generated=True
+            )
+            db.add(task)
 @router.get("/day/{day_id}", response_class=HTMLResponse)
 async def inventory_day_detail(day_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
