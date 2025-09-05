@@ -44,6 +44,7 @@ def create_default_categories(db: Session):
         ("Sauces", "batch"),
         ("Stocks", "batch"),
         ("Cold Storage", "inventory"),
+    ]
         ("Dry Storage", "inventory"),
         ("Freezer", "inventory")
     ]
