@@ -1717,6 +1717,7 @@ async def api_batch_available_units(batch_id: int, db: Session = Depends(get_db)
     
     return list(units_set) if units_set else ["units"]
 
+
 @app.get("/api/batches/{batch_id}/labor_stats")
 async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
