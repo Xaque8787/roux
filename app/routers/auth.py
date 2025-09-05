@@ -77,7 +77,7 @@ async def create_admin_user(
         key="access_token", 
         value=access_token, 
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=False,
         samesite="lax"
     )
     return response

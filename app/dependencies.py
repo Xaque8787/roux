@@ -2,7 +2,7 @@ from fastapi import HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from .database import get_db
 from .models import User
-from .auth import verify_jwt
+from .auth import verify_jwt, ACCESS_TOKEN_EXPIRE_MINUTES
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
