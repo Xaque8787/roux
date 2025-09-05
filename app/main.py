@@ -33,41 +33,42 @@ def create_default_categories(db: Session):
         ("Proteins", "ingredient"),
         ("Vegetables", "ingredient"),
         ("Dairy", "ingredient"),
+def create_default_categories(db: Session):
+    """Create default categories if they don't exist"""
+    default_categories = [
+        ("Proteins", "ingredient"),
+        ("Vegetables", "ingredient"),
+        ("Dairy", "ingredient"),
         ("Grains", "ingredient"),
         ("Spices", "ingredient"),
-        ("Appetizers", "recipe"),
-        ("Main Courses", "recipe"),
-        ("Desserts", "recipe"),
-        ("Beverages", "recipe"),
-        ("Hot Prep", "batch"),
-        ("Cold Prep", "batch"),
-        ("Baking", "batch"),
+        ("Oils", "ingredient"),
         ("Appetizers", "dish"),
         ("Entrees", "dish"),
         ("Desserts", "dish"),
         ("Beverages", "dish"),
-        ("Proteins", "inventory"),
-        ("Vegetables", "inventory"),
-        ("Dairy", "inventory"),
-        ("Dry Goods", "inventory"),
+        ("Soups", "recipe"),
+        ("Sauces", "recipe"),
+        ("Sides", "recipe"),
+        ("Prep Items", "batch"),
+        ("Daily Prep", "inventory")
     ]
-        # Check if category already exists
-        existing = db.query(Category).filter(
-            Category.name == name, 
-            Category.type == category_type
-        ).first()
-        
-        if not existing:
-            category = Category(name=name, type=category_type)
-            db.add(category)
-    for name, category_type in default_categories:
-        existing = db.query(Category).filter(Category.name == name, Category.type == category_type).first()
-        if not existing:
-            category = Category(name=name, type=category_type)
-            db.add(category)
     
-    db.commit()
-
+    try:
+        for name, category_type in default_categories:
+            # Check if category already exists
+            existing = db.query(Category).filter(
+                Category.name == name,
+                Category.type == category_type
+            ).first()
+            
+            if not existing:
+                category = Category(name=name, type=category_type)
+                db.add(category)
+        
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating default categories: {e}")
 # Helper function to create default vendor units
 def create_default_vendor_units(db: Session):
     default_units = [
