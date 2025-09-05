@@ -12,85 +12,91 @@ def calculate_task_summary(task, inventory_day_item):
     if not task.inventory_item:
         return None
     
-    item = task.inventory_item
-    summary = {
-        'par_level': item.par_level,
-        'par_unit_name': item.par_unit_name.name if item.par_unit_name else 'units',
-        'par_unit_equals_type': item.par_unit_equals_type,
-        'par_unit_equals': item.par_unit_equals_calculated,
-        'par_unit_equals_unit': item.par_unit_equals_unit,
-        'initial_inventory': 0.0,
-        'initial_converted': None,
-        'made_amount': None,
-        'made_unit': None,
-        'made_par_units': 0.0,
-        'made_converted': None,
-        'final_inventory': inventory_day_item.quantity if inventory_day_item else 0.0,
-        'final_converted': None,
-        'formulas': {}
-    }
+    inventory_item = task.inventory_item
     
-    # Calculate made amount based on batch and task type
-    made_amount_in_batch_units = 0.0
+    # Get par level and par unit name
+    par_level = inventory_item.par_level
+    par_unit_name = inventory_item.par_unit_name.name if inventory_item.par_unit_name else "units"
+    
+    # Get par unit equals information
+    par_unit_equals = inventory_item.par_unit_equals_calculated
+    par_unit_equals_type = inventory_item.par_unit_equals_type
+    par_unit_equals_unit = inventory_item.par_unit_equals_unit
+    
+    # Use actual daily inventory quantity as initial inventory
+    initial_inventory = inventory_day_item.quantity if inventory_day_item else 0.0
+    
+    # Calculate made amount in par units
+    made_par_units = 0.0
+    made_amount = None
     made_unit = None
+    made_converted = None
     
-    if task.batch:
-        if task.batch.variable_yield:
-            # Variable yield - use manual input
-            if task.made_amount and task.made_unit:
-                made_amount_in_batch_units = task.made_amount
-                made_unit = task.made_unit
-                summary['formulas']['made_amount'] = f"Manual input: {task.made_amount} {task.made_unit}"
-            else:
-                summary['formulas']['made_amount'] = "Variable yield - requires manual input"
-        else:
-            # Fixed yield - calculate from batch yield and scale
-            scale_factor = task.scale_factor or 1.0
-            made_amount_in_batch_units = task.batch.yield_amount * scale_factor
-            made_unit = task.batch.yield_unit
-            summary['formulas']['made_amount'] = f"Batch yield × scale: {task.batch.yield_amount} × {scale_factor} = {made_amount_in_batch_units} {made_unit}"
-    elif task.made_amount and task.made_unit:
-        # No batch but has manual input
-        made_amount_in_batch_units = task.made_amount
+    if task.made_amount and task.made_unit:
+        # Variable yield or manual input
+        made_amount = task.made_amount
         made_unit = task.made_unit
-        summary['formulas']['made_amount'] = f"Manual input: {task.made_amount} {task.made_unit}"
-    
-    summary['made_amount'] = made_amount_in_batch_units
-    summary['made_unit'] = made_unit
-    
-    # Convert made amount to par units
-    if made_amount_in_batch_units > 0 and item.par_unit_equals_calculated:
-        if item.par_unit_equals_type == 'auto' and task.batch and not task.batch.variable_yield:
-            # Auto: batch yield unit to par units
-            summary['made_par_units'] = made_amount_in_batch_units / item.par_unit_equals_calculated
-            summary['formulas']['made_par_units'] = f"{made_amount_in_batch_units} {made_unit} ÷ {item.par_unit_equals_calculated} = {summary['made_par_units']:.2f} {summary['par_unit_name']}"
-        elif item.par_unit_equals_type == 'custom':
-            # Custom conversion
-            if made_unit == item.par_unit_equals_unit:
-                summary['made_par_units'] = made_amount_in_batch_units / item.par_unit_equals_calculated
-                summary['formulas']['made_par_units'] = f"{made_amount_in_batch_units} {made_unit} ÷ {item.par_unit_equals_calculated} = {summary['made_par_units']:.2f} {summary['par_unit_name']}"
-            else:
-                # Need unit conversion - simplified for now
-                summary['made_par_units'] = made_amount_in_batch_units / item.par_unit_equals_calculated
-                summary['formulas']['made_par_units'] = f"~{made_amount_in_batch_units} {made_unit} ÷ {item.par_unit_equals_calculated} = {summary['made_par_units']:.2f} {summary['par_unit_name']} (approx)"
-        elif item.par_unit_equals_type == 'par_unit_itself':
-            # Direct conversion
-            summary['made_par_units'] = made_amount_in_batch_units
-            summary['formulas']['made_par_units'] = f"{made_amount_in_batch_units} {made_unit} = {summary['made_par_units']:.2f} {summary['par_unit_name']} (direct)"
-    
-    # Calculate initial inventory (final - made)
-    summary['initial_inventory'] = summary['final_inventory'] - summary['made_par_units']
-    summary['formulas']['initial_inventory'] = f"Final - Made: {summary['final_inventory']:.1f} - {summary['made_par_units']:.2f} = {summary['initial_inventory']:.2f} {summary['par_unit_name']}"
-    
-    # Convert to custom units if applicable
-    if item.par_unit_equals_calculated and item.par_unit_equals_type == 'custom':
-        summary['initial_converted'] = summary['initial_inventory'] * item.par_unit_equals_calculated
-        summary['made_converted'] = summary['made_par_units'] * item.par_unit_equals_calculated
-        summary['final_converted'] = summary['final_inventory'] * item.par_unit_equals_calculated
+        made_par_units = inventory_item.convert_to_par_units(made_amount, made_unit)
         
-        summary['formulas']['conversions'] = f"1 {summary['par_unit_name']} = {item.par_unit_equals_calculated} {item.par_unit_equals_unit}"
+        # Convert made amount to par unit equals unit if applicable
+        if par_unit_equals and par_unit_equals_unit and par_unit_equals_type == 'custom':
+            made_converted = made_amount  # Already in the right unit for custom
+        elif par_unit_equals and par_unit_equals_type == 'auto' and inventory_item.batch:
+            # Convert to batch yield unit
+            made_converted = made_amount  # Assume already in correct unit
+    elif task.batch and not task.batch.variable_yield and task.scale_factor:
+        # Fixed yield batch - calculate from batch yield and scale
+        batch_yield = task.batch.yield_amount * task.scale_factor
+        made_amount = batch_yield
+        made_unit = task.batch.yield_unit
+        made_par_units = inventory_item.convert_to_par_units(made_amount, made_unit)
+        
+        # Convert to par unit equals unit if applicable
+        if par_unit_equals and par_unit_equals_unit:
+            if par_unit_equals_type == 'custom':
+                # Convert from batch yield unit to custom unit
+                try:
+                    if made_unit in WEIGHT_CONVERSIONS and par_unit_equals_unit in WEIGHT_CONVERSIONS:
+                        made_converted = convert_weight(made_amount, made_unit, par_unit_equals_unit)
+                    elif made_unit in VOLUME_CONVERSIONS and par_unit_equals_unit in VOLUME_CONVERSIONS:
+                        made_converted = convert_volume(made_amount, made_unit, par_unit_equals_unit)
+                    else:
+                        made_converted = made_amount
+                except:
+                    made_converted = made_amount
+            elif par_unit_equals_type == 'auto':
+                made_converted = made_amount  # Already in batch yield unit
     
-    return summary
+    # Calculate final inventory (initial + made)
+    final_inventory = initial_inventory + made_par_units
+    
+    # Convert inventories to par unit equals unit if applicable
+    initial_converted = None
+    final_converted = None
+    
+    if par_unit_equals and par_unit_equals_unit and par_unit_equals_type == 'custom':
+        initial_converted = initial_inventory * par_unit_equals
+        final_converted = final_inventory * par_unit_equals
+    elif par_unit_equals and par_unit_equals_type == 'auto' and inventory_item.batch:
+        # Convert using batch yield unit
+        initial_converted = initial_inventory * par_unit_equals
+        final_converted = final_inventory * par_unit_equals
+    
+    return {
+        'par_level': par_level,
+        'par_unit_name': par_unit_name,
+        'par_unit_equals': par_unit_equals,
+        'par_unit_equals_type': par_unit_equals_type,
+        'par_unit_equals_unit': par_unit_equals_unit,
+        'initial_inventory': initial_inventory,
+        'initial_converted': initial_converted,
+        'made_amount': made_amount,
+        'made_unit': made_unit,
+        'made_par_units': made_par_units,
+        'made_converted': made_converted,
+        'final_inventory': final_inventory,
+        'final_converted': final_converted
+    }
 
 from .database import SessionLocal, engine, Base
 from .models import (

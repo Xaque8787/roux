@@ -74,12 +74,18 @@
                             {% if task_summary.initial_converted %}
                                 ({{ "%.2f"|format(task_summary.initial_converted) }} {{ task_summary.par_unit_equals_unit }})
                             {% endif %}
+                            <br><small class="text-muted">(Quantity entered in daily inventory)</small>
                             </p>
                             
                             {% if task_summary.made_amount %}
                             <p><strong>Made Amount:</strong> {{ task_summary.made_amount }} {{ task_summary.made_unit }} = {{ "%.2f"|format(task_summary.made_par_units) }} {{ task_summary.par_unit_name }}
                             {% if task_summary.made_converted %}
                                 ({{ "%.2f"|format(task_summary.made_converted) }} {{ task_summary.par_unit_equals_unit }})
+                            {% endif %}
+                            {% if task.batch and not task.batch.variable_yield and task.scale_factor %}
+                            <br><small class="text-muted">(Batch yield × scale: {{ task.batch.yield_amount }} × {{ task.scale_factor }} = {{ task_summary.made_amount }} {{ task_summary.made_unit }})</small>
+                            {% elif task_summary.made_amount %}
+                            <br><small class="text-muted">(Manual input: {{ task_summary.made_amount }} {{ task_summary.made_unit }})</small>
                             {% endif %}
                             </p>
                             {% endif %}
@@ -88,7 +94,7 @@
                             {% if task_summary.final_converted %}
                                 ({{ "%.2f"|format(task_summary.final_converted) }} {{ task_summary.par_unit_equals_unit }})
                             {% endif %}
-                            <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(task_summary.initial_inventory) }} + {{ "%.1f"|format(task_summary.made_par_units) }} = {{ "%.1f"|format(task_summary.final_inventory) }} {{ task_summary.par_unit_name }})</small>
+                            <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(task_summary.initial_inventory) }} + {{ "%.2f"|format(task_summary.made_par_units) }} = {{ "%.1f"|format(task_summary.final_inventory) }} {{ task_summary.par_unit_name }})</small>
                             </p>
                         </div>
                         {% endif %}
