@@ -1723,6 +1723,7 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    
     completed_tasks = db.query(Task).filter(
         or_(
             Task.batch_id == batch_id,
@@ -1738,20 +1739,18 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
         return {
             "task_count": 0,
             "most_recent_cost": batch.estimated_labor_cost,
-        from datetime import timezone
-        now = datetime.now(timezone.utc)
-        week_ago = now - timedelta(days=7)
-        month_ago = now - timedelta(days=30)
+            "average_week": batch.estimated_labor_cost,
             "average_month": batch.estimated_labor_cost,
             "average_all_time": batch.estimated_labor_cost,
             "week_task_count": 0,
             "month_task_count": 0
-        })
+        }
     
     # Calculate statistics
     most_recent = completed_tasks[0]
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
     
     week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
     month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
