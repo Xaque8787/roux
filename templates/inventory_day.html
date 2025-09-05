@@ -316,7 +316,7 @@
                                         {% if summary.final_converted %}
                                             ({{ "%.2f"|format(summary.final_converted) }} {{ summary.par_unit_equals_unit }})
                                         {% endif %}
-                                        <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(summary.initial_inventory) }} + {{ "%.2f"|format(summary.made_par_units) }} = {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }})</small>
+                                        <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(summary.initial_inventory) }} + {{ "%.2f"|format(summary.made_amount_par_units) }} = {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }})</small>
                                     </small>
                                 </div>
                                 {% endif %}
