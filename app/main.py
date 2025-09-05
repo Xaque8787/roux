@@ -30,7 +30,6 @@ def needs_setup(db: Session):
 # Helper function to create default categories
 def create_default_categories(db: Session):
     default_categories = [
-    default_categories = [
         ("Proteins", "ingredient"),
         ("Vegetables", "ingredient"),
         ("Dairy", "ingredient"),
@@ -40,16 +39,16 @@ def create_default_categories(db: Session):
         ("Main Courses", "dish"),
         ("Desserts", "dish"),
         ("Beverages", "dish"),
-        ("Prep Items", "inventory")
+        ("Prep Items", "inventory"),
+        ("Prep Items", "batch"),
+        ("Sauces", "batch"),
+        ("Sides", "batch"),
+        ("Cold Storage", "inventory"),
+        ("Dry Storage", "inventory"),
+        ("Freezer", "inventory")
     ]
-            ("Prep Items", "batch"),
-            ("Sauces", "batch"),
-            ("Sides", "batch"),
-            ("Cold Storage", "inventory"),
-            ("Dry Storage", "inventory"),
-            ("Freezer", "inventory")
-        ]
-        
+    
+    try:
         for name, category_type in default_categories:
             # Check if category already exists
             existing = db.query(Category).filter(
@@ -65,12 +64,6 @@ def create_default_categories(db: Session):
     except Exception as e:
         db.rollback()
         print(f"Error creating default categories: {e}")
-        existing = db.query(Category).filter(Category.name == name, Category.type == category_type).first()
-        if not existing:
-            category = Category(name=name, type=category_type)
-            db.add(category)
-    
-    db.commit()
 
 # Helper function to create default vendor units
 def create_default_vendor_units(db: Session):
@@ -161,13 +154,14 @@ async def setup_post(
     db.add(admin_user)
     db.commit()
     
-    # Redirect to login page after successful setup
-    response = RedirectResponse(url="/login", status_code=302)
-    return response
+    # Create default data
     create_default_categories(db)
     create_default_vendor_units(db)
     create_default_par_unit_names(db)
     
+    # Redirect to login page after successful setup
+    response = RedirectResponse(url="/login", status_code=302)
+    return response
 
 # Authentication routes
 @app.get("/login", response_class=HTMLResponse)
