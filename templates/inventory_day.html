@@ -260,9 +260,15 @@
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
                             {% elif task.status == "paused" %}
                                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                {% if task.requires_made_amount %}
+                                <button type="button" class="btn btn-xs btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                    Finish & Enter Amount
+                                </button>
+                                {% else %}
                                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display:inline;">
                                     <button type="submit" class="btn btn-xs btn-info">Resume</button>
                                 </form>
+                                {% endif %}
                                 {% endif %}
                                 <span class="badge bg-warning">Paused</span>
                                 <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>

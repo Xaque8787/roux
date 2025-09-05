@@ -42,7 +42,13 @@
                             {% elif task.status == "in_progress" %}
                                 <span class="badge bg-primary">In Progress</span>
                             {% elif task.status == "paused" %}
+                                {% if task.requires_made_amount %}
+                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                    <i class="fas fa-check"></i> Finish & Enter Amount
+                                </button>
+                                {% else %}
                                 <span class="badge bg-warning">Paused</span>
+                                {% endif %}
                             {% elif task.status == "completed" %}
                                 <span class="badge bg-success">Completed</span>
                             {% endif %}

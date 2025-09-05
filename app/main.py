@@ -1701,6 +1701,56 @@ async def finish_task(
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
+@app.get("/api/tasks/{task_id}/finish_requirements")
+async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Get available units based on batch or default units
+    available_units = []
+    if task.batch:
+        if task.batch.variable_yield:
+            # For variable yield, get available units from recipe ingredients
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == task.batch.recipe_id
+            ).all()
+            
+            units_set = set()
+            for ri in recipe_ingredients:
+                if ri.ingredient:
+                    ingredient_units = ri.ingredient.get_available_units()
+                    units_set.update(ingredient_units)
+            
+            available_units = sorted(list(units_set))
+        else:
+            # Fixed yield - use batch yield unit
+            available_units = [task.batch.yield_unit]
+    else:
+        # No batch - provide common units
+        available_units = ['lb', 'oz', 'gal', 'qt', 'cup', 'each']
+    
+    # Get current inventory info if available
+    inventory_info = None
+    if task.inventory_item:
+        inventory_day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.day_id == task.day_id,
+            InventoryDayItem.inventory_item_id == task.inventory_item.id
+        ).first()
+        
+        if inventory_day_item:
+            inventory_info = {
+                'current': inventory_day_item.quantity,
+                'par_level': task.inventory_item.par_level,
+                'par_unit_name': task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units'
+            }
+    
+    return {
+        'available_units': available_units,
+        'inventory_info': inventory_info,
+        'requires_made_amount': (task.batch and task.batch.variable_yield) or not task.batch
+    }
+
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/finish_with_amount")
 async def finish_task_with_amount(
     day_id: int,
@@ -1723,6 +1773,27 @@ async def finish_task_with_amount(
         day_item = db.query(InventoryDayItem).filter(
             InventoryDayItem.day_id == day_id,
             InventoryDayItem.inventory_item_id == task.inventory_item.id
+    # Update inventory if task has inventory item
+    if task.inventory_item:
+        inventory_day_item = db.query(InventoryDayItem).filter(
+            InventoryDayItem.day_id == day_id,
+            InventoryDayItem.inventory_item_id == task.inventory_item.id
+        ).first()
+        
+        if inventory_day_item:
+            # Convert made amount to par units and add to inventory
+            made_par_units = 0.0
+            if task.inventory_item.par_unit_equals_calculated:
+                if task.inventory_item.par_unit_equals_type == 'auto' and task.batch and not task.batch.variable_yield:
+                    made_par_units = made_amount / task.inventory_item.par_unit_equals_calculated
+                elif task.inventory_item.par_unit_equals_type == 'custom':
+                    if made_unit == task.inventory_item.par_unit_equals_unit:
+                        made_par_units = made_amount / task.inventory_item.par_unit_equals_calculated
+                elif task.inventory_item.par_unit_equals_type == 'par_unit_itself':
+                    made_par_units = made_amount
+            
+            inventory_day_item.quantity += made_par_units
+    
         ).first()
         
         if day_item:
