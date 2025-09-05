@@ -50,8 +50,15 @@ def create_default_categories(db: Session):
         ("Vegetables", "inventory"),
         ("Dairy", "inventory"),
         ("Dry Goods", "inventory"),
-    ]
-    
+        # Check if category already exists
+        existing = db.query(Category).filter(
+            Category.name == name, 
+            Category.type == category_type
+        ).first()
+        
+        if not existing:
+            category = Category(name=name, type=category_type)
+            db.add(category)
     for name, category_type in default_categories:
         existing = db.query(Category).filter(Category.name == name, Category.type == category_type).first()
         if not existing:
@@ -137,7 +144,8 @@ async def setup_post(
     if not full_name.strip():
         full_name = username
     
-    hashed_password = hash_password(password)
+        response = RedirectResponse(url="/login", status_code=303)
+        return response
     admin_user = User(
         username=username,
         full_name=full_name,
@@ -440,7 +448,8 @@ async def create_ingredient(
     
     db.add(ingredient)
     db.commit()
-    
+        response = RedirectResponse(url="/login", status_code=303)
+        return response
     return RedirectResponse(url="/ingredients", status_code=302)
 
 @app.get("/ingredients/{ingredient_id}", response_class=HTMLResponse)
