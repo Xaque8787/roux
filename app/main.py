@@ -1892,7 +1892,7 @@ def calculate_task_summary(task: Task, db: Session) -> Optional[Dict[str, Any]]:
     inventory_item = task.inventory_item
     
     # Get the inventory day item
-    initial_inventory = inventory_day_item.quantity if inventory_day_item else 0.0
+    day_item = db.query(InventoryDayItem).filter(
         InventoryDayItem.day_id == task.day_id,
         InventoryDayItem.inventory_item_id == inventory_item.id
     ).first()
