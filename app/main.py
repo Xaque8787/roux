@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, and_
 from datetime import datetime, date, timedelta, timezone
 from datetime import datetime, timedelta, date, timezone
 from typing import List, Optional, Dict, Any
