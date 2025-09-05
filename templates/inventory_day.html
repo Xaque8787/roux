@@ -448,7 +448,7 @@ function showMadeAmountInput(taskId, recipeName) {
                                     <div class="col-8">
                                         <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
                                     </div>
-                                    <div class="col-4" id="madeUnitSection">
+                                    <div class="col-4" id="madeUnitSection" ${data.available_units.length === 1 ? 'style="display: none;"' : ''}>
                                         <select class="form-select" id="madeUnit" required>
                                             ${data.available_units.map(unit => 
                                                 `<option value="${unit}">${unit}</option>`
@@ -457,7 +457,8 @@ function showMadeAmountInput(taskId, recipeName) {
                                     </div>
                                 </div>
                                 ${data.available_units.length === 1 ? `
-                                <small class="text-info">Unit: ${data.available_units[0]} (Par Unit Itself)</small>
+                                <small class="text-info">Unit: ${data.available_units[0]}</small>
+                                <input type="hidden" id="hiddenMadeUnit" value="${data.available_units[0]}">
                                 ` : ''}
                             </div>
                             ${data.inventory_info ? `
@@ -493,7 +494,17 @@ function showMadeAmountInput(taskId, recipeName) {
 
 function finishTaskWithAmount(taskId) {
     const madeAmount = document.getElementById('madeAmount').value;
-    const madeUnit = document.getElementById('madeUnit').value;
+    const madeUnitSelect = document.getElementById('madeUnit');
+    const hiddenMadeUnit = document.getElementById('hiddenMadeUnit');
+    
+    let madeUnit;
+    if (hiddenMadeUnit) {
+        // Single unit case (par unit itself)
+        madeUnit = hiddenMadeUnit.value;
+    } else if (madeUnitSelect) {
+        // Multiple units case
+        madeUnit = madeUnitSelect.value;
+    }
     
     if (!madeAmount || !madeUnit) {
         alert('Please enter amount made and select unit');
