@@ -1993,22 +1993,41 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
     
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    # Determine the correct unit based on inventory item configuration
+    unit_to_use = "units"  # fallback
     
-    available_units = []
     inventory_info = None
     
     if task.batch:
-        if task.batch.variable_yield:
-            # Get available units from recipe ingredients
-            recipe_ingredients = db.query(RecipeIngredient).options(
-                joinedload(RecipeIngredient.ingredient)
-            ).filter(RecipeIngredient.recipe_id == task.batch.recipe_id).all()
-            
-            units_set = set()
-            for ri in recipe_ingredients:
-                ingredient_units = ri.ingredient.get_available_units()
-                units_set.update(ingredient_units)
-            
+        if task.inventory_item:
+            # Use inventory item's par unit configuration
+            if task.inventory_item.par_unit_equals_type == 'par_unit_itself':
+                # Use the par unit name (e.g., "Tub", "Container")
+                if task.inventory_item.par_unit_name:
+                    unit_to_use = task.inventory_item.par_unit_name.name
+            elif task.inventory_item.par_unit_equals_type == 'custom':
+                # Use the custom unit (e.g., "lb", "gal")
+                if task.inventory_item.par_unit_equals_unit:
+                    unit_to_use = task.inventory_item.par_unit_equals_unit
+            elif task.inventory_item.par_unit_equals_type == 'auto':
+                # Use the batch yield unit (e.g., "lb", "gal")
+                if task.batch.yield_unit:
+                    unit_to_use = task.batch.yield_unit
+        else:
+            # No inventory item, use batch yield unit
+            if task.batch.yield_unit:
+                unit_to_use = task.batch.yield_unit
+    elif task.inventory_item:
+        # Task has inventory item but no batch
+        if task.inventory_item.par_unit_equals_type == 'par_unit_itself':
+            if task.inventory_item.par_unit_name:
+                unit_to_use = task.inventory_item.par_unit_name.name
+        elif task.inventory_item.par_unit_equals_type == 'custom':
+            if task.inventory_item.par_unit_equals_unit:
+                unit_to_use = task.inventory_item.par_unit_equals_unit
+    
+    # Return single unit (not a dropdown)
+    available_units = [unit_to_use]
             available_units = list(units_set)
         else:
             # Fixed yield - use yield unit
