@@ -67,7 +67,7 @@ app.include_router(api_tasks.router)
 
 # Additional API endpoint for batch labor stats
 @app.get("/api/batches/{batch_id}/labor_stats")
-async def api_batch_labor_stats(batch_id: int, db: Session = get_db()):
+async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
