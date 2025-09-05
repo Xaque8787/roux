@@ -2001,7 +2001,8 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
     if task.batch:
         if task.inventory_item:
             # Use inventory item's par unit configuration
-            if task.inventory_item.par_unit_equals_type == 'par_unit_itself':
+            "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
+        }
                 # Use the par unit name (e.g., "Tub", "Container")
                 if task.inventory_item.par_unit_name:
                     unit_to_use = task.inventory_item.par_unit_name.name
