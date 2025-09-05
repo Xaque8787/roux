@@ -1739,8 +1739,10 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
         return {
             "task_count": 0,
             "most_recent_cost": batch.estimated_labor_cost,
-            "most_recent_date": "No tasks completed",
-            "average_week": batch.estimated_labor_cost,
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
             "average_month": batch.estimated_labor_cost,
             "average_all_time": batch.estimated_labor_cost,
             "week_task_count": 0,
