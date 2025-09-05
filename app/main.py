@@ -71,7 +71,7 @@ def calculate_task_summary(task, inventory_day_item):
     final_inventory = initial_inventory + made_par_units
     
     # Convert inventories to par unit equals unit if applicable
-    initial_converted = None
+        'made_amount_par_units': made_amount_par_units,  # Fixed key name
     final_converted = None
     
     if par_unit_equals and par_unit_equals_unit and par_unit_equals_type == 'custom':
