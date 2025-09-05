@@ -399,17 +399,9 @@ function showMadeAmountInput(taskId, recipeName) {
 
 function finishTaskWithAmount(taskId) {
     const madeAmount = document.getElementById('madeAmount').value;
-    const madeUnitSelect = document.getElementById('madeUnit');
-    const hiddenMadeUnit = document.getElementById('hiddenMadeUnit');
+    const madeUnitInput = document.getElementById('madeUnit');
     
-    let madeUnit;
-    if (hiddenMadeUnit) {
-        // Single unit case (par unit itself)
-        madeUnit = hiddenMadeUnit.value;
-    } else if (madeUnitSelect) {
-        // Multiple units case
-        madeUnit = madeUnitSelect.value;
-    }
+    const madeUnit = madeUnitInput.value;
     
     if (!madeAmount || !madeUnit) {
         alert('Please enter amount made and select unit');

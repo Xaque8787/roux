@@ -316,7 +316,7 @@
                                         {% if summary.final_converted %}
                                             ({{ "%.2f"|format(summary.final_converted) }} {{ summary.par_unit_equals_unit }})
                                         {% endif %}
-                                        <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(summary.initial_inventory) }} + {{ "%.2f"|format(summary.made_amount_par_units) }} = {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }})</small>
+                                        <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(summary.initial_inventory) }} + {{ "%.2f"|format(summary.made_par_units) }} = {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }})</small>
                                     </small>
                                 </div>
                                 {% endif %}
@@ -496,17 +496,9 @@ function showMadeAmountInput(taskId, recipeName) {
 
 function finishTaskWithAmount(taskId) {
     const madeAmount = document.getElementById('madeAmount').value;
-    const madeUnitSelect = document.getElementById('madeUnit');
-    const hiddenMadeUnit = document.getElementById('hiddenMadeUnit');
+    const madeUnitInput = document.getElementById('madeUnit');
     
-    let madeUnit;
-    if (hiddenMadeUnit) {
-        // Single unit case (par unit itself)
-        madeUnit = hiddenMadeUnit.value;
-    } else if (madeUnitSelect) {
-        // Multiple units case
-        madeUnit = madeUnitSelect.value;
-    }
+    const madeUnit = madeUnitInput.value;
     
     if (!madeAmount || !madeUnit) {
         alert('Please enter amount made and select unit');

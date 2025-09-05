@@ -1713,48 +1713,52 @@ async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_d
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Get available units based on batch or default units
-    available_units = []
-    if task.batch:
-        if task.batch.variable_yield:
-            # For variable yield, get available units from recipe ingredients
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == task.batch.recipe_id
-            ).all()
-            
-            units_set = set()
-            for ri in recipe_ingredients:
-                if ri.ingredient:
-                    ingredient_units = ri.ingredient.get_available_units()
-                    units_set.update(ingredient_units)
-            
-            available_units = sorted(list(units_set))
-        else:
-            # Fixed yield - use batch yield unit
-            available_units = [task.batch.yield_unit]
-    else:
-        # No batch - provide common units
-        available_units = ['lb', 'oz', 'gal', 'qt', 'cup', 'each']
-    
-    # Get current inventory info if available
-    inventory_info = None
+    # Get finish requirements for task
     if task.inventory_item:
+        inventory_item = task.inventory_item
+        
+        # Determine the correct unit based on par unit equals type
+        if inventory_item.par_unit_equals_type == 'par_unit_itself' and inventory_item.par_unit_name:
+            # Use par unit name itself
+            unit_to_use = inventory_item.par_unit_name.name
+        elif inventory_item.par_unit_equals_type == 'custom' and inventory_item.par_unit_equals_unit:
+            # Use the custom unit defined in par unit equals
+            unit_to_use = inventory_item.par_unit_equals_unit
+        elif inventory_item.par_unit_equals_type == 'auto' and task.batch and task.batch.yield_unit:
+            # Use batch yield unit for auto type
+            unit_to_use = task.batch.yield_unit
+        else:
+            # Fallback
+            unit_to_use = 'units'
+        
+        # Always use single unit - no dropdown needed
+        available_units = [unit_to_use]
+        
+        # Get current inventory info
         inventory_day_item = db.query(InventoryDayItem).filter(
             InventoryDayItem.day_id == task.day_id,
-            InventoryDayItem.inventory_item_id == task.inventory_item.id
+            InventoryDayItem.inventory_item_id == inventory_item.id
         ).first()
         
         if inventory_day_item:
             inventory_info = {
                 'current': inventory_day_item.quantity,
-                'par_level': task.inventory_item.par_level,
-                'par_unit_name': task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else 'units'
+                'par_level': inventory_item.par_level,
+                'par_unit_name': inventory_item.par_unit_name.name if inventory_item.par_unit_name else 'units'
             }
+        else:
+            inventory_info = None
+    else:
+        # No inventory item - use batch yield unit or default
+        if task.batch and task.batch.yield_unit:
+            available_units = [task.batch.yield_unit]
+        else:
+            available_units = ['units']
+        inventory_info = None
     
     return {
         'available_units': available_units,
-        'inventory_info': inventory_info,
-        'requires_made_amount': (task.batch and task.batch.variable_yield) or not task.batch
+        'inventory_info': inventory_info
     }
 
 @app.post("/inventory/day/{day_id}/tasks/{task_id}/finish_with_amount")
