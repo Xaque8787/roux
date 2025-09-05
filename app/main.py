@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi import Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -9,7 +10,8 @@ from datetime import datetime, timedelta
 import json
 
 # Import database and models
-from .database import engine, get_db
+from .database import engine
+from .dependencies import get_db
 from .models import Base, Task, Batch, InventoryItem
 
 # Import routers
