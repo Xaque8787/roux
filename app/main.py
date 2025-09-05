@@ -1923,14 +1923,29 @@ def calculate_task_summary(task: Task, db: Session) -> Optional[Dict[str, Any]]:
     
     # Calculate made amount in par units
     if task.made_amount and task.made_unit:
-        if inventory_item.par_unit_name:
-            made_par_units = inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
-            summary["made_par_units"] = made_par_units
-            summary["made_amount_par_units"] = made_par_units
-            
-            # Calculate made converted amount
-            if inventory_item.par_unit_equals_calculated and inventory_item.par_unit_equals_unit:
-                summary["made_converted"] = made_par_units * inventory_item.par_unit_equals_calculated
+        # Convert made amount to par units
+        made_par_units = inventory_item.convert_to_par_units(task.made_amount, task.made_unit)
+        summary["made_par_units"] = made_par_units
+        summary["made_amount_par_units"] = made_par_units
+        
+        # Calculate made converted amount
+        if inventory_item.par_unit_equals_calculated and inventory_item.par_unit_equals_unit:
+            summary["made_converted"] = made_par_units * inventory_item.par_unit_equals_calculated
+    elif task.batch and not task.batch.variable_yield and task.scale_factor:
+        # For fixed yield batches with scaling, calculate made amount from batch yield
+        batch_yield_amount = task.batch.yield_amount * task.scale_factor
+        batch_yield_unit = task.batch.yield_unit
+        
+        # Convert batch yield to par units
+        made_par_units = inventory_item.convert_to_par_units(batch_yield_amount, batch_yield_unit)
+        summary["made_par_units"] = made_par_units
+        summary["made_amount_par_units"] = made_par_units
+        summary["made_amount"] = batch_yield_amount
+        summary["made_unit"] = batch_yield_unit
+        
+        # Calculate made converted amount
+        if inventory_item.par_unit_equals_calculated and inventory_item.par_unit_equals_unit:
+            summary["made_converted"] = made_par_units * inventory_item.par_unit_equals_calculated
     
     # Calculate final inventory
     summary["final_inventory"] = summary["initial_inventory"] + summary["made_amount_par_units"]
