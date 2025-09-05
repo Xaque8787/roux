@@ -30,29 +30,32 @@ def needs_setup(db: Session):
 # Helper function to create default categories
 def create_default_categories(db: Session):
     default_categories = [
+    default_categories = [
         ("Proteins", "ingredient"),
         ("Vegetables", "ingredient"),
-        ("Dairy", "ingredient"),
         ("Grains", "ingredient"),
+        ("Dairy", "ingredient"),
         ("Spices", "ingredient"),
-        ("Appetizers", "recipe"),
-        ("Main Courses", "recipe"),
-        ("Desserts", "recipe"),
-        ("Beverages", "recipe"),
-        ("Hot Prep", "batch"),
-        ("Cold Prep", "batch"),
-        ("Baking", "batch"),
         ("Appetizers", "dish"),
         ("Entrees", "dish"),
         ("Desserts", "dish"),
         ("Beverages", "dish"),
-        ("Proteins", "inventory"),
-        ("Vegetables", "inventory"),
-        ("Dairy", "inventory"),
-        ("Dry Goods", "inventory"),
+        ("Prep Items", "batch"),
+        ("Sauces", "batch"),
+        ("Stocks", "batch"),
+        ("Cold Storage", "inventory"),
+        ("Dry Storage", "inventory"),
+        ("Freezer", "inventory")
     ]
     
     for name, category_type in default_categories:
+        # Check if category already exists
+        existing = db.query(Category).filter(Category.name == name, Category.type == category_type).first()
+        if not existing:
+            category = Category(name=name, type=category_type)
+            db.add(category)
+    
+    db.commit()
         existing = db.query(Category).filter(Category.name == name, Category.type == category_type).first()
         if not existing:
             category = Category(name=name, type=category_type)
