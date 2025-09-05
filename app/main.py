@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_, desc
+from datetime import datetime, date, timedelta, timezone
 from datetime import datetime, timedelta, date, timezone
 from typing import List, Optional, Dict, Any
 import json
@@ -1723,7 +1723,6 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    # Get all completed tasks for this batch (both direct batch link and inventory item batch link)
     completed_tasks = db.query(Task).filter(
         or_(
             Task.batch_id == batch_id,
