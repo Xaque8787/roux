@@ -1725,22 +1725,26 @@ async def api_batch_available_units(batch_id: int, db: Session = Depends(get_db)
 async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
-        # Get all completed tasks for this batch (both direct batch link and inventory item batch link)
-        completed_tasks = db.query(Task).filter(
-            or_(
-                Task.batch_id == batch_id,
-                and_(
-                    Task.inventory_item_id.isnot(None),
-                    Task.inventory_item.has(InventoryItem.batch_id == batch_id)
-                )
-            ),
-            Task.finished_at.isnot(None)
-        ).all()
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Get all completed tasks for this batch (both direct batch link and inventory item batch link)
+    completed_tasks = db.query(Task).filter(
+        or_(
+            Task.batch_id == batch_id,
+            and_(
+                Task.inventory_item_id.isnot(None),
+                Task.inventory_item.has(InventoryItem.batch_id == batch_id)
+            )
+        ),
+        Task.finished_at.isnot(None)
+    ).order_by(Task.finished_at.desc()).all()
+    
+    if not completed_tasks:
         return {
             "task_count": 0,
             "most_recent_cost": batch.estimated_labor_cost,
             "most_recent_date": "No tasks completed",
-        # Calculate statistics
+            "average_week": batch.estimated_labor_cost,
             "average_month": batch.estimated_labor_cost,
             "average_all_time": batch.estimated_labor_cost,
             "week_task_count": 0,
