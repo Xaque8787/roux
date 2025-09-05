@@ -441,14 +441,24 @@ class DishBatchPortion(Base):
             total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            # Convert portion to yield unit if different
+            # Convert portion unit to yield unit if different
             if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                # Convert portion unit to yield unit
+                # Determine usage type and convert
+                usage_type = None
+                for ri in recipe_ingredients:
+                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+                    if ingredient and ingredient.usage_type:
+                        usage_type = ingredient.usage_type
+                        break
+                
                 try:
-                    # Determine if we're dealing with weight or volume
-                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    if usage_type == 'weight' and self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif usage_type == 'volume' and self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
                         converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
                     elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
                         converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)

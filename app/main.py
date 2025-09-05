@@ -1668,11 +1668,32 @@ async def api_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Batch not found")
     
     # For now, return the yield unit
-    # In the future, this could be expanded to include compatible units
-    units = []
-    if batch.yield_unit:
-        units.append({
-            "id": 1,  # Placeholder ID
+        # Get all available units from recipe ingredients
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == batch.recipe_id
+        ).all()
+        
+        # Collect all unique units from recipe ingredients
+        available_units = set()
+        
+        for ri in recipe_ingredients:
+            ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+            if ingredient:
+                # Get all available units for this ingredient
+                ingredient_units = ingredient.get_available_units()
+                available_units.update(ingredient_units)
+        
+        # Convert to list of dictionaries with id and name
+        # For simplicity, we'll use the unit name as both id and name
+        result = []
+        for unit in sorted(available_units):
+            result.append({"id": unit, "name": unit})
+        
+        # Always include the batch yield unit if it exists and isn't already included
+        if batch.yield_unit and batch.yield_unit not in available_units:
+            result.append({"id": batch.yield_unit, "name": batch.yield_unit})
+        
+        return result
             "name": batch.yield_unit
         })
     
