@@ -1990,7 +1990,8 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
         joinedload(Task.batch),
         joinedload(Task.inventory_item)
     ).filter(Task.id == task_id).first()
-    
+    # Determine the correct unit based on task configuration
+    unit = "units"  # Default fallback
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     # Determine the correct unit based on inventory item configuration
@@ -2005,27 +2006,28 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
         }
                 # Use the par unit name (e.g., "Tub", "Container")
                 if task.inventory_item.par_unit_name:
-                    unit_to_use = task.inventory_item.par_unit_name.name
-            elif task.inventory_item.par_unit_equals_type == 'custom':
-                # Use the custom unit (e.g., "lb", "gal")
-                if task.inventory_item.par_unit_equals_unit:
-                    unit_to_use = task.inventory_item.par_unit_equals_unit
-            elif task.inventory_item.par_unit_equals_type == 'auto':
-                # Use the batch yield unit (e.g., "lb", "gal")
-                if task.batch.yield_unit:
-                    unit_to_use = task.batch.yield_unit
-        else:
-            # No inventory item, use batch yield unit
-            if task.batch.yield_unit:
-                unit_to_use = task.batch.yield_unit
-    elif task.inventory_item:
-        # Task has inventory item but no batch
-        if task.inventory_item.par_unit_equals_type == 'par_unit_itself':
-            if task.inventory_item.par_unit_name:
+    if task.batch and task.batch.variable_yield and task.inventory_item:
+        # Variable yield batch with inventory item - use inventory item's unit configuration
+        if task.inventory_item.par_unit_equals_type == "par_unit_itself" and task.inventory_item.par_unit_name:
+            unit = task.inventory_item.par_unit_name.name
+        elif task.inventory_item.par_unit_equals_type == "custom" and task.inventory_item.par_unit_equals_unit:
+            unit = task.inventory_item.par_unit_equals_unit
+        elif task.inventory_item.par_unit_equals_type == "auto" and task.batch.yield_unit:
+            unit = task.batch.yield_unit
+    elif task.batch and task.batch.yield_unit:
+        # Use batch yield unit (for fixed yield or variable yield without inventory item)
+        unit = task.batch.yield_unit
                 unit_to_use = task.inventory_item.par_unit_name.name
-        elif task.inventory_item.par_unit_equals_type == 'custom':
-            if task.inventory_item.par_unit_equals_unit:
-                unit_to_use = task.inventory_item.par_unit_equals_unit
+    # Prepare inventory info if available
+    inventory_info = None
+    if task.inventory_item:
+        # Get current inventory day item
+        current_day_item = None
+        if task.day:
+            current_day_item = db.query(InventoryDayItem).filter(
+                InventoryDayItem.day_id == task.day.id,
+                InventoryDayItem.inventory_item_id == task.inventory_item.id
+            ).first()
     
     # Return single unit (not a dropdown)
     available_units = [unit_to_use]
@@ -2051,17 +2053,7 @@ async def api_task_finish_requirements(task_id: int, db: Session = Depends(get_d
             }
     
     return {
-        "available_units": available_units,
-        "inventory_info": inventory_info
-    }
-
-# Error handlers
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    if exc.status_code == 401:
-        return RedirectResponse(url="/login", status_code=302)
-    
-    return templates.TemplateResponse("error.html", {
+        "available_units": [unit],
         "request": request,
         "status_code": exc.status_code,
         "detail": exc.detail
