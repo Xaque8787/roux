@@ -38,7 +38,7 @@ async def create_ingredient(
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
     use_item_count_pricing: bool = Form(False),
-    net_weight_volume_item: float = Form(...),
+    net_weight_volume_item: float = Form(None),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
     breakable_case: bool = Form(False),
@@ -51,6 +51,13 @@ async def create_ingredient(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
+    # Validate required fields based on pricing type
+    if not use_item_count_pricing:
+        if net_weight_volume_item is None:
+            raise HTTPException(status_code=400, detail="Net weight/volume per item is required when not using item count pricing")
+        if not net_unit:
+            raise HTTPException(status_code=400, detail="Net unit is required when not using item count pricing")
+    
     ingredient = Ingredient(
         name=name,
         usage_type=usage_type,

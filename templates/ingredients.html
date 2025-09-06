@@ -129,7 +129,7 @@
                                     <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                               step="0.01" onchange="calculateNetCase(); calculateCostPreview();">
+                                               step="0.01" required onchange="calculateNetCase(); calculateCostPreview();">
                                         <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview();">
                                             <!-- Options populated by JavaScript -->
                                         </select>
