@@ -163,7 +163,7 @@ async def update_ingredient(
     if purchase_type == "case":
         ingredient.items_per_case = items_per_case
         if not use_item_count_pricing:
-            ingredient.net_weight_volume_case = net_weight_volume_case or (net_weight_volume_item * items_per_case if items_per_case and net_weight_volume_item else None)
+            ingredient.net_weight_volume_case = (net_weight_volume_item * items_per_case if items_per_case and net_weight_volume_item else None)
     else:
         if not use_item_count_pricing:
             ingredient.net_weight_volume_case = net_weight_volume_item

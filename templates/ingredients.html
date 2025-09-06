@@ -453,14 +453,6 @@ function updateAvailableUnits() {
     calculateCostPreview();
 }
 
-// Update case unit display
-function updateCaseUnitDisplay() {
-    const netUnit = document.getElementById('net_unit').value;
-    const netUnitCase = document.getElementById('netUnitCase');
-    if (netUnitCase) {
-        netUnitCase.textContent = WEIGHT_UNITS[netUnit] || VOLUME_UNITS[netUnit] || netUnit;
-    }
-}
 
 // Calculate net case from item
 function calculateNetCase() {
@@ -476,19 +468,6 @@ function calculateNetCase() {
     calculateCostPreview();
 }
 
-// Calculate net item from case
-function calculateNetItem() {
-    const netCase = parseFloat(document.getElementById('net_weight_volume_case').value) || 0;
-    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
-    const netItemInput = document.getElementById('net_weight_volume_item');
-    
-    if (netCase > 0 && itemsPerCase > 0) {
-        const netItem = (netCase / itemsPerCase).toFixed(2);
-        netItemInput.value = netItem;
-    }
-    
-    calculateCostPreview();
-}
 
 // Toggle item count pricing
 function toggleItemCountPricing() {
@@ -511,7 +490,6 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs not required
         netWeightVolumeInput.required = false;
         netUnitSelect.required = false;
-        netWeightVolumeCaseInput.required = false;
         
         // Sync the cost inputs
         purchaseTotalCostItem.value = purchaseTotalCost.value;
@@ -528,7 +506,6 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs required again
         netWeightVolumeInput.required = true;
         netUnitSelect.required = true;
-        netWeightVolumeCaseInput.required = false; // Will be set by toggleCaseFields
         
         // Sync the cost inputs back
         purchaseTotalCost.value = purchaseTotalCostItem.value;
@@ -561,23 +538,14 @@ function toggleCaseFields() {
     const caseRadio = document.getElementById('case');
     const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
     const caseFields = document.getElementById('caseFields');
-    const netWeightVolumeCaseInput = document.getElementById('net_weight_volume_case');
     const itemsPerCaseInput = document.getElementById('items_per_case');
     
     if (caseRadio.checked) {
         caseFields.style.display = 'block';
         itemsPerCaseInput.required = true;
-        
-        // Only require net weight/volume case field if not using item count pricing
-        if (netWeightVolumeCaseInput) {
-            netWeightVolumeCaseInput.required = !useItemCountPricing;
-        }
     } else {
         caseFields.style.display = 'none';
         itemsPerCaseInput.required = false;
-        if (netWeightVolumeCaseInput) {
-            netWeightVolumeCaseInput.required = true;
-        }
     }
     updateItemCountDisplay();
     calculateCostPreview();
@@ -676,14 +644,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
     document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
     document.getElementById('net_weight_volume_item').addEventListener('input', calculateCostPreview);
-    document.getElementById('net_weight_volume_case').addEventListener('input', calculateCostPreview);
     document.getElementById('items_per_case').addEventListener('input', function() {
-        calculateItemWeight();
+        calculateNetCase();
         updateItemCountDisplay();
         calculateCostPreview();
     });
     document.getElementById('net_unit').addEventListener('change', function() {
-        updateCaseUnitDisplay();
+        calculateNetCase();
         calculateCostPreview();
     });
 });
