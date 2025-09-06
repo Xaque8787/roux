@@ -393,6 +393,19 @@ async function loadAvailableUnitsForBatch(batchId, yieldUnit) {
         if (isVariable) {
             // For variable yield batches, show all weight and volume units
             units = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
+            
+            // Populate the dropdown immediately for variable yield
+            const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
+            parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+            
+            units.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit;
+                option.textContent = unit;
+                parUnitEqualsUnitSelect.appendChild(option);
+            });
+            
+            return; // Exit early for variable yield
         } else {
             // For fixed yield batches, try to get batch-specific units based on yield unit
             try {
@@ -412,21 +425,22 @@ async function loadAvailableUnitsForBatch(batchId, yieldUnit) {
                     units = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
                 }
             }
-        }
-        
-        const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
-        parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-        
-        units.forEach(unit => {
-            const option = document.createElement('option');
-            option.value = unit;
-            option.textContent = unit;
-            parUnitEqualsUnitSelect.appendChild(option);
-        });
-        
-        // Pre-select the yield unit if available
-        if (!isVariable && units.includes(yieldUnit)) {
-            parUnitEqualsUnitSelect.value = yieldUnit;
+            
+            // Populate the dropdown for fixed yield batches
+            const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
+            parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+            
+            units.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit;
+                option.textContent = unit;
+                parUnitEqualsUnitSelect.appendChild(option);
+            });
+            
+            // Pre-select the yield unit if available
+            if (units.includes(yieldUnit)) {
+                parUnitEqualsUnitSelect.value = yieldUnit;
+            }
         }
     } catch (error) {
         console.error('Error loading available units:', error);
