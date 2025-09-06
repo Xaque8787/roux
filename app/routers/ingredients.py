@@ -40,7 +40,8 @@ async def create_ingredient(
     use_item_count_pricing: bool = Form(False),
     net_weight_volume_item: float = Form(None),
     net_unit: str = Form(...),
-    purchase_total_cost: float = Form(...),
+    purchase_total_cost: float = Form(None),
+    purchase_total_cost_item: float = Form(None),
     breakable_case: bool = Form(False),
     items_per_case: int = Form(None),
     net_weight_volume_case: float = Form(None),
@@ -57,6 +58,14 @@ async def create_ingredient(
             raise HTTPException(status_code=400, detail="Net weight/volume per item is required when not using item count pricing")
         if not net_unit:
             raise HTTPException(status_code=400, detail="Net unit is required when not using item count pricing")
+        if purchase_total_cost is None:
+            raise HTTPException(status_code=400, detail="Purchase total cost is required when not using item count pricing")
+    else:
+        if purchase_total_cost_item is None:
+            raise HTTPException(status_code=400, detail="Purchase total cost is required when using item count pricing")
+    
+    # Use the appropriate cost field based on pricing type
+    final_purchase_cost = purchase_total_cost_item if use_item_count_pricing else purchase_total_cost
     
     ingredient = Ingredient(
         name=name,
@@ -66,7 +75,7 @@ async def create_ingredient(
         vendor_unit_id=vendor_unit_id if vendor_unit_id else None,
         purchase_type=purchase_type,
         purchase_unit_name=purchase_unit_name,
-        purchase_total_cost=purchase_total_cost,
+        purchase_total_cost=final_purchase_cost,
         breakable_case=breakable_case,
         use_item_count_pricing=use_item_count_pricing,
         net_weight_volume_item=net_weight_volume_item if not use_item_count_pricing else None,

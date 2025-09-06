@@ -140,7 +140,7 @@
                                 <div class="mb-3">
                                     <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
                                     <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                           step="0.01" onchange="calculateCostPreview();" required>
+                                           step="0.01" onchange="calculateCostPreview();">
                                 </div>
                             </div>
                         </div>
@@ -160,8 +160,8 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="purchase_total_cost_item" class="form-label">Purchase Total Cost</label>
-                                    <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost" 
-                                           step="0.01" onchange="calculateCostPreview();" required>
+                                    <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
+                                           step="0.01" onchange="calculateCostPreview();">
                                 </div>
                             </div>
                         </div>
@@ -546,8 +546,10 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs not required
         netWeightVolumeInput.required = false;
         netUnitSelect.required = false;
+        purchaseTotalCost.required = false;
         
-        // Sync the cost inputs
+        // Make item count inputs required and sync values
+        purchaseTotalCostItem.required = true;
         purchaseTotalCostItem.value = purchaseTotalCost.value;
         
         updateItemCountDisplay();
@@ -565,8 +567,10 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs required again when not using item count pricing
         netWeightVolumeInput.required = true;
         netUnitSelect.required = true;
+        purchaseTotalCost.required = true;
         
-        // Sync the cost inputs back
+        // Make item count inputs not required and sync values back
+        purchaseTotalCostItem.required = false;
         purchaseTotalCost.value = purchaseTotalCostItem.value;
     }
     
