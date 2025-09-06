@@ -447,7 +447,8 @@ async function loadAvailableUnitsForBatch(batchId, yieldUnit) {
         // Final fallback - show all units
         const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
         parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-        ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'].forEach(unit => {
+        const allUnits = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
+        allUnits.forEach(unit => {
             const option = document.createElement('option');
             option.value = unit;
             option.textContent = unit;
