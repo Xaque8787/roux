@@ -458,16 +458,54 @@ function calculateNetCase() {
     const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
     const netCaseDisplay = document.getElementById('netCaseDisplay');
     const netUnit = document.getElementById('net_unit').value;
-    const netUnitCase = document.getElementById('netUnitCase');
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
     
-    if (netItem > 0 && itemsPerCase > 0) {
-        const netCase = (netItem * itemsPerCase).toFixed(2);
-        netCaseDisplay.innerHTML = `<strong>${netCase} ${netUnit}</strong>`;
-        if (netUnitCase) {
-            netUnitCase.textContent = netUnit;
+    if (purchaseType === "case") {
+        if (netItem > 0 && itemsPerCase > 0) {
+            const netCase = (netItem * itemsPerCase).toFixed(2);
+            netCaseDisplay.innerHTML = `<strong>${netCase} ${netUnit}</strong>`;
+        } else {
+            netCaseDisplay.innerHTML = '<span class="text-muted">Enter net weight per item and items per case</span>';
         }
     } else {
-        netCaseDisplay.innerHTML = '<span class="text-muted">Enter net weight per item and items per case</span>';
+        // For single items, case display shows same as item
+        if (netItem > 0) {
+            netCaseDisplay.innerHTML = `<strong>${netItem} ${netUnit}</strong>`;
+        } else {
+            netCaseDisplay.innerHTML = '<span class="text-muted">Enter net weight per item</span>';
+        }
+    }
+    
+    calculateCostPreview();
+}
+
+// Calculate cost preview
+function calculateCostPreview() {
+    const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
+    const totalCost = useItemCountPricing ? 
+        (parseFloat(document.getElementById('purchase_total_cost_item').value) || 0) :
+        (parseFloat(document.getElementById('purchase_total_cost').value) || 0);
+    
+    if (useItemCountPricing) {
+        calculateItemCountCostPreview(totalCost);
+        return;
+    }
+    
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const netUnit = document.getElementById('net_unit').value;
+    const preview = document.getElementById('costPreview');
+    
+    // Calculate total net amount based on purchase type
+    let totalNet = 0;
+    if (purchaseType === 'case') {
+        const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+        if (netItem > 0 && itemsPerCase > 0) {
+            totalNet = netItem * itemsPerCase;
+        }
+    } else {
+        // Single item
+        totalNet = netItem;
     }
     
     calculateCostPreview();
@@ -548,14 +586,21 @@ function toggleCaseFields() {
     const caseRadio = document.getElementById('case');
     const caseFields = document.getElementById('caseFields');
     const itemsPerCaseInput = document.getElementById('items_per_case');
+    const netCaseDisplaySection = document.getElementById('netCaseDisplaySection');
     
     if (caseRadio.checked) {
         caseFields.style.display = 'block';
         itemsPerCaseInput.required = true;
+        if (netCaseDisplaySection) {
+            netCaseDisplaySection.style.display = 'block';
+        }
     } else {
         caseFields.style.display = 'none';
         itemsPerCaseInput.required = false;
         itemsPerCaseInput.value = ''; // Clear the value when hiding
+        if (netCaseDisplaySection) {
+            netCaseDisplaySection.style.display = 'none';
+        }
     }
     updateItemCountDisplay();
     calculateNetCase(); // Update the case display
@@ -570,47 +615,13 @@ function toggleBakingConversion() {
     if (checkbox.checked) {
         fields.style.display = 'block';
     } else {
-        fields.style.display = 'none';
-    }
-}
-
-// Calculate cost preview
-function calculateCostPreview() {
-    const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
-    const totalCost = useItemCountPricing ? 
-        (parseFloat(document.getElementById('purchase_total_cost_item').value) || 0) :
-        (parseFloat(document.getElementById('purchase_total_cost').value) || 0);
-    
-    if (useItemCountPricing) {
-        calculateItemCountCostPreview(totalCost);
-        return;
-    }
-    
-    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
-    const netCase = parseFloat(document.getElementById('net_weight_volume_case').value) || 0;
-    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
-    const netUnit = document.getElementById('net_unit').value;
-    const netCaseDisplay = document.getElementById('netCaseDisplay');
-    
-    // For case purchases, get the calculated net case value from display
-    let actualNetCase = netCase;
-    if (purchaseType === 'case' && netCaseDisplay) {
-        const displayText = netCaseDisplay.textContent;
-        const match = displayText.match(/(\d+\.?\d*)/);
-        if (match) {
-            actualNetCase = parseFloat(match[1]);
-        }
-    }
-    const preview = document.getElementById('costPreview');
-    
-    if (totalCost > 0 && ((purchaseType === 'single' && netItem > 0) || (purchaseType === 'case' && actualNetCase > 0))) {
-        const totalNet = purchaseType === 'case' ? actualNetCase : netItem;
+    if (totalCost > 0 && totalNet > 0) {
         const costPerUnit = (totalCost / totalNet).toFixed(4);
         const unitLabel = WEIGHT_UNITS[netUnit] || VOLUME_UNITS[netUnit] || netUnit;
         
         preview.innerHTML = `
             <strong>Cost per ${unitLabel}:</strong> $${costPerUnit}<br>
-            <small class="text-muted">Total: $${totalCost.toFixed(2)} ÷ ${totalNet} ${unitLabel} = $${costPerUnit}/${netUnit}</small>
+            <small class="text-muted">Total: $${totalCost.toFixed(2)} ÷ ${totalNet} ${netUnit} = $${costPerUnit}/${netUnit}</small>
         `;
         preview.className = 'alert alert-success';
     } else {
