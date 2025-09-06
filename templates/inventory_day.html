@@ -309,6 +309,8 @@
                                         <strong>Made Amount:</strong> {{ summary.made_amount }} {{ summary.made_unit }} = {{ "%.2f"|format(summary.made_par_units) }} {{ summary.par_unit_name }}
                                         {% if summary.made_converted %}
                                             ({{ "%.2f"|format(summary.made_converted) }} {{ summary.par_unit_equals_unit }})
+                                        {% elif summary.made_quantity_equivalent %}
+                                            ({{ "%.1f"|format(summary.made_quantity_equivalent) }} {{ summary.made_quantity_unit }})
                                         {% endif %}<br>
                                         {% endif %}
                                         
@@ -434,8 +436,51 @@ function showMadeAmountInput(taskId, recipeName) {
     fetch(`/api/tasks/${taskId}/finish_requirements`)
         .then(response => response.json())
         .then(data => {
+            console.log('Finish requirements data:', data);
+            
             const modal = document.createElement('div');
             modal.className = 'modal fade';
+            
+            let unitSection = '';
+            let unitInput = '';
+            
+            if (data.use_par_unit && data.par_unit_name) {
+                // Use par unit name as fixed unit
+                unitSection = `
+                    <div class="col-4">
+                        <input type="text" class="form-control" value="${data.par_unit_name}" readonly>
+                        <input type="hidden" id="madeUnit" value="${data.par_unit_name}">
+                    </div>
+                `;
+                
+                if (data.par_unit_equals_info) {
+                    unitSection += `
+                        <div class="col-12 mt-2">
+                            <small class="text-info">${data.par_unit_equals_info.description}</small>
+                        </div>
+                    `;
+                }
+            } else if (data.available_units && data.available_units.length === 1) {
+                // Single unit available
+                unitSection = `
+                    <div class="col-4" style="display: none;">
+                        <input type="hidden" id="madeUnit" value="${data.available_units[0]}">
+                    </div>
+                `;
+                unitInput = `<small class="text-info">Unit: ${data.available_units[0]}</small>`;
+            } else if (data.available_units && data.available_units.length > 1) {
+                // Multiple units available
+                unitSection = `
+                    <div class="col-4">
+                        <select class="form-select" id="madeUnit" required>
+                            ${data.available_units.map(unit => 
+                                `<option value="${unit}">${unit}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                `;
+            }
+            
             modal.innerHTML = `
                 <div class="modal-dialog">
                     <div class="modal-content">
@@ -450,18 +495,9 @@ function showMadeAmountInput(taskId, recipeName) {
                                     <div class="col-8">
                                         <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
                                     </div>
-                                    <div class="col-4" id="madeUnitSection" ${data.available_units.length === 1 ? 'style="display: none;"' : ''}>
-                                        <select class="form-select" id="madeUnit" required>
-                                            ${data.available_units.map(unit => 
-                                                `<option value="${unit}">${unit}</option>`
-                                            ).join('')}
-                                        </select>
-                                    </div>
+                                    ${unitSection}
                                 </div>
-                                ${data.available_units.length === 1 ? `
-                                <small class="text-info">Unit: ${data.available_units[0]}</small>
-                                <input type="hidden" id="hiddenMadeUnit" value="${data.available_units[0]}">
-                                ` : ''}
+                                ${unitInput}
                             </div>
                             ${data.inventory_info ? `
                             <div class="alert alert-info">

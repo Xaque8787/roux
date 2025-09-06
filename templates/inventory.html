@@ -384,8 +384,16 @@ function updateParUnitEquals() {
 
 async function loadAvailableUnitsForBatch(batchId, yieldUnit) {
     try {
-        const response = await fetch(`/api/batches/${batchId}/available_units`);
-        const units = await response.json();
+        // First try to get batch-specific units
+        let units = [];
+        try {
+            const response = await fetch(`/api/batches/${batchId}/available_units`);
+            units = await response.json();
+        } catch (error) {
+            console.log('Batch units not available, using fallback');
+            // Fallback for variable yield batches - show all weight and volume units
+            units = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
+        }
         
         const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
         parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
@@ -403,6 +411,15 @@ async function loadAvailableUnitsForBatch(batchId, yieldUnit) {
         }
     } catch (error) {
         console.error('Error loading available units:', error);
+        // Final fallback
+        const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
+        parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+        ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'].forEach(unit => {
+            const option = document.createElement('option');
+            option.value = unit;
+            option.textContent = unit;
+            parUnitEqualsUnitSelect.appendChild(option);
+        });
     }
 }
 

@@ -81,6 +81,8 @@
                             <p><strong>Made Amount:</strong> {{ task_summary.made_amount }} {{ task_summary.made_unit }} = {{ "%.2f"|format(task_summary.made_par_units) }} {{ task_summary.par_unit_name }}
                             {% if task_summary.made_converted %}
                                 ({{ "%.2f"|format(task_summary.made_converted) }} {{ task_summary.par_unit_equals_unit }})
+                            {% elif task_summary.made_quantity_equivalent %}
+                                ({{ "%.1f"|format(task_summary.made_quantity_equivalent) }} {{ task_summary.made_quantity_unit }})
                             {% endif %}
                             {% if task.batch and not task.batch.variable_yield and task.scale_factor %}
                             <br><small class="text-muted">(Batch yield × scale: {{ task.batch.yield_amount }} × {{ task.scale_factor }} = {{ task_summary.made_amount }} {{ task_summary.made_unit }})</small>

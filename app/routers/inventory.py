@@ -573,15 +573,30 @@ def calculate_task_summary(task, db):
         'final_inventory': day_item.quantity,
         'initial_converted': None,
         'made_converted': None,
-        'final_converted': None
+        'final_converted': None,
+        'made_quantity_equivalent': None,
+        'made_quantity_unit': None
     }
     
-    # Calculate made amount in par units
+    # Calculate made amount in par units and quantity equivalents
     if task.made_amount and task.made_unit:
-        made_par_units = item.convert_to_par_units(task.made_amount, task.made_unit)
-        summary['made_par_units'] = made_par_units
-        summary['made_amount_par_units'] = made_par_units
-        summary['final_inventory'] = day_item.quantity + made_par_units
+        # For par unit tasks, the made_amount is already in par units
+        if item.par_unit_name and task.made_unit == item.par_unit_name.name:
+            summary['made_par_units'] = task.made_amount
+            summary['made_amount_par_units'] = task.made_amount
+            
+            # Calculate quantity equivalent if custom par unit equals
+            if item.par_unit_equals_type == 'custom' and item.par_unit_equals_amount and item.par_unit_equals_unit:
+                quantity_equivalent = task.made_amount * item.par_unit_equals_amount
+                summary['made_quantity_equivalent'] = quantity_equivalent
+                summary['made_quantity_unit'] = item.par_unit_equals_unit
+        else:
+            # Regular unit conversion
+            made_par_units = item.convert_to_par_units(task.made_amount, task.made_unit)
+            summary['made_par_units'] = made_par_units
+            summary['made_amount_par_units'] = made_par_units
+        
+        summary['final_inventory'] = day_item.quantity + summary['made_amount_par_units']
     
     # Calculate conversions if custom par unit equals
     if item.par_unit_equals_type == 'custom' and item.par_unit_equals_calculated:

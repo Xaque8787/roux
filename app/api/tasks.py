@@ -43,11 +43,61 @@ async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_d
     result = {
         "requires_made_amount": task.requires_made_amount,
         "available_units": [],
-        "inventory_info": None
+        "inventory_info": None,
+        "use_par_unit": False,
+        "par_unit_name": None,
+        "par_unit_equals_info": None
     }
     
-    if task.requires_made_amount and task.batch:
-        # Get available units for the batch
+    # Check if this task has an inventory item with par unit settings
+    if task.requires_made_amount and task.inventory_item:
+        item = task.inventory_item
+        
+        # If inventory item has par unit settings, use par unit logic
+        if item.par_unit_name and item.par_unit_equals_type:
+            result["use_par_unit"] = True
+            result["par_unit_name"] = item.par_unit_name.name
+            
+            # Add par unit equals information for display
+            if item.par_unit_equals_type == "par_unit_itself":
+                result["par_unit_equals_info"] = {
+                    "type": "par_unit_itself",
+                    "description": f"Each {item.par_unit_name.name} = 1 {item.par_unit_name.name}"
+                }
+            elif item.par_unit_equals_type == "custom" and item.par_unit_equals_amount and item.par_unit_equals_unit:
+                result["par_unit_equals_info"] = {
+                    "type": "custom",
+                    "amount": item.par_unit_equals_amount,
+                    "unit": item.par_unit_equals_unit,
+                    "description": f"Each {item.par_unit_name.name} = {item.par_unit_equals_amount} {item.par_unit_equals_unit}"
+                }
+            elif item.par_unit_equals_type == "auto" and item.batch and not item.batch.variable_yield:
+                auto_amount = item.par_unit_equals_calculated
+                if auto_amount:
+                    result["par_unit_equals_info"] = {
+                        "type": "auto",
+                        "amount": auto_amount,
+                        "unit": item.batch.yield_unit,
+                        "description": f"Each {item.par_unit_name.name} = {auto_amount} {item.batch.yield_unit}"
+                    }
+        else:
+            # No par unit settings, fall back to regular unit selection
+            if task.batch and task.batch.yield_unit:
+                # Start with the batch's yield unit
+                available_units = [task.batch.yield_unit]
+                
+                # Add compatible units based on the yield unit type
+                if task.batch.yield_unit in WEIGHT_CONVERSIONS:
+                    available_units.extend([unit for unit in WEIGHT_CONVERSIONS.keys() if unit != task.batch.yield_unit])
+                elif task.batch.yield_unit in VOLUME_CONVERSIONS:
+                    available_units.extend([unit for unit in VOLUME_CONVERSIONS.keys() if unit != task.batch.yield_unit])
+                
+                result["available_units"] = available_units
+            else:
+                # Fallback to common units for variable yield without par units
+                result["available_units"] = list(WEIGHT_CONVERSIONS.keys()) + list(VOLUME_CONVERSIONS.keys())
+    elif task.requires_made_amount and task.batch:
+        # Regular batch task without inventory item
         if task.batch.yield_unit:
             # Start with the batch's yield unit
             available_units = [task.batch.yield_unit]
@@ -61,11 +111,11 @@ async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_d
             result["available_units"] = available_units
         else:
             # Fallback to common units
-            result["available_units"] = ["lb", "oz", "gal", "qt", "cup"]
+            result["available_units"] = list(WEIGHT_CONVERSIONS.keys()) + list(VOLUME_CONVERSIONS.keys())
     
     # Add inventory information if available
     if task.inventory_item:
-        from ..routers.inventory import InventoryDayItem
+        from ..models import InventoryDayItem
         day_item = db.query(InventoryDayItem).filter(
             InventoryDayItem.day_id == task.day_id,
             InventoryDayItem.inventory_item_id == task.inventory_item.id
