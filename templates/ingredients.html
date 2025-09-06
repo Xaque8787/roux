@@ -129,7 +129,7 @@
                                 <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                           step="0.01" onchange="calculateNetCase()">
+                                           step="0.01" onchange="calculateNetCase()" required>
                                     <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase()">
                                         <!-- Options populated by JavaScript -->
                                     </select>
@@ -140,7 +140,7 @@
                             <div class="mb-3">
                                 <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
                                 <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                       step="0.01" required>
+                                       step="0.01" required disabled>
                             </div>
                         </div>
                     </div>
@@ -189,7 +189,7 @@
                                     <label class="form-label">Net <span id="netTypeLabelCase">Weight</span> per Case</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="net_weight_volume_case" name="net_weight_volume_case" 
-                                               step="0.01" onchange="calculateNetItem()">
+                                               step="0.01" onchange="calculateNetItem()" required>
                                         <span class="input-group-text" id="netUnitCase">lb</span>
                                     </div>
                                     <small class="text-muted">Auto-calculated or enter manually</small>
@@ -490,20 +490,6 @@ function calculateNetItem() {
     calculateCostPreview();
 }
 
-// Toggle case fields
-function toggleCaseFields() {
-    const caseRadio = document.getElementById('case');
-    const caseFields = document.getElementById('caseFields');
-    
-    if (caseRadio.checked) {
-        caseFields.style.display = 'block';
-    } else {
-        caseFields.style.display = 'none';
-    }
-    updateItemCountDisplay();
-    calculateCostPreview();
-}
-
 // Toggle item count pricing
 function toggleItemCountPricing() {
     const checkbox = document.getElementById('use_item_count_pricing');
@@ -514,6 +500,7 @@ function toggleItemCountPricing() {
     const netUnitSelect = document.getElementById('net_unit');
     const purchaseTotalCost = document.getElementById('purchase_total_cost');
     const purchaseTotalCostItem = document.getElementById('purchase_total_cost_item');
+    const netWeightVolumeCaseInput = document.getElementById('net_weight_volume_case');
     
     if (checkbox.checked) {
         // Show item count pricing, hide weight/volume
@@ -524,6 +511,9 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs not required
         netWeightVolumeInput.required = false;
         netUnitSelect.required = false;
+        if (netWeightVolumeCaseInput) {
+            netWeightVolumeCaseInput.required = false;
+        }
         
         // Sync the cost inputs
         purchaseTotalCostItem.value = purchaseTotalCost.value;
@@ -540,6 +530,9 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs required again
         netWeightVolumeInput.required = true;
         netUnitSelect.required = true;
+        if (netWeightVolumeCaseInput) {
+            netWeightVolumeCaseInput.required = false; // Will be set by toggleCaseFields
+        }
         
         // Sync the cost inputs back
         purchaseTotalCost.value = purchaseTotalCostItem.value;
@@ -547,6 +540,8 @@ function toggleItemCountPricing() {
         purchaseTotalCostItem.disabled = true;
     }
     
+    toggleCaseFields(); // Update case field requirements
+    updateItemCountDisplay();
     calculateCostPreview();
 }
 
@@ -563,6 +558,33 @@ function updateItemCountDisplay() {
     } else {
         itemCountDisplay.innerHTML = '<span class="text-muted">Select purchase type and enter items per case</span>';
     }
+}
+
+// Toggle case fields
+function toggleCaseFields() {
+    const caseRadio = document.getElementById('case');
+    const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
+    const caseFields = document.getElementById('caseFields');
+    const netWeightVolumeCaseInput = document.getElementById('net_weight_volume_case');
+    const itemsPerCaseInput = document.getElementById('items_per_case');
+    
+    if (caseRadio.checked) {
+        caseFields.style.display = 'block';
+        itemsPerCaseInput.required = true;
+        
+        // Only require net weight/volume for case if not using item count pricing
+        if (netWeightVolumeCaseInput && !useItemCountPricing) {
+            netWeightVolumeCaseInput.required = true;
+        }
+    } else {
+        caseFields.style.display = 'none';
+        itemsPerCaseInput.required = false;
+        if (netWeightVolumeCaseInput) {
+            netWeightVolumeCaseInput.required = false;
+        }
+    }
+    updateItemCountDisplay();
+    calculateCostPreview();
 }
 
 // Toggle baking conversion fields
