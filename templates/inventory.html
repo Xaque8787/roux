@@ -356,6 +356,9 @@ function updateParUnitEquals() {
         // Load available units for the batch
         if (yieldUnit) {
             loadAvailableUnitsForBatch(batchSelect.value, yieldUnit);
+        } else if (isVariable) {
+            // For variable yield batches without yield unit, load all units
+            loadAvailableUnitsForBatch(batchSelect.value, null);
         }
         
         // Show/hide auto option based on variable yield
@@ -391,7 +394,7 @@ async function loadAvailableUnitsForBatch(batchId, yieldUnit) {
         let units = [];
         
         if (isVariable) {
-            // For variable yield batches, show all weight and volume units
+            // For variable yield batches, show all weight and volume units  
             units = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
             
             // Populate the dropdown immediately for variable yield
