@@ -135,7 +135,7 @@ async def update_ingredient(
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
     use_item_count_pricing: bool = Form(False),
-    net_weight_volume_item: float = Form(None),
+    net_weight_volume_item: float = Form(...),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
     breakable_case: bool = Form(False),
