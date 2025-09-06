@@ -161,7 +161,7 @@
                                 <div class="mb-3">
                                     <label for="purchase_total_cost_item" class="form-label">Purchase Total Cost</label>
                                     <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost" 
-                                           step="0.01" required>
+                                           step="0.01" onchange="calculateCostPreview();" required>
                                 </div>
                             </div>
                         </div>
@@ -181,7 +181,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="items_per_case" class="form-label">Items per Case</label>
-                                    <input type="number" class="form-control" id="items_per_case" name="items_per_case" onchange="updateItemCountDisplay(); calculateCostPreview();">
+                                    <input type="number" class="form-control" id="items_per_case" name="items_per_case" onchange="updateItemCountDisplay(); calculateNetCase(); calculateCostPreview();">
                                 </div>
                             </div>
                             <div class="col-md-6" id="netCaseDisplaySection">
@@ -338,8 +338,8 @@
                                     {% endif %}
                                 </td>
                             </tr>
-                            {% endfor %}
-                        </tbody>
+                        <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
+                               step="0.01" onchange="calculateCostPreview();" required>
                     </table>
                 </div>
             </div>
@@ -446,8 +446,7 @@ function updateAvailableUnits() {
         netUnitSelect.appendChild(option);
     });
     
-    // Update case unit display
-    updateCaseUnitDisplay();
+    calculateNetCase();
     calculateCostPreview();
 }
 
@@ -475,22 +474,19 @@ function calculateNetCase() {
             netCaseDisplay.innerHTML = '<span class="text-muted">Enter net weight per item</span>';
         }
     }
-    
-    calculateCostPreview();
 }
 
 // Calculate cost preview
 function calculateCostPreview() {
     const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
-    const totalCost = useItemCountPricing ? 
-        (parseFloat(document.getElementById('purchase_total_cost_item').value) || 0) :
-        (parseFloat(document.getElementById('purchase_total_cost').value) || 0);
     
     if (useItemCountPricing) {
+        const totalCost = parseFloat(document.getElementById('purchase_total_cost_item').value) || 0;
         calculateItemCountCostPreview(totalCost);
         return;
     }
     
+    const totalCost = parseFloat(document.getElementById('purchase_total_cost').value) || 0;
     const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
     const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
     const netUnit = document.getElementById('net_unit').value;
@@ -508,7 +504,19 @@ function calculateCostPreview() {
         totalNet = netItem;
     }
     
-    calculateCostPreview();
+    if (totalCost > 0 && totalNet > 0) {
+        const costPerUnit = (totalCost / totalNet).toFixed(4);
+        const unitLabel = WEIGHT_UNITS[netUnit] || VOLUME_UNITS[netUnit] || netUnit;
+        
+        preview.innerHTML = `
+            <strong>Cost per ${unitLabel}:</strong> $${costPerUnit}<br>
+            <small class="text-muted">Total: $${totalCost.toFixed(2)} ÷ ${totalNet} ${netUnit} = $${costPerUnit}/${netUnit}</small>
+        `;
+        preview.className = 'alert alert-success';
+    } else {
+        preview.innerHTML = '<small>Enter ingredient details to see cost per unit calculations</small>';
+        preview.className = 'alert alert-info';
+    }
 }
 
 
@@ -567,7 +575,6 @@ function toggleItemCountPricing() {
 }
 
 // Update item count display
-function updateItemCountDisplay() {
     const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
     const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
     const itemCountDisplay = document.getElementById('itemCountDisplay');
