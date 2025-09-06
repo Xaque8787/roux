@@ -129,7 +129,7 @@
                                 <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                           step="0.01" onchange="calculateNetCase()" required>
+                                           step="0.01" onchange="calculateNetCase(); calculateCostPreview();" required>
                                     <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase()">
                                         <!-- Options populated by JavaScript -->
                                     </select>
@@ -140,7 +140,7 @@
                             <div class="mb-3">
                                 <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
                                 <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                       step="0.01" required>
+                                       step="0.01" onchange="calculateCostPreview();" required>
                             </div>
                         </div>
                     </div>
