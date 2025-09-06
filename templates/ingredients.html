@@ -675,8 +675,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add event listeners for cost calculation
     document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
-    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
-    document.getElementById('net_weight_volume_item').addEventListener('input', calculateCostPreview);
+    if (document.getElementById('purchase_total_cost_item')) {
+        document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
+    }
+    if (document.getElementById('net_weight_volume_item')) {
+        document.getElementById('net_weight_volume_item').addEventListener('input', calculateCostPreview);
+    }
     document.getElementById('net_unit').addEventListener('change', function() {
         calculateNetCase();
         calculateCostPreview();
