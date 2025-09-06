@@ -511,9 +511,7 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs not required
         netWeightVolumeInput.required = false;
         netUnitSelect.required = false;
-        if (netWeightVolumeCaseInput) {
-            netWeightVolumeCaseInput.required = false;
-        }
+        netWeightVolumeCaseInput.required = false;
         
         // Sync the cost inputs
         purchaseTotalCostItem.value = purchaseTotalCost.value;
@@ -530,9 +528,7 @@ function toggleItemCountPricing() {
         // Make weight/volume inputs required again
         netWeightVolumeInput.required = true;
         netUnitSelect.required = true;
-        if (netWeightVolumeCaseInput) {
-            netWeightVolumeCaseInput.required = false; // Will be set by toggleCaseFields
-        }
+        netWeightVolumeCaseInput.required = false; // Will be set by toggleCaseFields
         
         // Sync the cost inputs back
         purchaseTotalCost.value = purchaseTotalCostItem.value;
