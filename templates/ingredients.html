@@ -572,15 +572,15 @@ function toggleCaseFields() {
         caseFields.style.display = 'block';
         itemsPerCaseInput.required = true;
         
-        // Only require net weight/volume for case if not using item count pricing
-        if (netWeightVolumeCaseInput && !useItemCountPricing) {
-            netWeightVolumeCaseInput.required = true;
+        // Only require net weight/volume case field if not using item count pricing
+        if (netWeightVolumeCaseInput) {
+            netWeightVolumeCaseInput.required = !useItemCountPricing;
         }
     } else {
         caseFields.style.display = 'none';
         itemsPerCaseInput.required = false;
         if (netWeightVolumeCaseInput) {
-            netWeightVolumeCaseInput.required = false;
+            netWeightVolumeCaseInput.required = true;
         }
     }
     updateItemCountDisplay();
