@@ -555,6 +555,7 @@ function toggleCaseFields() {
     } else {
         caseFields.style.display = 'none';
         itemsPerCaseInput.required = false;
+        itemsPerCaseInput.value = ''; // Clear the value when hiding
     }
     updateItemCountDisplay();
     calculateNetCase(); // Update the case display

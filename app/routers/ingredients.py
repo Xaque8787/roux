@@ -72,9 +72,15 @@ async def create_ingredient(
         ingredient.items_per_case = items_per_case
         if not use_item_count_pricing:
             ingredient.net_weight_volume_case = (net_weight_volume_item * items_per_case if items_per_case and net_weight_volume_item else None)
+        else:
+            ingredient.net_weight_volume_case = None
     else:
+        # For single items, set case fields to None/default values
+        ingredient.items_per_case = None
         if not use_item_count_pricing:
             ingredient.net_weight_volume_case = net_weight_volume_item
+        else:
+            ingredient.net_weight_volume_case = None
     
     # Handle baking conversion
     if has_baking_conversion and not use_item_count_pricing:
