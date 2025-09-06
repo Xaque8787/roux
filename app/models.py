@@ -134,6 +134,9 @@ class Ingredient(Base):
     purchase_total_cost = Column(Float)
     breakable_case = Column(Boolean, default=False)
     
+    # Item count pricing option
+    use_item_count_pricing = Column(Boolean, default=False)
+    
     # Net Weight/Volume (replaces purchase_weight_volume)
     net_weight_volume_item = Column(Float)  # Net weight/volume per item
     net_weight_volume_case = Column(Float)  # Net weight/volume per case (auto-calculated)
@@ -160,8 +163,17 @@ class Ingredient(Base):
         return self.purchase_total_cost
     
     @property
+    def total_item_count(self):
+        """Total item count for the entire purchase"""
+        if self.purchase_type == 'case' and self.items_per_case:
+            return self.items_per_case
+        return 1
+    
+    @property
     def total_net_weight_volume(self):
         """Total net weight/volume for the entire purchase"""
+        if self.use_item_count_pricing:
+            return None
         if self.purchase_type == 'case':
             return self.net_weight_volume_case
         return self.net_weight_volume_item
@@ -169,12 +181,24 @@ class Ingredient(Base):
     @property
     def cost_per_net_unit(self):
         """Cost per net unit (lb, oz, gal, etc.)"""
+        if self.use_item_count_pricing:
+            return self.purchase_total_cost / self.total_item_count
         if self.total_net_weight_volume and self.total_net_weight_volume > 0:
             return round(self.purchase_total_cost / self.total_net_weight_volume, 4)
         return 0
     
+    @property
+    def cost_per_item(self):
+        """Cost per individual item"""
+        if self.use_item_count_pricing:
+            return self.purchase_total_cost / self.total_item_count
+        return self.cost_per_net_unit
+    
     def get_available_units(self):
         """Get available units for this ingredient based on usage type"""
+        if self.use_item_count_pricing:
+            return ['item', 'each']
+        
         if self.usage_type == 'weight':
             units = list(WEIGHT_CONVERSIONS.keys())
         else:  # volume
@@ -188,6 +212,11 @@ class Ingredient(Base):
     
     def get_cost_per_unit(self, unit):
         """Get cost per specified unit"""
+        if self.use_item_count_pricing:
+            if unit in ['item', 'each']:
+                return self.cost_per_item
+            return 0
+        
         if not self.total_net_weight_volume or self.total_net_weight_volume <= 0:
             return 0
         

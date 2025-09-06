@@ -37,6 +37,7 @@ async def create_ingredient(
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
+    use_item_count_pricing: bool = Form(False),
     net_weight_volume_item: float = Form(...),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
@@ -60,20 +61,23 @@ async def create_ingredient(
         purchase_unit_name=purchase_unit_name,
         purchase_total_cost=purchase_total_cost,
         breakable_case=breakable_case,
-        net_weight_volume_item=net_weight_volume_item,
-        net_unit=net_unit,
+        use_item_count_pricing=use_item_count_pricing,
+        net_weight_volume_item=net_weight_volume_item if not use_item_count_pricing else None,
+        net_unit=net_unit if not use_item_count_pricing else None,
         has_baking_conversion=has_baking_conversion
     )
     
     # Handle case-specific fields
     if purchase_type == "case":
         ingredient.items_per_case = items_per_case
-        ingredient.net_weight_volume_case = net_weight_volume_case or (net_weight_volume_item * items_per_case if items_per_case else None)
+        if not use_item_count_pricing:
+            ingredient.net_weight_volume_case = net_weight_volume_case or (net_weight_volume_item * items_per_case if items_per_case and net_weight_volume_item else None)
     else:
-        ingredient.net_weight_volume_case = net_weight_volume_item
+        if not use_item_count_pricing:
+            ingredient.net_weight_volume_case = net_weight_volume_item
     
     # Handle baking conversion
-    if has_baking_conversion:
+    if has_baking_conversion and not use_item_count_pricing:
         ingredient.baking_measurement_unit = baking_measurement_unit
         ingredient.baking_weight_amount = baking_weight_amount
         ingredient.baking_weight_unit = baking_weight_unit
@@ -124,6 +128,7 @@ async def update_ingredient(
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
+    use_item_count_pricing: bool = Form(False),
     net_weight_volume_item: float = Form(...),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
@@ -149,20 +154,23 @@ async def update_ingredient(
     ingredient.purchase_unit_name = purchase_unit_name
     ingredient.purchase_total_cost = purchase_total_cost
     ingredient.breakable_case = breakable_case
-    ingredient.net_weight_volume_item = net_weight_volume_item
-    ingredient.net_unit = net_unit
+    ingredient.use_item_count_pricing = use_item_count_pricing
+    ingredient.net_weight_volume_item = net_weight_volume_item if not use_item_count_pricing else None
+    ingredient.net_unit = net_unit if not use_item_count_pricing else None
     ingredient.has_baking_conversion = has_baking_conversion
     
     # Handle case-specific fields
     if purchase_type == "case":
         ingredient.items_per_case = items_per_case
-        ingredient.net_weight_volume_case = net_weight_volume_case or (net_weight_volume_item * items_per_case if items_per_case else None)
+        if not use_item_count_pricing:
+            ingredient.net_weight_volume_case = net_weight_volume_case or (net_weight_volume_item * items_per_case if items_per_case and net_weight_volume_item else None)
     else:
-        ingredient.net_weight_volume_case = net_weight_volume_item
+        if not use_item_count_pricing:
+            ingredient.net_weight_volume_case = net_weight_volume_item
         ingredient.items_per_case = None
     
     # Handle baking conversion
-    if has_baking_conversion:
+    if has_baking_conversion and not use_item_count_pricing:
         ingredient.baking_measurement_unit = baking_measurement_unit
         ingredient.baking_weight_amount = baking_weight_amount
         ingredient.baking_weight_unit = baking_weight_unit

@@ -111,15 +111,25 @@
                         </div>
                     </div>
                     
+                    <!-- Use Item Count Pricing Option -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="use_item_count_pricing" name="use_item_count_pricing" onchange="toggleItemCountPricing()">
+                        <label class="form-check-label" for="use_item_count_pricing">
+                            Use item(s) instead of weight/volume
+                        </label>
+                        <br><small class="text-muted">Check this for items priced by count (e.g., heads of lettuce) rather than weight/volume</small>
+                    </div>
+                    
                     <!-- Net Weight/Volume Section -->
-                    <h6 class="mt-3">Net Weight/Volume</h6>
+                    <h6 class="mt-3" id="netWeightVolumeHeader">Net Weight/Volume</h6>
+                    <div id="netWeightVolumeSection">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                           step="0.01" required onchange="calculateNetCase()">
+                                           step="0.01" onchange="calculateNetCase()">
                                     <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase()">
                                         <!-- Options populated by JavaScript -->
                                     </select>
@@ -131,6 +141,28 @@
                                 <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
                                 <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
                                        step="0.01" required>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+                    
+                    <!-- Item Count Pricing Section (hidden by default) -->
+                    <div id="itemCountPricingSection" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Item Count</label>
+                                    <div class="form-control-plaintext" id="itemCountDisplay">
+                                        <span class="text-muted">Select purchase type and enter items per case</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="purchase_total_cost_item" class="form-label">Purchase Total Cost</label>
+                                    <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost" 
+                                           step="0.01" required disabled>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -256,11 +288,18 @@
                                     {% if ing.has_baking_conversion %}
                                     <br><small class="badge bg-info">Baking</small>
                                     {% endif %}
+                                    {% if ing.use_item_count_pricing %}
+                                    <br><small class="badge bg-warning">Item Count</small>
+                                    {% endif %}
                                 </td>
                                 <td>
-                                    <span class="badge {% if ing.usage_type == 'weight' %}bg-success{% else %}bg-primary{% endif %}">
-                                        {{ ing.usage_type.title() }}
-                                    </span>
+                                    {% if ing.use_item_count_pricing %}
+                                        <span class="badge bg-warning">Item Count</span>
+                                    {% else %}
+                                        <span class="badge {% if ing.usage_type == 'weight' %}bg-success{% else %}bg-primary{% endif %}">
+                                            {{ ing.usage_type.title() }}
+                                        </span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     <span class="badge {% if ing.purchase_type == 'case' %}bg-info{% else %}bg-secondary{% endif %}">
@@ -271,11 +310,16 @@
                                 </td>
                                 <td>
                                     <small>
+                                        {% if ing.use_item_count_pricing %}
+                                            {{ ing.total_item_count }} items
+                                            <br><small class="text-muted">${{ "%.2f"|format(ing.cost_per_item) }}/item</small>
+                                        {% else %}
                                         {% if ing.purchase_type == 'case' %}
                                             {{ ing.net_weight_volume_case }} {{ ing.net_unit }} (case)
                                             <br>{{ ing.net_weight_volume_item }} {{ ing.net_unit }} (item)
                                         {% else %}
                                             {{ ing.net_weight_volume_item }} {{ ing.net_unit }}
+                                        {% endif %}
                                         {% endif %}
                                     </small>
                                 </td>
@@ -456,7 +500,69 @@ function toggleCaseFields() {
     } else {
         caseFields.style.display = 'none';
     }
+    updateItemCountDisplay();
     calculateCostPreview();
+}
+
+// Toggle item count pricing
+function toggleItemCountPricing() {
+    const checkbox = document.getElementById('use_item_count_pricing');
+    const netWeightVolumeHeader = document.getElementById('netWeightVolumeHeader');
+    const netWeightVolumeSection = document.getElementById('netWeightVolumeSection');
+    const itemCountPricingSection = document.getElementById('itemCountPricingSection');
+    const netWeightVolumeInput = document.getElementById('net_weight_volume_item');
+    const netUnitSelect = document.getElementById('net_unit');
+    const purchaseTotalCost = document.getElementById('purchase_total_cost');
+    const purchaseTotalCostItem = document.getElementById('purchase_total_cost_item');
+    
+    if (checkbox.checked) {
+        // Show item count pricing, hide weight/volume
+        netWeightVolumeHeader.textContent = 'Item Count Pricing';
+        netWeightVolumeSection.style.display = 'none';
+        itemCountPricingSection.style.display = 'block';
+        
+        // Make weight/volume inputs not required
+        netWeightVolumeInput.required = false;
+        netUnitSelect.required = false;
+        
+        // Sync the cost inputs
+        purchaseTotalCostItem.value = purchaseTotalCost.value;
+        purchaseTotalCostItem.disabled = false;
+        purchaseTotalCost.disabled = true;
+        
+        updateItemCountDisplay();
+    } else {
+        // Show weight/volume, hide item count pricing
+        netWeightVolumeHeader.textContent = 'Net Weight/Volume';
+        netWeightVolumeSection.style.display = 'block';
+        itemCountPricingSection.style.display = 'none';
+        
+        // Make weight/volume inputs required again
+        netWeightVolumeInput.required = true;
+        netUnitSelect.required = true;
+        
+        // Sync the cost inputs back
+        purchaseTotalCost.value = purchaseTotalCostItem.value;
+        purchaseTotalCost.disabled = false;
+        purchaseTotalCostItem.disabled = true;
+    }
+    
+    calculateCostPreview();
+}
+
+// Update item count display
+function updateItemCountDisplay() {
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    const itemCountDisplay = document.getElementById('itemCountDisplay');
+    
+    if (purchaseType === 'case' && itemsPerCase > 0) {
+        itemCountDisplay.innerHTML = `<strong>${itemsPerCase} items</strong> (${itemsPerCase} items per case)`;
+    } else if (purchaseType === 'single') {
+        itemCountDisplay.innerHTML = '<strong>1 item</strong> (single item)';
+    } else {
+        itemCountDisplay.innerHTML = '<span class="text-muted">Select purchase type and enter items per case</span>';
+    }
 }
 
 // Toggle baking conversion fields
@@ -473,7 +579,16 @@ function toggleBakingConversion() {
 
 // Calculate cost preview
 function calculateCostPreview() {
-    const totalCost = parseFloat(document.getElementById('purchase_total_cost').value) || 0;
+    const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
+    const totalCost = useItemCountPricing ? 
+        (parseFloat(document.getElementById('purchase_total_cost_item').value) || 0) :
+        (parseFloat(document.getElementById('purchase_total_cost').value) || 0);
+    
+    if (useItemCountPricing) {
+        calculateItemCountCostPreview(totalCost);
+        return;
+    }
+    
     const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
     const netCase = parseFloat(document.getElementById('net_weight_volume_case').value) || 0;
     const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
@@ -496,6 +611,38 @@ function calculateCostPreview() {
     }
 }
 
+// Calculate cost preview for item count pricing
+function calculateItemCountCostPreview(totalCost) {
+    const preview = document.getElementById('costPreview');
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    
+    if (totalCost > 0) {
+        let itemCount, costPerItem;
+        
+        if (purchaseType === 'case' && itemsPerCase > 0) {
+            itemCount = itemsPerCase;
+            costPerItem = (totalCost / itemsPerCase).toFixed(2);
+        } else if (purchaseType === 'single') {
+            itemCount = 1;
+            costPerItem = totalCost.toFixed(2);
+        } else {
+            preview.innerHTML = '<small>Enter purchase details to see cost per item calculations</small>';
+            preview.className = 'alert alert-info';
+            return;
+        }
+        
+        preview.innerHTML = `
+            <strong>Cost per item:</strong> $${costPerItem}<br>
+            <small class="text-muted">Total: $${totalCost.toFixed(2)} ÷ ${itemCount} items = $${costPerItem}/item</small>
+        `;
+        preview.className = 'alert alert-success';
+    } else {
+        preview.innerHTML = '<small>Enter ingredient details to see cost per item calculations</small>';
+        preview.className = 'alert alert-info';
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
     const singleRadio = document.getElementById('single');
@@ -509,8 +656,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add event listeners for cost calculation
     document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
+    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
     document.getElementById('net_weight_volume_item').addEventListener('input', calculateCostPreview);
     document.getElementById('net_weight_volume_case').addEventListener('input', calculateCostPreview);
+    document.getElementById('items_per_case').addEventListener('input', function() {
+        calculateItemWeight();
+        updateItemCountDisplay();
+        calculateCostPreview();
+    });
     document.getElementById('net_unit').addEventListener('change', function() {
         updateCaseUnitDisplay();
         calculateCostPreview();
