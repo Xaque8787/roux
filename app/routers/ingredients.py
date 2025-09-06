@@ -129,7 +129,7 @@ async def update_ingredient(
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
     use_item_count_pricing: bool = Form(False),
-    net_weight_volume_item: float = Form(...),
+    net_weight_volume_item: float = Form(None),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(...),
     breakable_case: bool = Form(False),
@@ -155,7 +155,7 @@ async def update_ingredient(
     ingredient.purchase_total_cost = purchase_total_cost
     ingredient.breakable_case = breakable_case
     ingredient.use_item_count_pricing = use_item_count_pricing
-    ingredient.net_weight_volume_item = net_weight_volume_item if not use_item_count_pricing else None
+    ingredient.net_weight_volume_item = net_weight_volume_item
     ingredient.net_unit = net_unit if not use_item_count_pricing else None
     ingredient.has_baking_conversion = has_baking_conversion
     
