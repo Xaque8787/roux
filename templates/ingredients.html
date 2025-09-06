@@ -79,11 +79,11 @@
                         <label class="form-label">Purchase Type</label>
                         <div>
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="purchase_type" id="single" value="single" checked>
+                                <input class="form-check-input" type="radio" name="purchase_type" id="single" value="single" checked onchange="toggleCaseFields()">
                                 <label class="form-check-label" for="single">Single Item</label>
                             </div>
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="purchase_type" id="case" value="case">
+                                <input class="form-check-input" type="radio" name="purchase_type" id="case" value="case" onchange="toggleCaseFields()">
                                 <label class="form-check-label" for="case">Case (multi-item)</label>
                             </div>
                         </div>
@@ -123,27 +123,27 @@
                     <!-- Net Weight/Volume Section -->
                     <h6 class="mt-3" id="netWeightVolumeHeader">Net Weight/Volume</h6>
                     <div id="netWeightVolumeSection">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                           step="0.01" onchange="calculateNetCase(); calculateCostPreview();" required>
-                                    <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase()">
-                                        <!-- Options populated by JavaScript -->
-                                    </select>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
+                                               step="0.01" onchange="calculateNetCase(); calculateCostPreview();" required>
+                                        <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview();">
+                                            <!-- Options populated by JavaScript -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
+                                    <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
+                                           step="0.01" onchange="calculateCostPreview();" required>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
-                                <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                       step="0.01" onchange="calculateCostPreview();" required>
-                            </div>
-                        </div>
-                    </div>
                     </div>
                     
                     <!-- Item Count Pricing Section (hidden by default) -->
@@ -338,8 +338,8 @@
                                     {% endif %}
                                 </td>
                             </tr>
-                        <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                               step="0.01" onchange="calculateCostPreview();" required>
+                            {% endfor %}
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -429,10 +429,10 @@ function updateAvailableUnits() {
     // Update labels
     if (usageType === 'weight') {
         netTypeLabel.textContent = 'Weight';
-        netTypeLabelCase.textContent = 'Weight';
+        if (netTypeLabelCase) netTypeLabelCase.textContent = 'Weight';
     } else {
         netTypeLabel.textContent = 'Volume';
-        netTypeLabelCase.textContent = 'Volume';
+        if (netTypeLabelCase) netTypeLabelCase.textContent = 'Volume';
     }
     
     // Clear and populate unit options
@@ -450,7 +450,6 @@ function updateAvailableUnits() {
     calculateCostPreview();
 }
 
-
 // Calculate net case from item
 function calculateNetCase() {
     const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
@@ -458,6 +457,8 @@ function calculateNetCase() {
     const netCaseDisplay = document.getElementById('netCaseDisplay');
     const netUnit = document.getElementById('net_unit').value;
     const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    
+    if (!netCaseDisplay) return; // Element doesn't exist
     
     if (purchaseType === "case") {
         if (netItem > 0 && itemsPerCase > 0) {
@@ -519,7 +520,6 @@ function calculateCostPreview() {
     }
 }
 
-
 // Toggle item count pricing
 function toggleItemCountPricing() {
     const checkbox = document.getElementById('use_item_count_pricing');
@@ -575,6 +575,7 @@ function toggleItemCountPricing() {
 }
 
 // Update item count display
+function updateItemCountDisplay() {
     const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
     const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
     const itemCountDisplay = document.getElementById('itemCountDisplay');
@@ -622,18 +623,7 @@ function toggleBakingConversion() {
     if (checkbox.checked) {
         fields.style.display = 'block';
     } else {
-    if (totalCost > 0 && totalNet > 0) {
-        const costPerUnit = (totalCost / totalNet).toFixed(4);
-        const unitLabel = WEIGHT_UNITS[netUnit] || VOLUME_UNITS[netUnit] || netUnit;
-        
-        preview.innerHTML = `
-            <strong>Cost per ${unitLabel}:</strong> $${costPerUnit}<br>
-            <small class="text-muted">Total: $${totalCost.toFixed(2)} ÷ ${totalNet} ${netUnit} = $${costPerUnit}/${netUnit}</small>
-        `;
-        preview.className = 'alert alert-success';
-    } else {
-        preview.innerHTML = '<small>Enter ingredient details to see cost per unit calculations</small>';
-        preview.className = 'alert alert-info';
+        fields.style.display = 'none';
     }
 }
 
@@ -671,24 +661,22 @@ function calculateItemCountCostPreview(totalCost) {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    const singleRadio = document.getElementById('single');
-    const caseRadio = document.getElementById('case');
-    
-    singleRadio.addEventListener('change', toggleCaseFields);
-    caseRadio.addEventListener('change', toggleCaseFields);
-    
     // Initialize
     updateAvailableUnits();
     
     // Add event listeners for cost calculation
     document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
-    if (document.getElementById('purchase_total_cost_item')) {
-        document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
-    }
-    if (document.getElementById('net_weight_volume_item')) {
-        document.getElementById('net_weight_volume_item').addEventListener('input', calculateCostPreview);
-    }
+    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_weight_volume_item').addEventListener('input', function() {
+        calculateNetCase();
+        calculateCostPreview();
+    });
     document.getElementById('net_unit').addEventListener('change', function() {
+        calculateNetCase();
+        calculateCostPreview();
+    });
+    document.getElementById('items_per_case').addEventListener('input', function() {
+        updateItemCountDisplay();
         calculateNetCase();
         calculateCostPreview();
     });
