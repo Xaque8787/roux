@@ -465,17 +465,38 @@ class DishBatchPortion(Base):
     batch = relationship("Batch")
     
     @property
-    def cost(self):
+    def expected_cost(self):
+        """Calculate expected cost using estimated labor"""
+        return self._calculate_cost_with_labor_type('estimated')
+    
+    @property
+    def actual_cost(self):
+        """Calculate actual cost using most recent actual labor"""
+        return self._calculate_cost_with_labor_type('actual')
+    
+    @property
+    def actual_cost_week_avg(self):
+        """Calculate actual cost using week average labor"""
+        return self._calculate_cost_with_labor_type('week_avg')
+    
+    @property
+    def actual_cost_month_avg(self):
+        """Calculate actual cost using month average labor"""
+        return self._calculate_cost_with_labor_type('month_avg')
+    
+    @property
+    def actual_cost_all_time_avg(self):
+        """Calculate actual cost using all-time average labor"""
+        return self._calculate_cost_with_labor_type('all_time_avg')
+    
+    def _calculate_cost_with_labor_type(self, labor_type):
         """Calculate the cost of this dish batch portion"""
         if not self.batch or not self.portion_size:
             return 0
         
         if self.batch.variable_yield:
-            # For variable yield batches, we can't calculate cost without knowing actual yield
             return 0
         
-        # Calculate ingredient cost per unit
-        recipe_ingredients = []
         from sqlalchemy.orm import sessionmaker
         from .database import engine
         Session = sessionmaker(bind=engine)
@@ -488,16 +509,32 @@ class DishBatchPortion(Base):
             ).all()
             
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.actual_labor_cost
+            
+            # Get labor cost based on type
+            if labor_type == 'estimated':
+                labor_cost = self.batch.estimated_labor_cost
+            elif labor_type == 'actual':
+                labor_cost = self.batch.actual_labor_cost
+            elif labor_type == 'week_avg':
+                labor_cost = self.batch.average_labor_cost_week
+            elif labor_type == 'month_avg':
+                labor_cost = self.batch.average_labor_cost_month
+            elif labor_type == 'all_time_avg':
+                labor_cost = self.batch.average_labor_cost_all_time
+            else:
+                labor_cost = self.batch.estimated_labor_cost
+            
+            total_batch_cost = total_recipe_cost + labor_cost
             cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
             
-            # Convert portion unit to yield unit if different
+            # Handle unit conversion
             if self.portion_unit == self.batch.yield_unit:
                 return self.portion_size * cost_per_yield_unit
             else:
-                # Determine usage type and convert
+                # Convert between units
                 usage_type = None
                 for ri in recipe_ingredients:
+                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
                     ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
                     if ingredient and ingredient.usage_type:
                         usage_type = ingredient.usage_type
@@ -513,50 +550,6 @@ class DishBatchPortion(Base):
                     elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
                         converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
                     else:
-                        # Can't convert, assume 1:1
-                        converted_portion = self.portion_size
-                    
-                    return converted_portion * cost_per_yield_unit
-                except ValueError:
-                    # Conversion failed, assume 1:1
-                    return self.portion_size * cost_per_yield_unit
-        finally:
-            db.close()
-    
-    @property
-    def expected_cost(self):
-        """Calculate expected cost using estimated labor"""
-        if not self.batch or not self.portion_size:
-            return 0
-        
-        if self.batch.variable_yield:
-            return 0
-        
-        # Calculate ingredient cost per unit with ESTIMATED labor
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import RecipeIngredient
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == self.batch.recipe_id
-            ).all()
-            
-            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.estimated_labor_cost
-            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
-            
-            if self.portion_unit == self.batch.yield_unit:
-                return self.portion_size * cost_per_yield_unit
-            else:
-                try:
-                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
-                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
-                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    else:
                         converted_portion = self.portion_size
                     
                     return converted_portion * cost_per_yield_unit
@@ -565,137 +558,12 @@ class DishBatchPortion(Base):
         finally:
             db.close()
     
+    # Keep the old cost property for backward compatibility
     @property
-    def actual_cost(self):
-        """Calculate actual cost using most recent actual labor from completed tasks"""
-        if not self.batch or not self.portion_size:
-            return 0
-        
-        # This is the same as the cost property - uses most recent actual labor
-        return self.cost
+    def cost(self):
+        """Backward compatibility - returns actual cost"""
+        return self.actual_cost
     
-    @property
-    def actual_cost_week_avg(self):
-        """Calculate actual cost using week average labor"""
-        if not self.batch or not self.portion_size:
-            return 0
-        
-        if self.batch.variable_yield:
-            return 0
-        
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import RecipeIngredient
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == self.batch.recipe_id
-            ).all()
-            
-            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_week
-            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
-            
-            if self.portion_unit == self.batch.yield_unit:
-                return self.portion_size * cost_per_yield_unit
-            else:
-                try:
-                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
-                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
-                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    else:
-                        converted_portion = self.portion_size
-                    
-                    return converted_portion * cost_per_yield_unit
-                except ValueError:
-                    return self.portion_size * cost_per_yield_unit
-        finally:
-            db.close()
-    
-    @property
-    def actual_cost_month_avg(self):
-        """Calculate actual cost using month average labor"""
-        if not self.batch or not self.portion_size:
-            return 0
-        
-        if self.batch.variable_yield:
-            return 0
-        
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import RecipeIngredient
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == self.batch.recipe_id
-            ).all()
-            
-            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_month
-            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
-            
-            if self.portion_unit == self.batch.yield_unit:
-                return self.portion_size * cost_per_yield_unit
-            else:
-                try:
-                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
-                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
-                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    else:
-                        converted_portion = self.portion_size
-                    
-                    return converted_portion * cost_per_yield_unit
-                except ValueError:
-                    return self.portion_size * cost_per_yield_unit
-        finally:
-            db.close()
-    
-    @property
-    def actual_cost_all_time_avg(self):
-        """Calculate actual cost using all-time average labor"""
-        if not self.batch or not self.portion_size:
-            return 0
-        
-        if self.batch.variable_yield:
-            return 0
-        
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import RecipeIngredient
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == self.batch.recipe_id
-            ).all()
-            
-            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            total_batch_cost = total_recipe_cost + self.batch.average_labor_cost_all_time
-            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
-            
-            if self.portion_unit == self.batch.yield_unit:
-                return self.portion_size * cost_per_yield_unit
-            else:
-                try:
-                    if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
-                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
-                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    else:
-                        converted_portion = self.portion_size
-                    
-                    return converted_portion * cost_per_yield_unit
-                except ValueError:
-                    return self.portion_size * cost_per_yield_unit
-        finally:
-            db.close()
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"

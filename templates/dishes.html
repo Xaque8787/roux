@@ -49,7 +49,7 @@
                     <div class="mb-3">
                         <div class="input-group">
                             <input type="text" class="form-control" id="batchSearch" 
-                                   placeholder="Search for batches or click to see all..." autocomplete="off">
+                                   placeholder="Search for batches..." autocomplete="off">
                             <button type="button" class="btn btn-outline-secondary" id="addBatchBtn">
                                 <i class="fas fa-plus"></i> Add
                             </button>
@@ -177,9 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show all batches when field is focused
     batchSearch.addEventListener('focus', function() {
-        if (this.value.trim() === '') {
-            loadAllBatches();
-        }
+        loadAllBatches();
     });
     
     // Hide suggestions when clicking outside
