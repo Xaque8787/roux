@@ -531,8 +531,6 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
                 auto_generated=True
             )
             db.add(task)
-            )
-            db.add(task)
 @router.get("/day/{day_id}", response_class=HTMLResponse)
 async def inventory_day_detail(day_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
