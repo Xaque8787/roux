@@ -164,7 +164,7 @@ async def update_inventory_day(
 async def create_manual_task(
     day_id: int,
     request: Request,
-    assigned_to_ids: list = Form([]),
+    assigned_to_ids: list[int] = Form([]),
     inventory_item_id: int = Form(None),
     description: str = Form(...),
     db: Session = Depends(get_db),
@@ -174,27 +174,24 @@ async def create_manual_task(
     if not inventory_day or inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Cannot add tasks to finalized day")
     
-    # Create tasks for each assigned employee (or one unassigned task if none selected)
-    if not assigned_to_ids:
-        assigned_to_ids = [None]
+    # Create a single task with multiple employees assigned
+    task = Task(
+        day_id=day_id,
+        assigned_to_id=assigned_to_ids[0] if assigned_to_ids else None,  # Primary assignee
+        inventory_item_id=inventory_item_id if inventory_item_id else None,
+        batch_id=None,  # Will be set from inventory item if linked
+        description=description,
+        auto_generated=False,
+        assigned_employee_ids=','.join(map(str, assigned_to_ids)) if assigned_to_ids else None
+    )
     
-    for assigned_to_id in assigned_to_ids:
-        task = Task(
-            day_id=day_id,
-            assigned_to_id=assigned_to_id if assigned_to_id else None,
-            inventory_item_id=inventory_item_id if inventory_item_id else None,
-            batch_id=None,  # Will be set from inventory item if linked
-            description=description,
-            auto_generated=False
-        )
-        
-        # Set batch_id from inventory item if linked
-        if inventory_item_id:
-            inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
-            if inventory_item and inventory_item.batch_id:
-                task.batch_id = inventory_item.batch_id
-        
-        db.add(task)
+    # Set batch_id from inventory item if linked
+    if inventory_item_id:
+        inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+        if inventory_item and inventory_item.batch_id:
+            task.batch_id = inventory_item.batch_id
+    
+    db.add(task)
     
     db.commit()
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
