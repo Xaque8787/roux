@@ -409,7 +409,12 @@
                 {% set total_tasks = tasks|length %}
                 {% set completed_tasks = tasks|selectattr('status', 'equalto', 'completed')|list|length %}
                 {% set in_progress_tasks = tasks|selectattr('status', 'equalto', 'in_progress')|list|length %}
-                {% set below_par_items = inventory_day_items|selectattr('quantity', 'le', inventory_day_items|map(attribute='inventory_item.par_level'))|list|length %}
+                {% set below_par_count = 0 %}
+                {% for day_item in inventory_day_items %}
+                    {% if day_item.quantity <= day_item.inventory_item.par_level %}
+                        {% set below_par_count = below_par_count + 1 %}
+                    {% endif %}
+                {% endfor %}
                 
                 <div class="row text-center">
                     <div class="col-6">
@@ -442,7 +447,7 @@
                     <div class="col-6">
                         <div class="card bg-danger text-white">
                             <div class="card-body p-2">
-                                <h5>{{ below_par_items }}</h5>
+                                <h5>{{ below_par_count }}</h5>
                                 <small>Below Par</small>
                             </div>
                         </div>
