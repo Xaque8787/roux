@@ -22,8 +22,29 @@
                 <div class="row">
                     <div class="col-md-6">
                         <p><strong>Description:</strong> {{ task.description }}</p>
-                        <p><strong>Assigned to:</strong> 
-                            {% if task.assigned_to %}
+                        <p><strong>Assigned to:</strong>
+                            {% if task.assigned_employee_ids %}
+                                {% set employee_ids = task.assigned_employee_ids.split(',') %}
+                                {% if employee_ids|length > 1 %}
+                                    <span class="text-info">Team of {{ employee_ids|length }}</span>
+                                    <br>
+                                    {% for emp_id in employee_ids %}
+                                        {% for emp in employees %}
+                                            {% if emp.id|string == emp_id %}
+                                                <span class="badge bg-secondary me-1">{{ emp.full_name or emp.username }}</span>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endfor %}
+                                {% else %}
+                                    {% for emp_id in employee_ids %}
+                                        {% for emp in employees %}
+                                            {% if emp.id|string == emp_id %}
+                                                {{ emp.full_name or emp.username }}
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endfor %}
+                                {% endif %}
+                            {% elif task.assigned_to %}
                                 {{ task.assigned_to.full_name or task.assigned_to.username }}
                             {% else %}
                                 <span class="text-warning">Unassigned</span>
@@ -125,7 +146,10 @@
                         {% if task.finished_at and task.assigned_to %}
                         <p><strong>Labor Cost:</strong> 
                             <span class="text-success">${{ "%.2f"|format(task.labor_cost) }}</span>
-                            <br><small class="text-muted">{{ task.total_time_minutes }} min × ${{ "%.2f"|format(task.highest_hourly_wage) }}/hr (highest wage)</small>
+                            <br><small class="text-muted">{{ task.total_time_minutes }} min × ${{ "%.2f"|format(task.highest_hourly_wage) }}/hr</small>
+                            {% if task.assigned_employee_ids and task.assigned_employee_ids.split(',')|length > 1 %}
+                            <br><small class="text-info">(Highest wage among team members)</small>
+                            {% endif %}
                         </p>
                         {% endif %}
                     </div>
