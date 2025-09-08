@@ -212,6 +212,31 @@ async def assign_task(
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
+@router.post("/day/{day_id}/tasks/{task_id}/assign_multiple")
+async def assign_multiple_employees_to_task(
+    day_id: int,
+    task_id: int,
+    assigned_to_ids: list[int] = Form([]),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if not assigned_to_ids:
+        raise HTTPException(status_code=400, detail="At least one employee must be selected")
+    
+    # Set primary assignee to first selected employee
+    task.assigned_to_id = assigned_to_ids[0]
+    
+    # Store all assigned employee IDs
+    task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
 @router.post("/day/{day_id}/tasks/{task_id}/start")
 async def start_task(
     day_id: int,
