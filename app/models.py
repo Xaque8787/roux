@@ -225,17 +225,23 @@ class Ingredient(Base):
             # Convert from net unit to baking unit using density
             if self.usage_type == 'weight':
                 # Convert net weight to cups using baking conversion
-                cups_per_net_unit = self.baking_measurement_amount / self.baking_weight_amount
-                if self.net_unit != 'oz':
-                    # Convert net unit to oz first
-                    net_in_oz = convert_weight(1, self.net_unit, 'oz')
-                    cups_per_net_unit = cups_per_net_unit / net_in_oz
-                
-                # Convert cups to target baking unit
-                target_per_cup = BAKING_MEASUREMENTS[unit]
-                target_per_net_unit = cups_per_net_unit * target_per_cup
-                
-                return round(self.cost_per_net_unit / target_per_net_unit, 4)
+                # Check if baking conversion data is complete
+                if (self.baking_measurement_amount and self.baking_weight_amount and 
+                    self.baking_weight_amount > 0):
+                    cups_per_net_unit = self.baking_measurement_amount / self.baking_weight_amount
+                    if self.net_unit != 'oz':
+                        # Convert net unit to oz first
+                        net_in_oz = convert_weight(1, self.net_unit, 'oz')
+                        cups_per_net_unit = cups_per_net_unit / net_in_oz
+                    
+                    # Convert cups to target baking unit
+                    target_per_cup = BAKING_MEASUREMENTS[unit]
+                    target_per_net_unit = cups_per_net_unit * target_per_cup
+                    
+                    return round(self.cost_per_net_unit / target_per_net_unit, 4)
+                else:
+                    # Baking conversion incomplete, return 0
+                    return 0
         
         # Handle standard weight/volume conversions
         try:
