@@ -222,26 +222,41 @@ class Ingredient(Base):
         
         # Handle baking measurements
         if unit in BAKING_MEASUREMENTS and self.has_baking_conversion:
-            # Convert from net unit to baking unit using density
-            if self.usage_type == 'weight':
-                # Convert net weight to cups using baking conversion
-                # Check if baking conversion data is complete
-                if (self.baking_measurement_amount and self.baking_weight_amount and 
-                    self.baking_weight_amount > 0):
-                    cups_per_net_unit = self.baking_measurement_amount / self.baking_weight_amount
-                    if self.net_unit != 'oz':
-                        # Convert net unit to oz first
-                        net_in_oz = convert_weight(1, self.net_unit, 'oz')
-                        cups_per_net_unit = cups_per_net_unit / net_in_oz
-                    
-                    # Convert cups to target baking unit
-                    target_per_cup = BAKING_MEASUREMENTS[unit]
-                    target_per_net_unit = cups_per_net_unit * target_per_cup
-                    
-                    return round(self.cost_per_net_unit / target_per_net_unit, 4)
-                else:
-                    # Baking conversion incomplete, return 0
+            # Check if baking conversion data is complete
+            if (self.baking_measurement_unit and self.baking_weight_amount and 
+                self.baking_weight_unit and self.baking_weight_amount > 0):
+                
+                # Step 1: Convert net unit to baking weight unit (e.g., lb to oz)
+                try:
+                    if self.net_unit in WEIGHT_CONVERSIONS and self.baking_weight_unit in WEIGHT_CONVERSIONS:
+                        net_in_baking_weight_unit = convert_weight(1, self.net_unit, self.baking_weight_unit)
+                    else:
+                        return 0  # Can't convert between units
+                except ValueError:
                     return 0
+                
+                # Step 2: Calculate how many baking measurement units per net unit
+                # Example: 1 lb = 16 oz, and 1 cup = 6 oz, so 1 lb = 16/6 = 2.67 cups
+                baking_units_per_net_unit = net_in_baking_weight_unit / self.baking_weight_amount
+                
+                # Step 3: Convert from the defined baking measurement to the requested unit
+                # Example: if we defined "1 cup = 6 oz" and want "1/2 cup", we need to convert
+                if self.baking_measurement_unit in BAKING_MEASUREMENTS and unit in BAKING_MEASUREMENTS:
+                    # Convert from defined measurement to cups, then to target measurement
+                    defined_measurement_in_cups = 1.0 / BAKING_MEASUREMENTS[self.baking_measurement_unit]
+                    target_measurement_in_cups = 1.0 / BAKING_MEASUREMENTS[unit]
+                    
+                    # How many target units equal one defined measurement unit
+                    target_per_defined = defined_measurement_in_cups / target_measurement_in_cups
+                    
+                    # How many target units per net unit
+                    target_units_per_net_unit = baking_units_per_net_unit * target_per_defined
+                    
+                    return round(self.cost_per_net_unit / target_units_per_net_unit, 4)
+                else:
+                    return 0
+            else:
+                return 0
         
         # Handle standard weight/volume conversions
         try:
