@@ -11,7 +11,7 @@ import os
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
@@ -38,8 +38,11 @@ def verify_jwt(token: str):
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token")
         return payload
-    except JWTError:
+    except JWTError as e:
+        # Handle expired tokens specifically
+        if "expired" in str(e).lower():
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):

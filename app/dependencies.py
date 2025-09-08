@@ -13,7 +13,16 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
             headers={"Location": "/login"}
         )
     
-    payload = verify_jwt(token)
+    try:
+        payload = verify_jwt(token)
+    except HTTPException:
+        # Token is invalid or expired, redirect to login
+        raise HTTPException(
+            status_code=401, 
+            detail="Session expired",
+            headers={"Location": "/login"}
+        )
+    
     username = payload.get("sub")
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.is_active:

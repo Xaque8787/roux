@@ -119,7 +119,7 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
 # Error handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    if exc.status_code == 401 and "Location" in exc.headers:
+    if exc.status_code == 401 and exc.headers and "Location" in exc.headers:
         return RedirectResponse(url=exc.headers["Location"], status_code=302)
     
     return templates.TemplateResponse("error.html", {
