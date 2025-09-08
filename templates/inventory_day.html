@@ -1,664 +1,787 @@
-{% extends "base.html" %}
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, Date, ForeignKey
+from sqlalchemy.orm import relationship
+from datetime import datetime, date
+from .database import Base
 
-{% block title %}Inventory Day {{ inventory_day.date }} - Food Cost Management{% endblock %}
+# Standard conversion tables
+WEIGHT_CONVERSIONS = {
+    'lb': 1.0,      # Base unit: pounds
+    'oz': 16.0,     # 16 oz per lb
+    'g': 453.592,   # 453.592 g per lb
+    'kg': 0.453592, # 0.453592 kg per lb
+}
 
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <h1><i class="fas fa-calendar-day"></i> Inventory Day: {{ inventory_day.date }}</h1>
-        <a href="/inventory" class="btn btn-secondary mb-3">
-            <i class="fas fa-arrow-left"></i> Back to Inventory
-        </a>
+VOLUME_CONVERSIONS = {
+    'gal': 1.0,     # Base unit: gallons
+    'qt': 4.0,      # 4 qt per gal
+    'pt': 8.0,      # 8 pt per gal
+    'cup': 16.0,    # 16 cups per gal
+    'fl_oz': 128.0, # 128 fl oz per gal
+    'l': 3.78541,   # 3.78541 L per gal
+    'ml': 3785.41,  # 3785.41 ml per gal
+}
+
+BAKING_MEASUREMENTS = {
+    'cup': 1.0,      # Base unit: cups
+    '3/4_cup': 0.75,
+    '2/3_cup': 0.667,
+    '1/2_cup': 0.5,
+    '1/3_cup': 0.333,
+    '1/4_cup': 0.25,
+    '1/8_cup': 0.125,
+    'tbsp': 16.0,    # 16 tbsp per cup
+    'tsp': 48.0,     # 48 tsp per cup
+}
+
+def convert_weight(amount, from_unit, to_unit):
+    """Convert between weight units"""
+    if from_unit not in WEIGHT_CONVERSIONS or to_unit not in WEIGHT_CONVERSIONS:
+        raise ValueError(f"Invalid weight units: {from_unit} or {to_unit}")
+    
+    # Convert to base unit (pounds) then to target unit
+    base_amount = amount / WEIGHT_CONVERSIONS[from_unit]
+    return round(base_amount * WEIGHT_CONVERSIONS[to_unit], 2)
+
+def convert_volume(amount, from_unit, to_unit):
+    """Convert between volume units"""
+    if from_unit not in VOLUME_CONVERSIONS or to_unit not in VOLUME_CONVERSIONS:
+        raise ValueError(f"Invalid volume units: {from_unit} or {to_unit}")
+    
+    # Convert to base unit (gallons) then to target unit
+    base_amount = amount / VOLUME_CONVERSIONS[from_unit]
+    return round(base_amount * VOLUME_CONVERSIONS[to_unit], 2)
+
+def convert_baking_measurement(amount, from_unit, to_unit, ingredient_density_oz_per_cup):
+    """Convert between baking measurements using ingredient density"""
+    if from_unit not in BAKING_MEASUREMENTS or to_unit not in BAKING_MEASUREMENTS:
+        raise ValueError(f"Invalid baking units: {from_unit} or {to_unit}")
+    
+    # Convert to base unit (cups)
+    cups = amount / BAKING_MEASUREMENTS[from_unit]
+    
+    # Convert to target unit
+    target_amount = cups * BAKING_MEASUREMENTS[to_unit]
+    
+    return round(target_amount, 2)
+
+def get_baking_weight(amount, baking_unit, ingredient_density_oz_per_cup):
+    """Convert baking measurement to weight using ingredient density"""
+    if baking_unit not in BAKING_MEASUREMENTS:
+        raise ValueError(f"Invalid baking unit: {baking_unit}")
+    
+    # Convert to cups first
+    cups = amount / BAKING_MEASUREMENTS[baking_unit]
+    
+    # Convert to weight using density
+    weight_oz = cups * ingredient_density_oz_per_cup
+    
+    return round(weight_oz, 2)
+
+class VendorUnit(Base):
+    __tablename__ = "vendor_units"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # lb, oz, gal, qt, etc.
+    description = Column(String)  # Optional description
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=False)
+    hourly_wage = Column(Float, default=15.0)
+    work_schedule = Column(String)  # JSON string of days: "mon,tue,wed,thu,fri"
+    role = Column(String, default="user")  # admin, manager, user
+    is_admin = Column(Boolean, default=False)
+    is_user = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+
+class Vendor(Base):
+    __tablename__ = "vendors"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    contact_info = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Category(Base):
+    __tablename__ = "categories"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True)
+    type = Column(String)  # 'ingredient', 'recipe', 'batch', 'dish', 'inventory'
+
+class ParUnitName(Base):
+    __tablename__ = "par_unit_names"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # Tub, Case, Container, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Ingredient(Base):
+    __tablename__ = "ingredients"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    vendor_id = Column(Integer, ForeignKey("vendors.id"))
+    vendor_unit_id = Column(Integer, ForeignKey("vendor_units.id"))
+    
+    # New usage type system
+    usage_type = Column(String, nullable=False)  # 'weight' or 'volume'
+    
+    # Purchase Level
+    purchase_type = Column(String)  # 'case' or 'single'
+    purchase_unit_name = Column(String)  # Case, Bag, Sack, Box (container type)
+    purchase_total_cost = Column(Float)
+    breakable_case = Column(Boolean, default=False)
+    
+    # Item count pricing option
+    use_item_count_pricing = Column(Boolean, default=False)
+    
+    # Net Weight/Volume (replaces purchase_weight_volume)
+    net_weight_volume_item = Column(Float)  # Net weight/volume per item
+    net_weight_volume_case = Column(Float)  # Net weight/volume per case (auto-calculated)
+    net_unit = Column(String)  # The unit for net weight/volume (lb, oz, gal, etc.)
+    
+    # Item Level (for cases)
+    items_per_case = Column(Integer)
+    
+    # Baking Measurements Conversion
+    has_baking_conversion = Column(Boolean, default=False)
+    baking_measurement_unit = Column(String)  # cup, tbsp, etc.
+    baking_measurement_amount = Column(Float)  # user entered amount
+    baking_weight_unit = Column(String)  # oz, g, etc.
+    baking_weight_amount = Column(Float)  # user entered weight
+    
+    category = relationship("Category")
+    vendor = relationship("Vendor")
+    vendor_unit = relationship("VendorUnit")
+    
+    @property
+    def item_cost(self):
+        if self.purchase_type == 'case' and self.items_per_case:
+            return self.purchase_total_cost / self.items_per_case
+        return self.purchase_total_cost
+    
+    @property
+    def total_item_count(self):
+        """Total item count for the entire purchase"""
+        if self.purchase_type == 'case' and self.items_per_case:
+            return self.items_per_case
+        return 1
+    
+    @property
+    def total_net_weight_volume(self):
+        """Total net weight/volume for the entire purchase"""
+        if self.use_item_count_pricing:
+            return None
+        if self.purchase_type == 'case':
+            return self.net_weight_volume_case
+        return self.net_weight_volume_item
+    
+    @property
+    def cost_per_net_unit(self):
+        """Cost per net unit (lb, oz, gal, etc.)"""
+        if self.use_item_count_pricing:
+            return self.purchase_total_cost / self.total_item_count
+        if self.total_net_weight_volume and self.total_net_weight_volume > 0:
+            return round(self.purchase_total_cost / self.total_net_weight_volume, 4)
+        return 0
+    
+    @property
+    def cost_per_item(self):
+        """Cost per individual item"""
+        if self.use_item_count_pricing:
+            return self.purchase_total_cost / self.total_item_count
+        return self.cost_per_net_unit
+    
+    def get_available_units(self):
+        """Get available units for this ingredient based on usage type"""
+        if self.use_item_count_pricing:
+            return ['item', 'each']
         
-        {% if inventory_day.finalized %}
-        <div class="alert alert-info">
-            <i class="fas fa-lock"></i> This day is finalized and cannot be edited.
-            <a href="/inventory/reports/{{ inventory_day.id }}" class="btn btn-sm btn-info ms-2">
-                <i class="fas fa-chart-bar"></i> View Report
-            </a>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-clipboard-list"></i> Daily Inventory</h5>
-            </div>
-            <div class="card-body">
-                {% if not inventory_day.finalized %}
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update">
-                    <div class="mb-3">
-                        <label for="global_notes" class="form-label">Day Notes</label>
-                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2" placeholder="General notes for the day...">{{ inventory_day.global_notes or '' }}</textarea>
-                    </div>
+        if self.usage_type == 'weight':
+            units = list(WEIGHT_CONVERSIONS.keys())
+        else:  # volume
+            units = list(VOLUME_CONVERSIONS.keys())
+        
+        # Add baking measurements if available
+        if self.has_baking_conversion:
+            units.extend(list(BAKING_MEASUREMENTS.keys()))
+        
+        return units
+    
+    def get_cost_per_unit(self, unit):
+        """Get cost per specified unit"""
+        if self.use_item_count_pricing:
+            if unit in ['item', 'each']:
+                return self.cost_per_item
+            return 0
+        
+        if not self.total_net_weight_volume or self.total_net_weight_volume <= 0:
+            return 0
+        
+        # Handle baking measurements
+        if unit in BAKING_MEASUREMENTS and self.has_baking_conversion:
+            # Check if baking conversion data is complete
+            if (self.baking_measurement_unit and self.baking_weight_amount and 
+                self.baking_weight_unit and self.baking_weight_amount > 0):
+                
+                # Step 1: Convert net unit to baking weight unit (e.g., lb to oz)
+                try:
+                    if self.net_unit in WEIGHT_CONVERSIONS and self.baking_weight_unit in WEIGHT_CONVERSIONS:
+                        net_in_baking_weight_unit = convert_weight(1, self.net_unit, self.baking_weight_unit)
+                    else:
+                        return 0  # Can't convert between units
+                except ValueError:
+                    return 0
+                
+                # Step 2: Calculate how many baking measurement units per net unit
+                # Example: 1 lb = 16 oz, and 1 cup = 6 oz, so 1 lb = 16/6 = 2.67 cups
+                baking_units_per_net_unit = net_in_baking_weight_unit / self.baking_weight_amount
+                
+                # Step 3: Convert from the defined baking measurement to the requested unit
+                # Example: if we defined "1 cup = 6 oz" and want "1/2 cup", we need to convert
+                if self.baking_measurement_unit in BAKING_MEASUREMENTS and unit in BAKING_MEASUREMENTS:
+                    # Convert from defined measurement to cups, then to target measurement
+                    defined_measurement_in_cups = 1.0 / BAKING_MEASUREMENTS[self.baking_measurement_unit]
+                    target_measurement_in_cups = 1.0 / BAKING_MEASUREMENTS[unit]
                     
-                    <div class="row">
-                        {% for item in inventory_day_items %}
-                        {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
-                        {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
-                        <div class="col-md-6 mb-3">
-                            <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
-                                <div class="card-body p-2">
-                                    <label class="form-label mb-1">
-                                        <strong>{{ item.inventory_item.name }}</strong>
-                                        <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
-                                        {% if item.inventory_item.batch %}
-                                        <br><small class="text-info">Batch: {{ item.inventory_item.batch.recipe.name }}</small>
-                                        {% endif %}
-                                    </label>
-                                    <input type="number" class="form-control form-control-sm mb-2" 
-                                           name="item_{{ item.inventory_item.id }}" 
-                                           value="{{ item.quantity }}" 
-                                           step="0.01"
-                                           {% if is_below_par %}
-                                           style="background-color: #ffebee;"
-                                           {% elif is_near_par %}
-                                           style="background-color: #fff8e1;"
-                                           {% endif %}>
-                                    
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" 
-                                               name="override_create_{{ item.inventory_item.id }}" 
-                                               id="override_create_{{ item.inventory_item.id }}"
-                                               {% if item.override_create_task %}checked{% endif %}>
-                                        <label class="form-check-label" for="override_create_{{ item.inventory_item.id }}">
-                                            <small>Force Task</small>
-                                        </label>
-                                    </div>
-                                    
-                                    {% if is_below_par %}
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" 
-                                               name="override_no_task_{{ item.inventory_item.id }}" 
-                                               id="override_no_task_{{ item.inventory_item.id }}"
-                                               {% if item.override_no_task %}checked{% endif %}>
-                                        <label class="form-check-label" for="override_no_task_{{ item.inventory_item.id }}">
-                                            <small>No Task</small>
-                                        </label>
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save"></i> Save Inventory & Generate Tasks
-                    </button>
-                    <button type="button" class="btn btn-warning ms-2" onclick="showRegenerateTasksModal()">
-                        <i class="fas fa-redo"></i> Force Regenerate All Tasks
-                    </button>
-                </form>
-                {% else %}
-                <div class="mb-3">
-                    <label class="form-label">Day Notes</label>
-                    <div class="border p-2 bg-light">
-                        {{ inventory_day.global_notes or 'No notes for this day.' }}
-                    </div>
-                </div>
-                
-                <div class="row">
-                    {% for item in inventory_day_items %}
-                    {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
-                    {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
-                    <div class="col-md-6 mb-3">
-                        <div class="card {% if is_below_par %}border-danger{% elif is_near_par %}border-warning{% endif %}">
-                            <div class="card-body p-2">
-                                <label class="form-label mb-1">
-                                    <strong>{{ item.inventory_item.name }}</strong>
-                                    <small class="text-muted">(Par: {{ item.inventory_item.par_level }})</small>
-                                </label>
-                                <input type="number" class="form-control form-control-sm" 
-                                       value="{{ item.quantity }}" 
-                                       readonly
-                                       {% if is_below_par %}
-                                       style="background-color: #ffebee;"
-                                       {% elif is_near_par %}
-                                       style="background-color: #fff8e1;"
-                                       {% endif %}>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-tasks"></i> Tasks</h5>
-            </div>
-            <div class="card-body">
-                {% if not inventory_day.finalized %}
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new" class="mb-3">
-                    <div class="mb-2">
-                        <label class="form-label">Assign to Employees:</label>
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <span id="selectedEmployeesText">Select employees...</span>
-                            </button>
-                            <ul class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;">
-                            {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
-                            {% for emp in employees %}
-                            {% if emp.id|string in working_employee_ids %}
-                                <li>
-                                    <div class="form-check dropdown-item-text">
-                                        <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp_{{ emp.id }}" onchange="updateSelectedEmployeesText()">
-                                        <label class="form-check-label" for="emp_{{ emp.id }}">
-                                            {{ emp.full_name or emp.username }}
-                                        </label>
-                                    </div>
-                                </li>
-                            {% endif %}
-                            {% endfor %}
-                            </ul>
-                        </div>
-                        <small class="text-muted">Select one or more employees, or leave blank for unassigned task</small>
-                    </div>
-                    <div class="mb-2">
-                        <select class="form-select form-select-sm" name="inventory_item_id">
-                            <option value="">Link to inventory item (optional)...</option>
-                            {% for item in inventory_day_items %}
-                            <option value="{{ item.inventory_item.id }}">{{ item.inventory_item.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-2">
-                        <input type="text" class="form-control form-control-sm" name="description" placeholder="Task description" required>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-success">
-                        <i class="fas fa-plus"></i> Add Manual Task
-                    </button>
-                </form>
-                {% endif %}
-                
-                <div class="task-list">
-                    {% for task in tasks %}
-                    <div class="card mb-2 {% if task.auto_generated %}border-info{% endif %}">
-                        <div class="card-body p-2">
-                            <div class="d-flex justify-content-between align-items-start mb-1">
-                                <small><strong>{{ task.description }}</strong></small>
-                                <div>
-                                    {% if task.auto_generated %}
-                                    <span class="badge bg-info">Auto</span>
-                                    {% endif %}
-                                    {% if task.inventory_item and task.inventory_item.batch %}
-                                    <span class="badge bg-success">Batch</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            
-                            {% if task.assigned_to %}
-                            <small class="text-muted">Assigned to: {{ task.assigned_to.full_name or task.assigned_to.username }}</small><br>
-                            {% else %}
-                            <small class="text-warning">Unassigned</small>
-                            {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
-                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/assign" style="display:inline;">
-                                <select name="assigned_to_id" class="form-select form-select-sm mt-1" onchange="this.form.submit()">
-                                    <option value="">Assign to...</option>
-                                    {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
-                                    {% for emp in employees %}
-                                    {% if emp.id|string in working_employee_ids %}
-                                    <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
-                                    {% endif %}
-                                    {% endfor %}
-                                </select>
-                            </form>
-                            {% endif %}
-                            <br>
-                            {% endif %}
-                            
-                            {% if task.inventory_item and task.inventory_item.batch %}
-                            <small class="text-info">
-                                <i class="fas fa-industry"></i> Batch: 
-                                <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
-                                    {{ task.inventory_item.batch.recipe.name }}
-                                </a>
-                            </small><br>
-                            {% endif %}
-                            
-                            {% if task.batch %}
-                            <small class="text-success">
-                                <i class="fas fa-link"></i> Direct Batch Link: 
-                                <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a>
-                            </small><br>
-                            {% elif task.inventory_item and task.inventory_item.batch %}
-                            <small class="text-info">
-                                <i class="fas fa-industry"></i> Batch: 
-                                <a href="/batches/{{ task.inventory_item.batch.id }}" class="text-decoration-none">
-                                    {{ task.inventory_item.batch.recipe.name }}
-                                </a>
-                            </small><br>
-                            {% endif %}
-                            
-                            {% if task.status == "not_started" %}
-                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
-                                {% if task.requires_scale_selection %}
-                                <button type="button" class="btn btn-xs btn-primary" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                    Select Scale & Start
-                                </button>
-                                {% else %}
-                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
-                                    <button type="submit" class="btn btn-xs btn-primary">Start</button>
-                                </form>
-                                {% endif %}
-                                {% else %}
-                                <span class="badge bg-secondary">Not Started</span>
-                                {% endif %}
-                            {% elif task.status == "in_progress" %}
-                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
-                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
-                                    <button type="submit" class="btn btn-xs btn-warning">Pause</button>
-                                </form>
-                                {% if task.requires_made_amount %}
-                                <button type="button" class="btn btn-xs btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                    Finish & Enter Amount
-                                </button>
-                                {% else %}
-                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
-                                    <button type="submit" class="btn btn-xs btn-success">Finish</button>
-                                </form>
-                                {% endif %}
-                                {% endif %}
-                                <span class="badge bg-primary">In Progress</span>
-                                <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
-                            {% elif task.status == "paused" %}
-                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
-                                {% if task.requires_made_amount %}
-                                <button type="button" class="btn btn-xs btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                    Finish & Enter Amount
-                                </button>
-                                {% else %}
-                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display:inline;">
-                                    <button type="submit" class="btn btn-xs btn-info">Resume</button>
-                                </form>
-                                {% endif %}
-                                {% endif %}
-                                <span class="badge bg-warning">Paused</span>
-                                <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
-                            {% elif task.status == "completed" %}
-                                <span class="badge bg-success">Completed</span>
-                                <br><small class="text-muted">Time: {{ task.total_time_minutes }} min</small>
-                                {% if task.assigned_to %}
-                                <br><small class="text-success">Cost: ${{ "%.2f"|format(task.labor_cost) }}</small>
-                                {% endif %}
-                                {% if task.selected_scale and task.selected_scale != 'full' %}
-                                <br><small class="text-info">Scale: {{ task.selected_scale.title() }}</small>
-                                {% endif %}
-                                {% if task.made_amount %}
-                                <br><small class="text-warning">Made: {{ task.made_amount }} {{ task.made_unit }}</small>
-                                {% endif %}
-                                
-                                <!-- Enhanced Task Summary Information -->
-                                {% if task.id in task_summaries %}
-                                {% set summary = task_summaries[task.id] %}
-                                <div class="mt-2 p-2 bg-light border rounded">
-                                    <small>
-                                        <strong>Task Summary:</strong><br>
-                                        <strong>Par Level:</strong> {{ "%.1f"|format(summary.par_level) }} {{ summary.par_unit_name }}<br>
-                                        
-                                        {% if summary.par_unit_equals %}
-                                        <strong>Par Unit Equals:</strong> {{ "%.2f"|format(summary.par_unit_equals) }} {{ summary.par_unit_equals_unit }} per {{ summary.par_unit_name }}<br>
-                                        {% elif summary.par_unit_equals_type == 'par_unit_itself' %}
-                                        <strong>Par Unit Equals:</strong> 1 {{ summary.par_unit_name }} = 1 {{ summary.par_unit_name }}<br>
-                                        {% endif %}
-                                        
-                                        <strong>Initial Inventory:</strong> {{ "%.1f"|format(summary.initial_inventory) }} {{ summary.par_unit_name }}
-                                        {% if summary.initial_converted %}
-                                            ({{ "%.2f"|format(summary.initial_converted) }} {{ summary.par_unit_equals_unit }})
-                                        {% endif %}<br>
-                                        <small class="text-muted">(Quantity entered in daily inventory)</small><br>
-                                        
-                                        {% if summary.made_amount %}
-                                        <strong>Made Amount:</strong> {{ summary.made_amount }} {{ summary.made_unit }} = {{ "%.2f"|format(summary.made_par_units) }} {{ summary.par_unit_name }}
-                                        {% if summary.made_converted %}
-                                            ({{ "%.2f"|format(summary.made_converted) }} {{ summary.par_unit_equals_unit }})
-                                        {% elif summary.made_quantity_equivalent %}
-                                            ({{ "%.1f"|format(summary.made_quantity_equivalent) }} {{ summary.made_quantity_unit }})
-                                        {% endif %}<br>
-                                        {% endif %}
-                                        
-                                        <strong>Final Inventory:</strong> {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }}
-                                        {% if summary.final_converted %}
-                                            ({{ "%.2f"|format(summary.final_converted) }} {{ summary.par_unit_equals_unit }})
-                                        {% endif %}
-                                        <br><small class="text-muted">(Initial + Made: {{ "%.1f"|format(summary.initial_inventory) }} + {{ "%.2f"|format(summary.made_amount_par_units) }} = {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }})</small>
-                                    </small>
-                                </div>
-                                {% endif %}
-                                
-                            {% endif %}
-                            
-                            <div class="mt-1">
-                                <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-xs btn-outline-info">
-                                    <i class="fas fa-eye"></i> View
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+                    # How many target units equal one defined measurement unit
+                    target_per_defined = defined_measurement_in_cups / target_measurement_in_cups
+                    
+                    # How many target units per net unit
+                    target_units_per_net_unit = baking_units_per_net_unit * target_per_defined
+                    
+                    return round(self.cost_per_net_unit / target_units_per_net_unit, 4)
+                else:
+                    return 0
+            else:
+                return 0
         
-        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
-        <div class="card mt-3">
-            <div class="card-body text-center">
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
-                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
-                        <i class="fas fa-lock"></i> Finalize Day
-                    </button>
-                </form>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<style>
-.btn-xs {
-    padding: 0.125rem 0.25rem;
-    font-size: 0.75rem;
-    line-height: 1.5;
-    border-radius: 0.2rem;
-}
-</style>
-
-<script>
-// Update selected employees text in dropdown
-function updateSelectedEmployeesText() {
-    const checkboxes = document.querySelectorAll('input[name="assigned_to_ids"]:checked');
-    const selectedText = document.getElementById('selectedEmployeesText');
-    
-    if (checkboxes.length === 0) {
-        selectedText.textContent = 'Select employees...';
-    } else if (checkboxes.length === 1) {
-        const label = document.querySelector(`label[for="${checkboxes[0].id}"]`);
-        selectedText.textContent = label.textContent.trim();
-    } else {
-        selectedText.textContent = `${checkboxes.length} employees selected`;
-    }
-}
-
-// Show regenerate tasks confirmation modal
-function showRegenerateTasksModal() {
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.innerHTML = `
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title text-warning">
-                        <i class="fas fa-exclamation-triangle"></i> Force Regenerate Tasks
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-danger">
-                        <strong>Warning:</strong> This will delete ALL existing tasks (including started and completed ones) and regenerate them based on current inventory levels.
-                    </div>
-                    <p>This action will:</p>
-                    <ul>
-                        <li>Delete all auto-generated tasks</li>
-                        <li>Delete all manual tasks</li>
-                        <li>Lose all task progress and time tracking</li>
-                        <li>Generate new tasks based on current inventory</li>
-                    </ul>
-                    <p><strong>Are you sure you want to continue?</strong></p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="forceRegenerateTasks()">
-                        <i class="fas fa-redo"></i> Force Regenerate
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    const modalInstance = new bootstrap.Modal(modal);
-    modalInstance.show();
-    
-    modal.addEventListener('hidden.bs.modal', function() {
-        document.body.removeChild(modal);
-    });
-}
-
-function forceRegenerateTasks() {
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.action = '/inventory/day/{{ inventory_day.id }}/update';
-    form.style.display = 'none';
-    
-    // Add force regenerate flag
-    const forceInput = document.createElement('input');
-    forceInput.type = 'hidden';
-    forceInput.name = 'force_regenerate';
-    forceInput.value = 'true';
-    form.appendChild(forceInput);
-    
-    // Copy all current form data
-    const originalForm = document.querySelector('form[action="/inventory/day/{{ inventory_day.id }}/update"]');
-    const formData = new FormData(originalForm);
-    
-    for (let [key, value] of formData.entries()) {
-        if (key !== 'force_regenerate') {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = value;
-            form.appendChild(input);
-        }
-    }
-    
-    document.body.appendChild(form);
-    form.submit();
-}
-
-// Scale Selection Modal
-function showScaleSelection(taskId, recipeName) {
-    fetch(`/api/tasks/${taskId}/scale_options`)
-        .then(response => response.json())
-        .then(scales => {
-            const modal = document.createElement('div');
-            modal.className = 'modal fade';
-            modal.innerHTML = `
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Select Batch Scale - ${recipeName}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Select batch scale to make:</label>
-                                <select class="form-select" id="scaleSelect" required>
-                                    <option value="">Choose scale...</option>
-                                    ${scales.map(scale => 
-                                        `<option value="${scale.key}" data-yield="${scale.yield}">${scale.label} - ${scale.yield}</option>`
-                                    ).join('')}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale(${taskId})">Start Task</button>
-                        </div>
-                    </div>
-                </div>
-            `;
+        # Handle standard weight/volume conversions
+        try:
+            if self.usage_type == 'weight':
+                conversion_factor = convert_weight(1, self.net_unit, unit)
+            else:  # volume
+                conversion_factor = convert_volume(1, self.net_unit, unit)
             
-            document.body.appendChild(modal);
-            const modalInstance = new bootstrap.Modal(modal);
-            modalInstance.show();
-            
-            modal.addEventListener('hidden.bs.modal', function() {
-                document.body.removeChild(modal);
-            });
-        })
-        .catch(error => {
-            console.error('Error loading scale options:', error);
-            alert('Error loading scale options');
-        });
-}
+            return round(self.cost_per_net_unit / conversion_factor, 4)
+        except ValueError:
+            return 0
 
-function startTaskWithScale(taskId) {
-    const scaleSelect = document.getElementById('scaleSelect');
-    const selectedScale = scaleSelect.value;
+class Recipe(Base):
+    __tablename__ = "recipes"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    category = relationship("Category")
+    instructions = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
-    if (!selectedScale) {
-        alert('Please select a batch scale');
-        return;
-    }
-    
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
-    form.style.display = 'none';
-    
-    const scaleInput = document.createElement('input');
-    scaleInput.name = 'selected_scale';
-    scaleInput.value = selectedScale;
-    
-    form.appendChild(scaleInput);
-    document.body.appendChild(form);
-    form.submit();
-}
+    # Add relationship to recipe ingredients
+    ingredients = relationship("RecipeIngredient", back_populates="recipe")
 
-// Made Amount Input Modal
-function showMadeAmountInput(taskId, recipeName) {
-    fetch(`/api/tasks/${taskId}/finish_requirements`)
-        .then(response => response.json())
-        .then(data => {
-            console.log('Finish requirements data:', data);
+class RecipeIngredient(Base):
+    __tablename__ = "recipe_ingredients"
+    id = Column(Integer, primary_key=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
+    unit = Column(String, nullable=False)  # Standard unit (lb, oz, cup, etc.)
+    quantity = Column(Float)
+    
+    recipe = relationship("Recipe", back_populates="ingredients")
+    ingredient = relationship("Ingredient")
+    
+    @property
+    def cost(self):
+        """Calculate the cost of this recipe ingredient"""
+        if self.ingredient and self.unit and self.quantity:
+            cost_per_unit = self.ingredient.get_cost_per_unit(self.unit)
+            return round(self.quantity * cost_per_unit, 2)
+        return 0
+
+class Batch(Base):
+    __tablename__ = "batches"
+    id = Column(Integer, primary_key=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    
+    # Variable yield option
+    variable_yield = Column(Boolean, default=False)
+    yield_amount = Column(Float)
+    yield_unit = Column(String)  # Standard unit (lb, oz, gal, etc.)
+    
+    estimated_labor_minutes = Column(Integer)  # Average estimated time
+    hourly_labor_rate = Column(Float, default=16.75)  # Configurable labor rate
+    can_be_scaled = Column(Boolean, default=False)
+    scale_double = Column(Boolean, default=False)
+    scale_half = Column(Boolean, default=False)
+    scale_quarter = Column(Boolean, default=False)
+    scale_eighth = Column(Boolean, default=False)
+    scale_sixteenth = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    recipe = relationship("Recipe")
+    
+    @property
+    def estimated_labor_cost(self):
+        """Calculate estimated labor cost based on average time and hourly rate"""
+        return (self.estimated_labor_minutes / 60) * self.hourly_labor_rate
+    
+    def get_scaled_yield(self, scale_factor):
+        """Get yield amount for a specific scale factor"""
+        if self.variable_yield:
+            return None  # Variable yield batches don't have predetermined amounts
+        return round(self.yield_amount * scale_factor, 2)
+    
+    def get_available_scales(self):
+        """Get available scale options for this batch"""
+        scales = [('full', 1.0, 'Full Batch')]
+        
+        if self.can_be_scaled:
+            if self.scale_double:
+                scales.append(('double', 2.0, 'Double Batch'))
+            if self.scale_half:
+                scales.append(('half', 0.5, 'Half Batch'))
+            if self.scale_quarter:
+                scales.append(('quarter', 0.25, 'Quarter Batch'))
+            if self.scale_eighth:
+                scales.append(('eighth', 0.125, 'Eighth Batch'))
+            if self.scale_sixteenth:
+                scales.append(('sixteenth', 0.0625, 'Sixteenth Batch'))
+        
+        return scales
+    
+    @property
+    def actual_labor_cost(self):
+        """Calculate actual labor cost from most recent completed task"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            # Get most recent completed task for this batch
+            from .models import Task
+            recent_task = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None)
+            ).order_by(Task.finished_at.desc()).first()
             
-            const modal = document.createElement('div');
-            modal.className = 'modal fade';
+            if recent_task:
+                return recent_task.labor_cost
+            return self.estimated_labor_cost  # Fallback to estimated
+        finally:
+            db.close()
+    
+    @property
+    def average_labor_cost_week(self):
+        """Average labor cost from past week's completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        from datetime import datetime, timedelta
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            week_ago = datetime.utcnow() - timedelta(days=7)
             
-            let unitSection = '';
-            let unitInput = '';
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None),
+                Task.finished_at >= week_ago
+            ).all()
             
-            if (data.use_par_unit && data.par_unit_name) {
-                // Use par unit name as fixed unit
-                unitSection = `
-                    <div class="col-4">
-                        <input type="text" class="form-control" value="${data.par_unit_name}" readonly>
-                        <input type="hidden" id="madeUnit" value="${data.par_unit_name}">
-                    </div>
-                `;
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
+    
+    @property
+    def average_labor_cost_month(self):
+        """Average labor cost from past month's completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        from datetime import datetime, timedelta
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            month_ago = datetime.utcnow() - timedelta(days=30)
+            
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None),
+                Task.finished_at >= month_ago
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
+
+    @property
+    def average_labor_cost_all_time(self):
+        """Average labor cost from all completed tasks"""
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import Task
+            tasks = db.query(Task).filter(
+                Task.batch_id == self.id,
+                Task.finished_at.isnot(None)
+            ).all()
+            
+            if tasks:
+                return sum(task.labor_cost for task in tasks) / len(tasks)
+            return self.estimated_labor_cost
+        finally:
+            db.close()
+
+class Dish(Base):
+    __tablename__ = "dishes"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    category = relationship("Category")
+    sale_price = Column(Float, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class DishBatchPortion(Base):
+    __tablename__ = "dish_batch_portions"
+    id = Column(Integer, primary_key=True)
+    dish_id = Column(Integer, ForeignKey("dishes.id"))
+    batch_id = Column(Integer, ForeignKey("batches.id"))
+    portion_size = Column(Float)
+    portion_unit = Column(String)  # Standard unit
+    
+    batch = relationship("Batch")
+    
+    @property
+    def expected_cost(self):
+        """Calculate expected cost using estimated labor"""
+        return self._calculate_cost_with_labor_type('estimated')
+    
+    @property
+    def actual_cost(self):
+        """Calculate actual cost using most recent actual labor"""
+        return self._calculate_cost_with_labor_type('actual')
+    
+    @property
+    def actual_cost_week_avg(self):
+        """Calculate actual cost using week average labor"""
+        return self._calculate_cost_with_labor_type('week_avg')
+    
+    @property
+    def actual_cost_month_avg(self):
+        """Calculate actual cost using month average labor"""
+        return self._calculate_cost_with_labor_type('month_avg')
+    
+    @property
+    def actual_cost_all_time_avg(self):
+        """Calculate actual cost using all-time average labor"""
+        return self._calculate_cost_with_labor_type('all_time_avg')
+    
+    def _calculate_cost_with_labor_type(self, labor_type):
+        """Calculate the cost of this dish batch portion"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
+            return 0
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            from .models import RecipeIngredient
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            
+            # Get labor cost based on type
+            if labor_type == 'estimated':
+                labor_cost = self.batch.estimated_labor_cost
+            elif labor_type == 'actual':
+                labor_cost = self.batch.actual_labor_cost
+            elif labor_type == 'week_avg':
+                labor_cost = self.batch.average_labor_cost_week
+            elif labor_type == 'month_avg':
+                labor_cost = self.batch.average_labor_cost_month
+            elif labor_type == 'all_time_avg':
+                labor_cost = self.batch.average_labor_cost_all_time
+            else:
+                labor_cost = self.batch.estimated_labor_cost
+            
+            total_batch_cost = total_recipe_cost + labor_cost
+            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+            
+            # Handle unit conversion
+            if self.portion_unit == self.batch.yield_unit:
+                return self.portion_size * cost_per_yield_unit
+            else:
+                # Convert between units
+                usage_type = None
+                for ri in recipe_ingredients:
+                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+                    if ingredient and ingredient.usage_type:
+                        usage_type = ingredient.usage_type
+                        break
                 
-                if (data.par_unit_equals_info) {
-                    unitSection += `
-                        <div class="col-12 mt-2">
-                            <small class="text-info">${data.par_unit_equals_info.description}</small>
-                        </div>
-                    `;
-                }
-            } else if (data.available_units && data.available_units.length === 1) {
-                // Single unit available
-                unitSection = `
-                    <div class="col-4" style="display: none;">
-                        <input type="hidden" id="madeUnit" value="${data.available_units[0]}">
-                    </div>
-                `;
-                unitInput = `<small class="text-info">Unit: ${data.available_units[0]}</small>`;
-            } else if (data.available_units && data.available_units.length > 1) {
-                // Multiple units available
-                unitSection = `
-                    <div class="col-4">
-                        <select class="form-select" id="madeUnit" required>
-                            ${data.available_units.map(unit => 
-                                `<option value="${unit}">${unit}</option>`
-                            ).join('')}
-                        </select>
-                    </div>
-                `;
-            }
-            
-            modal.innerHTML = `
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Enter Amount Made - ${recipeName}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Amount Made:</label>
-                                <div class="row">
-                                    <div class="col-8">
-                                        <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
-                                    </div>
-                                    ${unitSection}
-                                </div>
-                                ${unitInput}
-                            </div>
-                            ${data.inventory_info ? `
-                            <div class="alert alert-info">
-                                <small>
-                                    <strong>Current Inventory:</strong> ${data.inventory_info.current} ${data.inventory_info.par_unit_name}<br>
-                                    <strong>Par Level:</strong> ${data.inventory_info.par_level} ${data.inventory_info.par_unit_name}
-                                </small>
-                            </div>
-                            ` : ''}
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount(${taskId})">Finish Task</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            const modalInstance = new bootstrap.Modal(modal);
-            modalInstance.show();
-            
-            modal.addEventListener('hidden.bs.modal', function() {
-                document.body.removeChild(modal);
-            });
-        })
-        .catch(error => {
-            console.error('Error loading finish requirements:', error);
-            alert('Error loading task requirements');
-        });
-}
+                try:
+                    if usage_type == 'weight' and self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif usage_type == 'volume' and self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                    else:
+                        converted_portion = self.portion_size
+                    
+                    return converted_portion * cost_per_yield_unit
+                except ValueError:
+                    return self.portion_size * cost_per_yield_unit
+        finally:
+            db.close()
+    
+    # Keep the old cost property for backward compatibility
+    @property
+    def cost(self):
+        """Backward compatibility - returns actual cost"""
+        return self.actual_cost
+    
 
-function finishTaskWithAmount(taskId) {
-    const madeAmount = document.getElementById('madeAmount').value;
-    const madeUnitInput = document.getElementById('madeUnit');
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Link to batch
     
-    const madeUnit = madeUnitInput.value;
+    # New par unit system
+    par_unit_name_id = Column(Integer, ForeignKey("par_unit_names.id"), nullable=True)
+    par_unit_equals_type = Column(String)  # 'auto', 'par_unit_itself', 'custom'
+    par_unit_equals_amount = Column(Float)  # For custom type
+    par_unit_equals_unit = Column(String)  # For custom type
     
-    if (!madeAmount || !madeUnit) {
-        alert('Please enter amount made and select unit');
-        return;
-    }
+    category = relationship("Category")
+    batch = relationship("Batch")
+    par_unit_name = relationship("ParUnitName")
+    par_level = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
-    form.style.display = 'none';
+    @property
+    def par_unit_equals_calculated(self):
+        """Calculate par unit equals based on type and batch"""
+        if not self.batch:
+            return None
+        
+        if self.par_unit_equals_type == 'auto' and not self.batch.variable_yield:
+            # Auto: batch yield divided by par level
+            if self.par_level > 0:
+                return round(self.batch.yield_amount / self.par_level, 2)
+        elif self.par_unit_equals_type == 'par_unit_itself':
+            # Par unit itself is the amount
+            return 1.0
+        elif self.par_unit_equals_type == 'custom':
+            # Custom amount entered by user
+            return self.par_unit_equals_amount
+        
+        return None
     
-    const amountInput = document.createElement('input');
-    amountInput.name = 'made_amount';
-    amountInput.value = madeAmount;
+    def convert_to_par_units(self, amount, unit):
+        """Convert an amount in given unit to par units"""
+        par_unit_equals = self.par_unit_equals_calculated
+        if not par_unit_equals:
+            return amount  # Can't convert, return as-is
+        
+        if self.par_unit_equals_type == 'par_unit_itself':
+            # Direct conversion - amount is already in par units
+            return amount
+        elif self.par_unit_equals_type == 'custom':
+            # Convert using custom conversion
+            if unit == self.par_unit_equals_unit:
+                return round(amount / par_unit_equals, 2)
+            else:
+                # Need to convert units first
+                try:
+                    if unit in WEIGHT_CONVERSIONS and self.par_unit_equals_unit in WEIGHT_CONVERSIONS:
+                        converted_amount = convert_weight(amount, unit, self.par_unit_equals_unit)
+                    elif unit in VOLUME_CONVERSIONS and self.par_unit_equals_unit in VOLUME_CONVERSIONS:
+                        converted_amount = convert_volume(amount, unit, self.par_unit_equals_unit)
+                    else:
+                        converted_amount = amount  # Can't convert
+                    
+                    return round(converted_amount / par_unit_equals, 2)
+                except ValueError:
+                    return amount
+        elif self.par_unit_equals_type == 'auto' and self.batch:
+            # Convert using batch yield unit
+            if unit == self.batch.yield_unit:
+                return round(amount / par_unit_equals, 2)
+            else:
+                try:
+                    if unit in WEIGHT_CONVERSIONS and self.batch.yield_unit in WEIGHT_CONVERSIONS:
+                        converted_amount = convert_weight(amount, unit, self.batch.yield_unit)
+                    elif unit in VOLUME_CONVERSIONS and self.batch.yield_unit in VOLUME_CONVERSIONS:
+                        converted_amount = convert_volume(amount, unit, self.batch.yield_unit)
+                    else:
+                        converted_amount = amount
+                    
+                    return round(converted_amount / par_unit_equals, 2)
+                except ValueError:
+                    return amount
+        
+        return amount
+
+class InventoryDay(Base):
+    __tablename__ = "inventory_days"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, default=date.today)
+    finalized = Column(Boolean, default=False)
+    employees_working = Column(String)
+    global_notes = Column(Text)  # Global notes for the day
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class InventoryDayItem(Base):
+    __tablename__ = "inventory_day_items"
+    id = Column(Integer, primary_key=True)
+    day_id = Column(Integer, ForeignKey("inventory_days.id"))
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"))
+    quantity = Column(Float, default=0)
+    override_create_task = Column(Boolean, default=False)  # Override to create task for above par items
+    override_no_task = Column(Boolean, default=False)  # Override to NOT create task for below par items
     
-    const unitInput = document.createElement('input');
-    unitInput.name = 'made_unit';
-    unitInput.value = madeUnit;
+    inventory_item = relationship("InventoryItem")
+    day = relationship("InventoryDay")
+
+class Task(Base):
+    __tablename__ = "tasks"
+    id = Column(Integer, primary_key=True)
+    day_id = Column(Integer, ForeignKey("inventory_days.id"))
+    assigned_to_id = Column(Integer, ForeignKey("users.id"))
+    assigned_employee_ids = Column(String)  # Comma-separated list of employee IDs
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Inherited from inventory item
+    description = Column(String)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    paused_at = Column(DateTime, nullable=True)
+    total_pause_time = Column(Integer, default=0)  # in seconds
+    notes = Column(Text)
+    auto_generated = Column(Boolean, default=False)  # True if generated from below-par items
+    is_paused = Column(Boolean, default=False)
     
-    form.appendChild(amountInput);
-    form.appendChild(unitInput);
-    document.body.appendChild(form);
-    form.submit();
-}
-</script>
-{% endblock %}
+    # New fields for variable yield and scaling
+    selected_scale = Column(String)  # 'full', 'half', 'double', etc.
+    scale_factor = Column(Float, default=1.0)  # Numeric scale factor
+    made_amount = Column(Float)  # Amount made (for variable yield)
+    made_unit = Column(String)  # Unit for made amount
+    assigned_to = relationship("User")
+    day = relationship("InventoryDay")
+    inventory_item = relationship("InventoryItem")
+    batch = relationship("Batch")
+    
+    @property
+    def assigned_employees(self):
+        """Get list of assigned employee objects"""
+        if not self.assigned_employee_ids:
+            return [self.assigned_to] if self.assigned_to else []
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            employee_ids = [int(id_str) for id_str in self.assigned_employee_ids.split(',') if id_str.strip()]
+            employees = db.query(User).filter(User.id.in_(employee_ids)).all()
+            return employees
+        except (ValueError, AttributeError):
+            return [self.assigned_to] if self.assigned_to else []
+        finally:
+            db.close()
+    
+    @property
+    def highest_hourly_wage(self):
+        """Get the highest hourly wage among assigned employees"""
+        employees = self.assigned_employees
+        if not employees:
+            return 0
+        return max(emp.hourly_wage for emp in employees)
+    
+    @property
+    def total_time_minutes(self):
+        if not self.started_at or not self.finished_at:
+            if self.started_at and not self.finished_at:
+                # Task is in progress
+                current_time = datetime.utcnow()
+                if self.is_paused and self.paused_at:
+                    total_seconds = (self.paused_at - self.started_at).total_seconds()
+                else:
+                    total_seconds = (current_time - self.started_at).total_seconds()
+                return int(total_seconds / 60) - int(self.total_pause_time / 60)
+            return 0
+        total_seconds = (self.finished_at - self.started_at).total_seconds()
+        return int(total_seconds / 60) - int(self.total_pause_time / 60)
+    
+    @property
+    def labor_cost(self):
+        """Calculate labor cost for this task"""
+        if self.assigned_to and self.total_time_minutes > 0:
+            return (self.total_time_minutes / 60) * self.assigned_to.hourly_wage
+        return 0
+    
+    @property
+    def status(self):
+        if not self.started_at:
+            return "not_started"
+        elif self.finished_at:
+            return "completed"
+        elif self.is_paused:
+            return "paused"
+        else:
+            return "in_progress"
+    
+    @property
+    def requires_scale_selection(self):
+        """Check if task requires scale selection before starting"""
+        return (self.batch and self.batch.can_be_scaled and 
+                not self.selected_scale and self.status == "not_started")
+    
+    @property
+    def requires_made_amount(self):
+        """Check if task requires made amount input before completion"""
+        return (self.batch and self.batch.variable_yield and 
+                not self.made_amount and self.status in ["in_progress", "paused"])
+    
+    def get_actual_yield(self):
+        """Get the actual yield for this task"""
+        if self.batch:
+            if self.batch.variable_yield and self.made_amount:
+                return self.made_amount, self.made_unit
+            elif not self.batch.variable_yield and self.scale_factor:
+                scaled_yield = self.batch.get_scaled_yield(self.scale_factor)
+                return scaled_yield, self.batch.yield_unit
+        return None, None
+
+class UtilityCost(Base):
+    __tablename__ = "utility_costs"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    monthly_cost = Column(Float, nullable=False)
+    last_updated = Column(DateTime, default=datetime.utcnow)

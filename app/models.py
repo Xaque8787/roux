@@ -674,6 +674,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True)
     day_id = Column(Integer, ForeignKey("inventory_days.id"))
     assigned_to_id = Column(Integer, ForeignKey("users.id"))
+    assigned_employee_ids = Column(String)  # Comma-separated list of employee IDs
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
     batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Inherited from inventory item
     description = Column(String)
@@ -696,6 +697,34 @@ class Task(Base):
     batch = relationship("Batch")
     
     @property
+    def assigned_employees(self):
+        """Get list of assigned employee objects"""
+        if not self.assigned_employee_ids:
+            return [self.assigned_to] if self.assigned_to else []
+        
+        from sqlalchemy.orm import sessionmaker
+        from .database import engine
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            employee_ids = [int(id_str) for id_str in self.assigned_employee_ids.split(',') if id_str.strip()]
+            employees = db.query(User).filter(User.id.in_(employee_ids)).all()
+            return employees
+        except (ValueError, AttributeError):
+            return [self.assigned_to] if self.assigned_to else []
+        finally:
+            db.close()
+    
+    @property
+    def highest_hourly_wage(self):
+        """Get the highest hourly wage among assigned employees"""
+        employees = self.assigned_employees
+        if not employees:
+            return 0
+        return max(emp.hourly_wage for emp in employees)
+    
+    @property
     def total_time_minutes(self):
         if not self.started_at or not self.finished_at:
             if self.started_at and not self.finished_at:
@@ -713,8 +742,10 @@ class Task(Base):
     @property
     def labor_cost(self):
         """Calculate labor cost for this task"""
-        if self.assigned_to and self.total_time_minutes > 0:
-            return (self.total_time_minutes / 60) * self.assigned_to.hourly_wage
+        if self.total_time_minutes > 0:
+            wage = self.highest_hourly_wage
+            if wage > 0:
+                return (self.total_time_minutes / 60) * wage
         return 0
     
     @property
