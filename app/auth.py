@@ -38,12 +38,11 @@ def verify_jwt(token: str):
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        raise HTTPException(status_code=401, detail="Invalid token")
         return payload
     except JWTError as e:
         # Handle expired tokens specifically
         if "expired" in str(e).lower():
-        raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Session expired")
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
