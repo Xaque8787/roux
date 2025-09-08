@@ -122,6 +122,7 @@ async def update_inventory_day(
     day_id: int,
     request: Request,
     global_notes: str = Form(""),
+    force_regenerate: bool = Form(False),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
@@ -153,7 +154,7 @@ async def update_inventory_day(
         day_item.override_no_task = override_no_task_key in form_data
     
     # Generate tasks based on inventory levels
-    generate_tasks_for_day(db, inventory_day, inventory_day_items)
+    generate_tasks_for_day(db, inventory_day, inventory_day_items, force_regenerate)
     
     db.commit()
     
@@ -478,18 +479,34 @@ async def inventory_report(
         "completed_tasks": completed_tasks,
         "below_par_items": below_par_items
     })
-def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items):
+def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items, force_regenerate: bool = False):
     """Generate tasks for items that are below par level"""
     
-    # Delete existing auto-generated tasks for this day
-    db.query(Task).filter(
-        Task.day_id == inventory_day.id,
-        Task.auto_generated == True
-    ).delete()
+    if force_regenerate:
+        # Force regenerate: delete ALL tasks for this day
+        db.query(Task).filter(Task.day_id == inventory_day.id).delete()
+    else:
+        # Normal operation: only delete auto-generated tasks that haven't been started
+        db.query(Task).filter(
+            Task.day_id == inventory_day.id,
+            Task.auto_generated == True,
+            Task.started_at.is_(None)  # Only delete tasks that haven't been started
+        ).delete()
     
     for day_item in inventory_day_items:
         item = day_item.inventory_item
         is_below_par = day_item.quantity <= item.par_level
+        
+        # Check if task already exists for this item (unless force regenerating)
+        if not force_regenerate:
+            existing_task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.inventory_item_id == item.id
+            ).first()
+            
+            # Skip if task already exists and has been started
+            if existing_task and existing_task.started_at:
+                continue
         
         # Create task if:
         # 1. Item is below par and not overridden to skip
@@ -512,6 +529,8 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
                 batch_id=item.batch_id if item.batch else None,
                 description=description,
                 auto_generated=True
+            )
+            db.add(task)
             )
             db.add(task)
 @router.get("/day/{day_id}", response_class=HTMLResponse)

@@ -88,6 +88,9 @@
                     <button type="submit" class="btn btn-success">
                         <i class="fas fa-save"></i> Save Inventory & Generate Tasks
                     </button>
+                    <button type="button" class="btn btn-warning ms-2" onclick="showRegenerateTasksModal()">
+                        <i class="fas fa-redo"></i> Force Regenerate All Tasks
+                    </button>
                 </form>
                 {% else %}
                 <div class="mb-3">
@@ -136,18 +139,25 @@
                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new" class="mb-3">
                     <div class="mb-2">
                         <label class="form-label">Assign to Employees:</label>
-                        <div class="border p-2" style="max-height: 120px; overflow-y: auto;">
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span id="selectedEmployeesText">Select employees...</span>
+                            </button>
+                            <ul class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;">
                             {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
                             {% for emp in employees %}
                             {% if emp.id|string in working_employee_ids %}
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp_{{ emp.id }}">
-                                <label class="form-check-label" for="emp_{{ emp.id }}">
-                                    {{ emp.full_name or emp.username }}
-                                </label>
-                            </div>
+                                <li>
+                                    <div class="form-check dropdown-item-text">
+                                        <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp_{{ emp.id }}" onchange="updateSelectedEmployeesText()">
+                                        <label class="form-check-label" for="emp_{{ emp.id }}">
+                                            {{ emp.full_name or emp.username }}
+                                        </label>
+                                    </div>
+                                </li>
                             {% endif %}
                             {% endfor %}
+                            </ul>
                         </div>
                         <small class="text-muted">Select one or more employees, or leave blank for unassigned task</small>
                     </div>
@@ -361,6 +371,97 @@
 </style>
 
 <script>
+// Update selected employees text in dropdown
+function updateSelectedEmployeesText() {
+    const checkboxes = document.querySelectorAll('input[name="assigned_to_ids"]:checked');
+    const selectedText = document.getElementById('selectedEmployeesText');
+    
+    if (checkboxes.length === 0) {
+        selectedText.textContent = 'Select employees...';
+    } else if (checkboxes.length === 1) {
+        const label = document.querySelector(`label[for="${checkboxes[0].id}"]`);
+        selectedText.textContent = label.textContent.trim();
+    } else {
+        selectedText.textContent = `${checkboxes.length} employees selected`;
+    }
+}
+
+// Show regenerate tasks confirmation modal
+function showRegenerateTasksModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Force Regenerate Tasks
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <strong>Warning:</strong> This will delete ALL existing tasks (including started and completed ones) and regenerate them based on current inventory levels.
+                    </div>
+                    <p>This action will:</p>
+                    <ul>
+                        <li>Delete all auto-generated tasks</li>
+                        <li>Delete all manual tasks</li>
+                        <li>Lose all task progress and time tracking</li>
+                        <li>Generate new tasks based on current inventory</li>
+                    </ul>
+                    <p><strong>Are you sure you want to continue?</strong></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="forceRegenerateTasks()">
+                        <i class="fas fa-redo"></i> Force Regenerate
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+    
+    modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+    });
+}
+
+function forceRegenerateTasks() {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = '/inventory/day/{{ inventory_day.id }}/update';
+    form.style.display = 'none';
+    
+    // Add force regenerate flag
+    const forceInput = document.createElement('input');
+    forceInput.type = 'hidden';
+    forceInput.name = 'force_regenerate';
+    forceInput.value = 'true';
+    form.appendChild(forceInput);
+    
+    // Copy all current form data
+    const originalForm = document.querySelector('form[action="/inventory/day/{{ inventory_day.id }}/update"]');
+    const formData = new FormData(originalForm);
+    
+    for (let [key, value] of formData.entries()) {
+        if (key !== 'force_regenerate') {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
 // Scale Selection Modal
 function showScaleSelection(taskId, recipeName) {
     fetch(`/api/tasks/${taskId}/scale_options`)
