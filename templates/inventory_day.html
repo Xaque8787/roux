@@ -535,7 +535,6 @@ class DishBatchPortion(Base):
                 usage_type = None
                 for ri in recipe_ingredients:
                     ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
-                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
                     if ingredient and ingredient.usage_type:
                         usage_type = ingredient.usage_type
                         break

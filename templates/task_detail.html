@@ -125,7 +125,7 @@
                         {% if task.finished_at and task.assigned_to %}
                         <p><strong>Labor Cost:</strong> 
                             <span class="text-success">${{ "%.2f"|format(task.labor_cost) }}</span>
-                            <br><small class="text-muted">{{ task.total_time_minutes }} min × ${{ "%.2f"|format(task.assigned_to.hourly_wage) }}/hr</small>
+                            <br><small class="text-muted">{{ task.total_time_minutes }} min × ${{ "%.2f"|format(task.highest_hourly_wage) }}/hr (highest wage)</small>
                         </p>
                         {% endif %}
                     </div>
