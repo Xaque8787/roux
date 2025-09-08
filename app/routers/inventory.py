@@ -189,7 +189,9 @@ async def create_manual_task(
     if inventory_item_id:
         inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
         if inventory_item and inventory_item.batch_id:
+            task.batch_id = inventory_item.batch_id
     
+    db.add(task)
     db.commit()
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
