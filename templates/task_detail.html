@@ -181,6 +181,7 @@
                         {% if task.labor_cost > task.batch.estimated_labor_cost %}+{% endif %}${{ "%.2f"|format(task.labor_cost - task.batch.estimated_labor_cost) }}
                     </span>
                 </p>
+                {% endif %}
                 {% elif task.janitorial_task %}
                 <h6><i class="fas fa-broom"></i> Janitorial Task</h6>
                 <p><strong>Description:</strong> {{ task.janitorial_task.description }}</p>
@@ -197,9 +198,14 @@
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
                 <p><small class="text-muted">Pure labor cost - no food cost for janitorial tasks</small></p>
                 {% endif %}
-                {% endif %}
                 {% else %}
-                <p class="text-muted">Manual task - no batch or janitorial task linked</p>
+                <h6><i class="fas fa-hand-paper"></i> Manual Task</h6>
+                <p><strong>Description:</strong> {{ task.description }}</p>
+                <p><strong>Task Type:</strong> <span class="badge bg-secondary">Manual</span></p>
+                <p><small class="text-muted">Manually created task - no batch or janitorial template linked</small></p>
+                {% if task.finished_at and task.assigned_to %}
+                <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
+                {% endif %}
                 {% endif %}
             </div>
         </div>

@@ -111,6 +111,8 @@
                                     <br><small class="text-warning"><i class="fas fa-broom"></i> Janitorial</small>
                                     {% elif task.batch %}
                                     <br><small class="text-info"><i class="fas fa-industry"></i> Batch</small>
+                                    {% else %}
+                                    <br><small class="text-secondary"><i class="fas fa-hand-paper"></i> Manual</small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -146,6 +148,9 @@
                                         {% endif %}
                                     {% else %}
                                         <span class="badge bg-secondary">Manual</span>
+                                        {% if task.janitorial_task %}
+                                        <span class="badge bg-warning ms-1">Janitorial</span>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 <td>

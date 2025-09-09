@@ -226,6 +226,10 @@
                                     <br><small class="text-warning">
                                         <i class="fas fa-broom"></i> Janitorial Task
                                     </small>
+                                    {% else %}
+                                    <br><small class="text-secondary">
+                                        <i class="fas fa-hand-paper"></i> Manual Task
+                                    </small>
                                     {% endif %}
                                     {% if task.made_amount %}
                                     <br><small class="text-success">
