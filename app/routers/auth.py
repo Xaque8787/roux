@@ -66,6 +66,7 @@ async def create_admin_user(
         create_default_vendor_units(db)
         create_default_vendors(db)
         create_default_par_unit_names(db)
+        create_default_janitorial_tasks(db)
     except Exception as e:
         # If default data creation fails, log it but don't prevent setup completion
         print(f"Warning: Could not create some default data: {e}")
