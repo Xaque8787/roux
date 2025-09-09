@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay, 
-                     InventoryDayItem, Task, User)
+                     InventoryDayItem, Task, User, JanitorialTask, JanitorialTaskDay)
 from ..utils.helpers import get_today_date
 from datetime import datetime
 
@@ -20,6 +20,7 @@ async def inventory_page(request: Request, db: Session = Depends(get_db), curren
     batches = db.query(Batch).all()
     par_unit_names = db.query(ParUnitName).all()
     employees = db.query(User).filter(User.is_active == True).all()
+    janitorial_tasks = db.query(JanitorialTask).all()
     
     # Get current day (today's inventory day if exists)
     today = date.today()
@@ -41,6 +42,7 @@ async def inventory_page(request: Request, db: Session = Depends(get_db), curren
         "par_unit_names": par_unit_names,
         "employees": employees,
         "current_day": current_day,
+        "janitorial_tasks": janitorial_tasks,
         "finalized_days": finalized_days,
         "today_date": get_today_date()
     })
@@ -71,6 +73,45 @@ async def create_inventory_item(
     )
     
     db.add(inventory_item)
+    db.commit()
+    
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@router.post("/new_janitorial_task")
+async def create_janitorial_task(
+    request: Request,
+    description: str = Form(...),
+    task_type: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    janitorial_task = JanitorialTask(
+        description=description,
+        task_type=task_type
+    )
+    
+    db.add(janitorial_task)
+    db.commit()
+    
+    return RedirectResponse(url="/inventory", status_code=302)
+
+@router.get("/janitorial_tasks/{task_id}/delete")
+async def delete_janitorial_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_admin)
+):
+    janitorial_task = db.query(JanitorialTask).filter(JanitorialTask.id == task_id).first()
+    if not janitorial_task:
+        raise HTTPException(status_code=404, detail="Janitorial task not found")
+    
+    # Delete associated day tasks first
+    db.query(JanitorialTaskDay).filter(JanitorialTaskDay.janitorial_task_id == task_id).delete()
+    
+    # Delete any tasks linked to this janitorial task
+    db.query(Task).filter(Task.janitorial_task_id == task_id).delete()
+    
+    db.delete(janitorial_task)
     db.commit()
     
     return RedirectResponse(url="/inventory", status_code=302)
@@ -113,6 +154,16 @@ async def create_inventory_day(
         )
         db.add(day_item)
     
+    # Create janitorial task day items for all janitorial tasks
+    janitorial_tasks = db.query(JanitorialTask).all()
+    for janitorial_task in janitorial_tasks:
+        janitorial_day_item = JanitorialTaskDay(
+            day_id=inventory_day.id,
+            janitorial_task_id=janitorial_task.id,
+            include_task=(janitorial_task.task_type == 'daily')  # Auto-include daily tasks
+        )
+        db.add(janitorial_day_item)
+    
     db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
@@ -141,6 +192,7 @@ async def update_inventory_day(
     
     # Process inventory item quantities
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
     
     for day_item in inventory_day_items:
         item_key = f"item_{day_item.inventory_item_id}"
@@ -153,8 +205,14 @@ async def update_inventory_day(
         day_item.override_create_task = override_create_key in form_data
         day_item.override_no_task = override_no_task_key in form_data
     
+    # Process janitorial task inclusion
+    for janitorial_day_item in janitorial_day_items:
+        if janitorial_day_item.janitorial_task.task_type == 'manual':
+            janitorial_key = f"janitorial_{janitorial_day_item.janitorial_task_id}"
+            janitorial_day_item.include_task = janitorial_key in form_data
+    
     # Generate tasks based on inventory levels
-    generate_tasks_for_day(db, inventory_day, inventory_day_items, force_regenerate)
+    generate_tasks_for_day(db, inventory_day, inventory_day_items, janitorial_day_items, force_regenerate)
     
     db.commit()
     
@@ -500,7 +558,7 @@ async def inventory_report(
         "completed_tasks": completed_tasks,
         "below_par_items": below_par_items
     })
-def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items, force_regenerate: bool = False):
+def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items, janitorial_day_items, force_regenerate: bool = False):
     """Generate tasks for items that are below par level"""
     
     if force_regenerate:
@@ -552,6 +610,39 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
                 auto_generated=True
             )
             db.add(task)
+    
+    # Generate janitorial tasks
+    for janitorial_day_item in janitorial_day_items:
+        janitorial_task = janitorial_day_item.janitorial_task
+        
+        # Check if task already exists for this janitorial task (unless force regenerating)
+        if not force_regenerate:
+            existing_task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.janitorial_task_id == janitorial_task.id
+            ).first()
+            
+            # Skip if task already exists and has been started
+            if existing_task and existing_task.started_at:
+                continue
+        
+        # Create task if:
+        # 1. Daily task (always included)
+        # 2. Manual task that is checked to be included
+        should_create_task = (
+            janitorial_task.task_type == 'daily' or
+            (janitorial_task.task_type == 'manual' and janitorial_day_item.include_task)
+        )
+        
+        if should_create_task:
+            task = Task(
+                day_id=inventory_day.id,
+                janitorial_task_id=janitorial_task.id,
+                description=janitorial_task.description,
+                auto_generated=(janitorial_task.task_type == 'daily')
+            )
+            db.add(task)
+
 @router.get("/day/{day_id}", response_class=HTMLResponse)
 async def inventory_day_detail(day_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
@@ -559,6 +650,7 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
     tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
     employees = db.query(User).filter(User.is_active == True).all()
     
@@ -575,6 +667,7 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
         "current_user": current_user,
         "inventory_day": inventory_day,
         "inventory_day_items": inventory_day_items,
+        "janitorial_day_items": janitorial_day_items,
         "tasks": tasks,
         "employees": employees,
         "task_summaries": task_summaries

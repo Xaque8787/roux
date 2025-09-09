@@ -56,6 +56,9 @@
                             {% else %}
                                 <span class="badge bg-secondary">Manual</span>
                             {% endif %}
+                            {% if task.janitorial_task %}
+                                <span class="badge bg-warning ms-1">Janitorial</span>
+                            {% endif %}
                         </p>
                         <p><strong>Status:</strong> 
                             {% if task.status == "not_started" %}
@@ -159,11 +162,12 @@
         
         <div class="card mt-3">
             <div class="card-header">
-                <h5><i class="fas fa-industry"></i> Assigned Batch</h5>
+                <h5><i class="fas fa-industry"></i> Task Details</h5>
             </div>
             <div class="card-body">
                 {% if task.batch %}
-                <p><strong>Batch:</strong> 
+                <h6><i class="fas fa-industry"></i> Linked Batch</h6>
+                <p><strong>Recipe:</strong> 
                     <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">
                         {{ task.batch.recipe.name }}
                     </a>
@@ -177,9 +181,25 @@
                         {% if task.labor_cost > task.batch.estimated_labor_cost %}+{% endif %}${{ "%.2f"|format(task.labor_cost - task.batch.estimated_labor_cost) }}
                     </span>
                 </p>
+                {% elif task.janitorial_task %}
+                <h6><i class="fas fa-broom"></i> Janitorial Task</h6>
+                <p><strong>Description:</strong> {{ task.janitorial_task.description }}</p>
+                <p><strong>Task Type:</strong> 
+                    {% if task.janitorial_task.task_type == 'daily' %}
+                        <span class="badge bg-primary">Daily Task</span>
+                        <br><small class="text-muted">Automatically included in every inventory day</small>
+                    {% else %}
+                        <span class="badge bg-secondary">Manual Task</span>
+                        <br><small class="text-muted">Added manually to specific days</small>
+                    {% endif %}
+                </p>
+                {% if task.finished_at and task.assigned_to %}
+                <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
+                <p><small class="text-muted">Pure labor cost - no food cost for janitorial tasks</small></p>
+                {% endif %}
                 {% endif %}
                 {% else %}
-                <p class="text-muted">No batch assigned to this task</p>
+                <p class="text-muted">Manual task - no batch or janitorial task linked</p>
                 {% endif %}
             </div>
         </div>

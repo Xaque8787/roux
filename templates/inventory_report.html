@@ -107,6 +107,11 @@
                             <tr>
                                 <td>
                                     <small>{{ task.description }}</small>
+                                    {% if task.janitorial_task %}
+                                    <br><small class="text-warning"><i class="fas fa-broom"></i> Janitorial</small>
+                                    {% elif task.batch %}
+                                    <br><small class="text-info"><i class="fas fa-industry"></i> Batch</small>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if task.assigned_to %}
@@ -136,6 +141,9 @@
                                 <td>
                                     {% if task.auto_generated %}
                                         <span class="badge bg-info">Auto</span>
+                                        {% if task.janitorial_task %}
+                                        <span class="badge bg-warning ms-1">Janitorial</span>
+                                        {% endif %}
                                     {% else %}
                                         <span class="badge bg-secondary">Manual</span>
                                     {% endif %}
@@ -254,6 +262,8 @@
                                 <td>
                                     {% if task.batch %}
                                         <small><a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a></small>
+                                    {% elif task.janitorial_task %}
+                                        <small class="text-warning">Janitorial Task</small>
                                     {% else %}
                                         <small class="text-muted">None</small>
                                     {% endif %}
