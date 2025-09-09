@@ -146,7 +146,12 @@
                         <tbody>
                             {% for janitorial_day_item in janitorial_day_items %}
                             <tr>
-                                <td>{{ janitorial_day_item.janitorial_task.description }}</td>
+                                <td>
+                                    <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
+                                    {% if janitorial_day_item.janitorial_task.instructions %}
+                                    <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:30] }}{% if janitorial_day_item.janitorial_task.instructions|length > 30 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
                                         <span class="badge bg-primary">Daily</span>
@@ -324,7 +329,6 @@
                                         <small>{{ task.total_time_minutes }} min</small>
                                         {% if task.finished_at and task.assigned_employees|length > 0 %}
                                         <br><small class="text-success">${{ "%.2f"|format(task.labor_cost) }}</small>
-                                        <br><small class="text-muted">@${{ "%.2f"|format(task.highest_hourly_wage) }}/hr</small>
                                         {% endif %}
                                     {% else %}
                                         <small class="text-muted">-</small>

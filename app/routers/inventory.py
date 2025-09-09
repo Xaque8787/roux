@@ -80,13 +80,15 @@ async def create_inventory_item(
 @router.post("/new_janitorial_task")
 async def create_janitorial_task(
     request: Request,
-    description: str = Form(...),
+    title: str = Form(...),
+    instructions: str = Form(""),
     task_type: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
     janitorial_task = JanitorialTask(
-        description=description,
+        title=title,
+        instructions=instructions if instructions else None,
         task_type=task_type
     )
     
@@ -638,7 +640,7 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
             task = Task(
                 day_id=inventory_day.id,
                 janitorial_task_id=janitorial_task.id,
-                description=janitorial_task.description,
+                description=janitorial_task.title,
                 auto_generated=(janitorial_task.task_type == 'daily')
             )
             db.add(task)

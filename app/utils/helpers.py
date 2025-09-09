@@ -1,6 +1,6 @@
 from datetime import date
 from sqlalchemy.orm import Session
-from ..models import Category, VendorUnit, Vendor, ParUnitName
+from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
 
 def create_default_categories(db: Session):
     """Create default categories if they don't exist"""

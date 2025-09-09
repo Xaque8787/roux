@@ -286,9 +286,15 @@
             <div class="card-body">
                 <form method="post" action="/inventory/new_janitorial_task">
                     <div class="mb-3">
-                        <label for="janitorial_description" class="form-label">Task Description</label>
-                        <input type="text" class="form-control" id="janitorial_description" name="description" 
+                        <label for="janitorial_title" class="form-label">Task Title</label>
+                        <input type="text" class="form-control" id="janitorial_title" name="title" 
                                placeholder="e.g. Clean kitchen floors, Empty trash bins" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="janitorial_instructions" class="form-label">Instructions (Optional)</label>
+                        <textarea class="form-control" id="janitorial_instructions" name="instructions" rows="3" 
+                                  placeholder="Detailed instructions for completing this task..."></textarea>
                     </div>
                     
                     <div class="mb-3">
@@ -330,7 +336,7 @@
                     <table class="table table-striped table-sm">
                         <thead>
                             <tr>
-                                <th>Description</th>
+                                <th>Title</th>
                                 <th>Type</th>
                                 <th>Actions</th>
                             </tr>
@@ -338,7 +344,12 @@
                         <tbody>
                             {% for janitorial_task in janitorial_tasks %}
                             <tr>
-                                <td>{{ janitorial_task.description }}</td>
+                                <td>
+                                    <strong>{{ janitorial_task.title }}</strong>
+                                    {% if janitorial_task.instructions %}
+                                    <br><small class="text-muted">{{ janitorial_task.instructions[:50] }}{% if janitorial_task.instructions|length > 50 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if janitorial_task.task_type == 'daily' %}
                                         <span class="badge bg-primary">Daily</span>

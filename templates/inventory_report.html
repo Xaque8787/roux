@@ -107,10 +107,10 @@
                             <tr>
                                 <td>
                                     <small>{{ task.description }}</small>
-                                    {% if task.janitorial_task %}
-                                    <br><small class="text-warning"><i class="fas fa-broom"></i> Janitorial</small>
-                                    {% elif task.batch %}
+                                    {% if task.batch %}
                                     <br><small class="text-info"><i class="fas fa-industry"></i> Batch</small>
+                                    {% elif task.janitorial_task %}
+                                    <br><small class="text-warning"><i class="fas fa-broom"></i> Janitorial</small>
                                     {% else %}
                                     <br><small class="text-secondary"><i class="fas fa-hand-paper"></i> Manual</small>
                                     {% endif %}

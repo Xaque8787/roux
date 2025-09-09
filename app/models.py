@@ -6,7 +6,8 @@ from .database import Base
 class JanitorialTask(Base):
     __tablename__ = "janitorial_tasks"
     id = Column(Integer, primary_key=True)
-    description = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    instructions = Column(Text)
     task_type = Column(String, nullable=False)  # 'daily' or 'manual'
     created_at = Column(DateTime, default=datetime.utcnow)
 

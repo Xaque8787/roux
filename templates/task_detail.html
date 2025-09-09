@@ -149,7 +149,7 @@
                         {% if task.finished_at and task.assigned_to %}
                         <p><strong>Labor Cost:</strong> 
                             <span class="text-success">${{ "%.2f"|format(task.labor_cost) }}</span>
-                            <br><small class="text-muted">{{ task.total_time_minutes }} min × ${{ "%.2f"|format(task.highest_hourly_wage) }}/hr</small>
+                            <br><small class="text-muted">{{ task.total_time_minutes }} minutes of labor</small>
                             {% if task.assigned_employee_ids and task.assigned_employee_ids.split(',')|length > 1 %}
                             <br><small class="text-info">(Highest wage among team members)</small>
                             {% endif %}
@@ -184,7 +184,13 @@
                 {% endif %}
                 {% elif task.janitorial_task %}
                 <h6><i class="fas fa-broom"></i> Janitorial Task</h6>
-                <p><strong>Description:</strong> {{ task.janitorial_task.description }}</p>
+                <p><strong>Title:</strong> {{ task.janitorial_task.title }}</p>
+                {% if task.janitorial_task.instructions %}
+                <p><strong>Instructions:</strong></p>
+                <div class="border p-2 bg-light">
+                    {{ task.janitorial_task.instructions|replace('\n', '<br>')|safe }}
+                </div>
+                {% endif %}
                 <p><strong>Task Type:</strong> 
                     {% if task.janitorial_task.task_type == 'daily' %}
                         <span class="badge bg-primary">Daily Task</span>
@@ -196,11 +202,11 @@
                 </p>
                 {% if task.finished_at and task.assigned_to %}
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
-                <p><small class="text-muted">Pure labor cost - no food cost for janitorial tasks</small></p>
+                <p><small class="text-muted">Labor cost only - no food cost for janitorial tasks</small></p>
                 {% endif %}
                 {% else %}
                 <h6><i class="fas fa-hand-paper"></i> Manual Task</h6>
-                <p><strong>Description:</strong> {{ task.description }}</p>
+                <p><strong>Title:</strong> {{ task.description }}</p>
                 <p><strong>Task Type:</strong> <span class="badge bg-secondary">Manual</span></p>
                 <p><small class="text-muted">Manually created task - no batch or janitorial template linked</small></p>
                 {% if task.finished_at and task.assigned_to %}
