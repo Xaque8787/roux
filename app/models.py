@@ -3,6 +3,23 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from .database import Base
 
+class JanitorialTask(Base):
+    __tablename__ = "janitorial_tasks"
+    id = Column(Integer, primary_key=True)
+    description = Column(String, nullable=False)
+    task_type = Column(String, nullable=False)  # 'daily' or 'manual'
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class JanitorialTaskDay(Base):
+    __tablename__ = "janitorial_task_days"
+    id = Column(Integer, primary_key=True)
+    day_id = Column(Integer, ForeignKey("inventory_days.id"))
+    janitorial_task_id = Column(Integer, ForeignKey("janitorial_tasks.id"))
+    include_task = Column(Boolean, default=True)  # For manual tasks
+    
+    janitorial_task = relationship("JanitorialTask")
+    day = relationship("InventoryDay")
+
 # Standard conversion tables
 WEIGHT_CONVERSIONS = {
     'lb': 1.0,      # Base unit: pounds
@@ -676,6 +693,7 @@ class Task(Base):
     assigned_to_id = Column(Integer, ForeignKey("users.id"))
     assigned_employee_ids = Column(String)  # Comma-separated list of employee IDs
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
+    janitorial_task_id = Column(Integer, ForeignKey("janitorial_tasks.id"), nullable=True)  # Link to janitorial task
     batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Inherited from inventory item
     description = Column(String)
     started_at = Column(DateTime, nullable=True)
@@ -694,7 +712,27 @@ class Task(Base):
     assigned_to = relationship("User")
     day = relationship("InventoryDay")
     inventory_item = relationship("InventoryItem")
+    janitorial_task = relationship("JanitorialTask")
     batch = relationship("Batch")
+    
+    @property
+    def task_source(self):
+        """Identify the source type of this task"""
+        if self.inventory_item_id:
+            return "inventory"
+        elif self.janitorial_task_id:
+            return "janitorial"
+        else:
+            return "manual"
+    
+    @property
+    def food_cost(self):
+        """Calculate food cost - janitorial tasks have zero food cost"""
+        if self.janitorial_task_id:
+            return 0.0
+        # For inventory tasks, would need to calculate from batch/recipe
+        # This is a placeholder for future food cost calculation
+        return 0.0
     
     @property
     def assigned_employees(self):
