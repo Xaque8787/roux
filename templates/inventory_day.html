@@ -445,7 +445,7 @@
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="modal_emp_{{ emp.id }}">
                             <label class="form-check-label" for="modal_emp_{{ emp.id }}">
-                                {{ emp.full_name or emp.username }} (${{ "%.2f"|format(emp.hourly_wage) }}/hr)
+                                {{ emp.full_name or emp.username }}
                             </label>
                         </div>
                         {% endfor %}
@@ -502,7 +502,7 @@ function showAssignModal(taskId) {
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="assign_emp_{{ emp.id }}">
                                 <label class="form-check-label" for="assign_emp_{{ emp.id }}">
-                                    {{ emp.full_name or emp.username }} (${{ "%.2f"|format(emp.hourly_wage) }}/hr)
+                                    {{ emp.full_name or emp.username }}
                                 </label>
                             </div>
                             {% endfor %}
