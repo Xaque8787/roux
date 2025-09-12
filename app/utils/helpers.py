@@ -23,7 +23,7 @@ def create_default_categories(db: Session):
         ("Cleaning & Non-Food", "ingredient"),
         ("General", "ingredient"),
         
-        # Batch and inventory categories (shared)
+        # Batch categories
         ("Sauces", "batch"),
         ("Dressings", "batch"),
         ("Soups", "batch"),
@@ -59,7 +59,7 @@ def create_default_categories(db: Session):
         ("Specials", "inventory"),
         ("Misc Tasks", "inventory"),
         
-        # Recipe categories (use batch categories)
+        # Recipe categories (use batch categories minus task-specific ones)
         ("Sauces", "recipe"),
         ("Dressings", "recipe"),
         ("Soups", "recipe"),
@@ -88,23 +88,29 @@ def create_default_categories(db: Session):
     
     created_count = 0
     for name, cat_type in default_categories:
-        # Check if this specific category already exists
-        existing = db.query(Category).filter(
-            Category.name == name,
-            Category.type == cat_type
-        ).first()
-        
-        if not existing:
-            print(f"Creating category: {name} ({cat_type})")
-            category = Category(name=name, type=cat_type)
-            db.add(category)
-            created_count += 1
-        else:
-            print(f"Category already exists: {name} ({cat_type})")
+        try:
+            # Check if this specific category already exists
+            existing = db.query(Category).filter(
+                Category.name == name,
+                Category.type == cat_type
+            ).first()
+            
+            if not existing:
+                print(f"Creating category: {name} ({cat_type})")
+                category = Category(name=name, type=cat_type)
+                db.add(category)
+                created_count += 1
+            else:
+                print(f"Category already exists: {name} ({cat_type})")
+        except Exception as e:
+            print(f"Error creating category {name} ({cat_type}): {e}")
     
+    print(f"Category creation completed. Created {created_count} new categories.")
 
 def create_default_vendor_units(db: Session):
     """Create default vendor units if they don't exist"""
+    print("Starting vendor unit creation...")
+    
     default_units = [
         ("lb", "Pounds"),
         ("oz", "Ounces"),
@@ -122,40 +128,52 @@ def create_default_vendor_units(db: Session):
         ("case", "Case"),
     ]
     
+    created_count = 0
     for name, description in default_units:
-        existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
-        if not existing:
-            unit = VendorUnit(name=name, description=description)
-            db.add(unit)
+        try:
+            existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
+            if not existing:
+                print(f"Creating vendor unit: {name}")
+                unit = VendorUnit(name=name, description=description)
+                db.add(unit)
+                created_count += 1
+            else:
+                print(f"Vendor unit already exists: {name}")
+        except Exception as e:
+            print(f"Error creating vendor unit {name}: {e}")
     
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        pass
+    print(f"Vendor unit creation completed. Created {created_count} new units.")
 
 def create_default_vendors(db: Session):
     """Create default vendors if they don't exist"""
+    print("Starting vendor creation...")
+    
     default_vendors = [
         ("Local Supplier", "Local food supplier"),
         ("Wholesale Market", "Wholesale food market"),
         ("Specialty Vendor", "Specialty ingredient vendor"),
     ]
     
+    created_count = 0
     for name, contact_info in default_vendors:
-        existing = db.query(Vendor).filter(Vendor.name == name).first()
-        if not existing:
-            vendor = Vendor(name=name, contact_info=contact_info)
-            db.add(vendor)
+        try:
+            existing = db.query(Vendor).filter(Vendor.name == name).first()
+            if not existing:
+                print(f"Creating vendor: {name}")
+                vendor = Vendor(name=name, contact_info=contact_info)
+                db.add(vendor)
+                created_count += 1
+            else:
+                print(f"Vendor already exists: {name}")
+        except Exception as e:
+            print(f"Error creating vendor {name}: {e}")
     
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        pass
+    print(f"Vendor creation completed. Created {created_count} new vendors.")
 
 def create_default_par_unit_names(db: Session):
     """Create default par unit names if they don't exist"""
+    print("Starting par unit name creation...")
+    
     default_par_units = [
         "Tub",
         "Container",
@@ -169,18 +187,21 @@ def create_default_par_unit_names(db: Session):
         "Unit"
     ]
     
+    created_count = 0
     for name in default_par_units:
-        existing = db.query(ParUnitName).filter(ParUnitName.name == name).first()
-        if not existing:
-            par_unit = ParUnitName(name=name)
-            db.add(par_unit)
+        try:
+            existing = db.query(ParUnitName).filter(ParUnitName.name == name).first()
+            if not existing:
+                print(f"Creating par unit name: {name}")
+                par_unit = ParUnitName(name=name)
+                db.add(par_unit)
+                created_count += 1
+            else:
+                print(f"Par unit name already exists: {name}")
+        except Exception as e:
+            print(f"Error creating par unit name {name}: {e}")
     
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        pass
-
+    print(f"Par unit name creation completed. Created {created_count} new units.")
 
 def get_today_date():
     """Get today's date as string"""
