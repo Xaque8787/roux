@@ -226,6 +226,7 @@ async def create_manual_task(
     request: Request,
     assigned_to_ids: list[int] = Form([]),
     inventory_item_id: int = Form(None),
+    batch_id: int = Form(None),
     description: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
@@ -239,14 +240,14 @@ async def create_manual_task(
         day_id=day_id,
         assigned_to_id=assigned_to_ids[0] if assigned_to_ids else None,  # Primary assignee
         inventory_item_id=inventory_item_id if inventory_item_id else None,
-        batch_id=None,  # Will be set from inventory item if linked
+        batch_id=batch_id if batch_id else None,  # Direct batch assignment or from inventory item
         description=description,
         auto_generated=False,
         assigned_employee_ids=','.join(map(str, assigned_to_ids)) if assigned_to_ids else None
     )
     
-    # Set batch_id from inventory item if linked
-    if inventory_item_id:
+    # Set batch_id from inventory item if linked and no direct batch selected
+    if inventory_item_id and not batch_id:
         inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
         if inventory_item and inventory_item.batch_id:
             task.batch_id = inventory_item.batch_id
@@ -655,6 +656,7 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
     janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
     tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
     employees = db.query(User).filter(User.is_active == True).all()
+    batches = db.query(Batch).all()  # Add batches for manual task creation
     
     # Calculate task summaries for completed tasks
     task_summaries = {}
@@ -672,6 +674,7 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
         "janitorial_day_items": janitorial_day_items,
         "tasks": tasks,
         "employees": employees,
+        "batches": batches,
         "task_summaries": task_summaries
     })
 

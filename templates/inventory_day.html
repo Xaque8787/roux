@@ -516,6 +516,18 @@
                             <option value="{{ day_item.inventory_item.id }}">{{ day_item.inventory_item.name }}</option>
                             {% endfor %}
                         </select>
+                        <small class="text-muted">Link to inventory item for par level tracking</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="modal_batch_id" class="form-label">Link to Batch (Optional)</label>
+                        <select class="form-select" id="modal_batch_id" name="batch_id">
+                            <option value="">No batch linked</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Link to batch for labor cost tracking</small>
                     </div>
                     
                     <div class="mb-3">
