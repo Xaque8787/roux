@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import User
 from ..auth import hash_password, verify_password, create_jwt, ACCESS_TOKEN_EXPIRE_MINUTES
 from ..utils.helpers import (create_default_categories, create_default_vendor_units, 
-
+                            create_default_vendors, create_default_par_unit_names)
 router = APIRouter(tags=["auth"])
 templates = Jinja2Templates(directory="templates")
 
