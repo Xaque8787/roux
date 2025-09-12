@@ -64,15 +64,20 @@ async def create_admin_user(
     try:
         print("Creating default categories...")
         create_default_categories(db)
+        db.commit()  # Ensure categories are committed
         print("Creating default vendor units...")
         create_default_vendor_units(db)
+        db.commit()  # Ensure vendor units are committed
         print("Creating default vendors...")
         create_default_vendors(db)
+        db.commit()  # Ensure vendors are committed
         print("Creating default par unit names...")
         create_default_par_unit_names(db)
+        db.commit()  # Ensure par unit names are committed
         print("Default data creation completed")
     except Exception as e:
         print(f"Warning: Could not create some default data: {e}")
+        db.rollback()
         # Don't prevent setup completion if default data creation fails
     
     # Auto-login the admin user
