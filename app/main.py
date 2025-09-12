@@ -26,6 +26,9 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 # Import dependencies
 from .dependencies import get_current_user
 
+# Import icon utilities
+from .utils.icons import get_category_icon, get_task_icon
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
@@ -47,6 +50,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
 
+# Add template globals for icon functions
+templates.env.globals['get_category_icon'] = get_category_icon
+templates.env.globals['get_task_icon'] = get_task_icon
 # Include routers
 app.include_router(auth.router)
 app.include_router(home.router)
