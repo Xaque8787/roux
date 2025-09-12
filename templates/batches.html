@@ -27,22 +27,6 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label for="category_id" class="form-label">Category</label>
-                        <div class="input-group">
-                            <select class="form-select" id="category_id" name="category_id" required>
-                                <option value="">Select Category</option>
-                                {% for cat in categories %}
-                                <option value="{{ cat.id }}">
-                                    {% if cat.icon %}<i class="{{ cat.icon }}"></i> {% endif %}{{ cat.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categoryModal">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                    </div>
                     
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="variable_yield" name="variable_yield" onchange="toggleYieldFields()">
@@ -140,7 +124,6 @@
                         <thead>
                             <tr>
                                 <th>Recipe</th>
-                                <th>Category</th>
                                 <th>Yield</th>
                                 <th>Est. Labor</th>
                                 <th>Scaling</th>
@@ -154,14 +137,6 @@
                                     <strong>{{ batch.recipe.name }}</strong>
                                     {% if batch.recipe.category %}
                                     <br><small class="text-muted">{{ batch.recipe.category.name }}</small>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if batch.category %}
-                                        <i class="{{ batch.category.icon }}" style="color: {{ batch.category.color }}"></i>
-                                        {{ batch.category.name }}
-                                    {% else %}
-                                        <span class="text-muted">None</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -206,31 +181,6 @@
                     </table>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Category Modal -->
-<div class="modal fade" id="categoryModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add New Category</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" action="/categories/new">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="categoryName" class="form-label">Category Name</label>
-                        <input type="text" class="form-control" id="categoryName" name="name" required>
-                        <input type="hidden" name="type" value="batch">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Category</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>

@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
-from ..models import Batch, Recipe, RecipeIngredient, Category
+from ..models import Batch, Recipe, RecipeIngredient
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 templates = Jinja2Templates(directory="templates")
@@ -13,21 +13,18 @@ templates = Jinja2Templates(directory="templates")
 async def batches_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     batches = db.query(Batch).all()
     recipes = db.query(Recipe).all()
-    categories = db.query(Category).filter(Category.type == "batch").all()
     
     return templates.TemplateResponse("batches.html", {
         "request": request,
         "current_user": current_user,
         "batches": batches,
-        "recipes": recipes,
-        "categories": categories
+        "recipes": recipes
     })
 
 @router.post("/new")
 async def create_batch(
     request: Request,
     recipe_id: int = Form(...),
-    category_id: int = Form(...),
     variable_yield: bool = Form(False),
     yield_amount: float = Form(None),
     yield_unit: str = Form(None),
@@ -44,7 +41,6 @@ async def create_batch(
 ):
     batch = Batch(
         recipe_id=recipe_id,
-        category_id=category_id,
         variable_yield=variable_yield,
         yield_amount=yield_amount if not variable_yield else None,
         yield_unit=yield_unit if not variable_yield else None,
@@ -91,14 +87,12 @@ async def batch_edit_page(batch_id: int, request: Request, db: Session = Depends
         raise HTTPException(status_code=404, detail="Batch not found")
     
     recipes = db.query(Recipe).all()
-    categories = db.query(Category).filter(Category.type == "batch").all()
     
     return templates.TemplateResponse("batch_edit.html", {
         "request": request,
         "current_user": current_user,
         "batch": batch,
-        "recipes": recipes,
-        "categories": categories
+        "recipes": recipes
     })
 
 @router.post("/{batch_id}/edit")
@@ -106,7 +100,6 @@ async def update_batch(
     batch_id: int,
     request: Request,
     recipe_id: int = Form(...),
-    category_id: int = Form(...),
     variable_yield: bool = Form(False),
     yield_amount: float = Form(None),
     yield_unit: str = Form(None),
@@ -126,7 +119,6 @@ async def update_batch(
         raise HTTPException(status_code=404, detail="Batch not found")
     
     batch.recipe_id = recipe_id
-    batch.category_id = category_id
     batch.variable_yield = variable_yield
     batch.yield_amount = yield_amount if not variable_yield else None
     batch.yield_unit = yield_unit if not variable_yield else None

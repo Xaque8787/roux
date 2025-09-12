@@ -26,6 +26,9 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 # Import dependencies
 from .dependencies import get_current_user
 
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")
 
@@ -41,40 +44,8 @@ app.add_middleware(
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
-# Define template function for task icons
-def get_task_icon_and_color(task):
-    """Get icon and color for a task based on priority system"""
-    # 1. Janitorial tasks always use broom (yellow)
-    if hasattr(task, 'janitorial_task_id') and task.janitorial_task_id:
-        return "fa-broom", "#ffc107"
-    
-    # 2. Manual tasks (no inventory item and no batch) use hand (grey)
-    if (not hasattr(task, 'inventory_item_id') or not task.inventory_item_id) and (not hasattr(task, 'batch_id') or not task.batch_id):
-        if not hasattr(task, 'janitorial_task_id') or not task.janitorial_task_id:
-            return "fa-hand", "#6c757d"
-    
-    # 3. Inventory item category takes priority (grey color for inventory)
-    if hasattr(task, 'inventory_item') and task.inventory_item and hasattr(task.inventory_item, 'category') and task.inventory_item.category:
-        return task.inventory_item.category.icon or "fa-list-check", "#6c757d"
-    
-    # 4. Fallback to batch category (yellow color for batches)
-    if hasattr(task, 'batch') and task.batch and hasattr(task.batch, 'category') and task.batch.category:
-        return task.batch.category.icon or "fa-industry", "#ffc107"
-    
-    # 5. Default fallback
-    return "fa-list-check", "#6c757d"
-
-def get_task_icon(task):
-    """Template function to get task icon and color"""
-    icon, color = get_task_icon_and_color(task)
-    return icon, color
-
-# Initialize templates and register the function
+# Initialize templates
 templates = Jinja2Templates(directory="templates")
-templates.env.globals['get_task_icon'] = get_task_icon
 
 # Include routers
 app.include_router(auth.router)

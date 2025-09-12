@@ -11,12 +11,10 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 async def create_category(
     name: str = Form(...),
     type: str = Form(...),
-    icon: str = Form("fa-square"),
-    color: str = Form("#8e44ad"),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    category = Category(name=name, type=type, icon=icon, color=color)
+    category = Category(name=name, type=type)
     db.add(category)
     db.commit()
     

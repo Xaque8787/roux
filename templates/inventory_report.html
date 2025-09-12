@@ -106,9 +106,14 @@
                             {% for task in tasks %}
                             <tr>
                                 <td>
-                                    {% set task_icon, task_color = get_task_icon(task) %}
-                                    <i class="{{ task_icon }}" style="color: {{ task_color }}"></i>
                                     <small>{{ task.description }}</small>
+                                    {% if task.batch %}
+                                    <br><small class="text-info"><i class="fas fa-industry"></i> Batch</small>
+                                    {% elif task.janitorial_task %}
+                                    <br><small class="text-warning"><i class="fas fa-broom"></i> Janitorial</small>
+                                    {% else %}
+                                    <br><small class="text-secondary"><i class="fas fa-hand-paper"></i> Manual</small>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if task.assigned_to %}
