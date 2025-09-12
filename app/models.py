@@ -126,7 +126,7 @@ class Vendor(Base):
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True)
+    name = Column(String, nullable=False)
     type = Column(String)  # 'ingredient', 'recipe', 'batch', 'dish', 'inventory'
     icon = Column(String)  # Font Awesome icon name (e.g., 'fa-cheese')
     color = Column(String)  # Hex color code for section-specific theming
