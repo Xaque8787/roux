@@ -6,7 +6,9 @@ from datetime import timedelta
 from ..database import get_db
 from ..models import User
 from ..auth import hash_password, verify_password, create_jwt, ACCESS_TOKEN_EXPIRE_MINUTES
-from ..utils.helpers import create_default_categories, create_default_vendor_units, create_default_vendors, create_default_par_unit_names
+from ..utils.helpers import (create_default_categories, create_default_vendor_units, 
+                            create_default_vendors, create_default_par_unit_names, 
+                            create_default_janitorial_tasks)
 
 router = APIRouter(tags=["auth"])
 templates = Jinja2Templates(directory="templates")
@@ -66,6 +68,7 @@ async def create_admin_user(
         create_default_vendor_units(db)
         create_default_vendors(db)
         create_default_par_unit_names(db)
+        create_default_janitorial_tasks(db)
         create_default_janitorial_tasks(db)
     except Exception as e:
         # If default data creation fails, log it but don't prevent setup completion

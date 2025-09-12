@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
-from ..models import Batch, Recipe, RecipeIngredient
+from ..models import Batch, Recipe, RecipeIngredient, Category
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 templates = Jinja2Templates(directory="templates")
