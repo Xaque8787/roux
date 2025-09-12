@@ -35,17 +35,6 @@
                                     {% for cat in categories %}
                                     <option value="{{ cat.id }}" {% if recipe.category_id == cat.id %}selected{% endif %}>
                                         {{ cat.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="instructions" class="form-label">Instructions</label>
-                        <textarea class="form-control" id="instructions" name="instructions" rows="4">{{ recipe.instructions or '' }}</textarea>
-                    </div>
                     
                     <h6>Ingredients:</h6>
                     <div class="mb-3">

@@ -322,6 +322,7 @@ class Batch(Base):
     __tablename__ = "batches"
     id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    category_id = Column(Integer, ForeignKey("categories.id"))
     
     # Variable yield option
     variable_yield = Column(Boolean, default=False)
@@ -339,6 +340,7 @@ class Batch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     recipe = relationship("Recipe")
+    category = relationship("Category")
     
     @property
     def estimated_labor_cost(self):

@@ -13,13 +13,11 @@ templates = Jinja2Templates(directory="templates")
 @router.get("/", response_class=HTMLResponse)
 async def recipes_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     recipes = db.query(Recipe).all()
-    categories = db.query(Category).filter(Category.type == "recipe").all()
     
     return templates.TemplateResponse("recipes.html", {
         "request": request,
         "current_user": current_user,
-        "recipes": recipes,
-        "categories": categories
+        "recipes": recipes
     })
 
 @router.post("/new")
@@ -27,7 +25,6 @@ async def create_recipe(
     request: Request,
     name: str = Form(...),
     instructions: str = Form(""),
-    category_id: int = Form(...),
     ingredients_data: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
@@ -35,7 +32,7 @@ async def create_recipe(
     recipe = Recipe(
         name=name,
         instructions=instructions if instructions else None,
-        category_id=category_id
+        category_id=None
     )
     
     db.add(recipe)
@@ -83,14 +80,12 @@ async def recipe_edit_page(recipe_id: int, request: Request, db: Session = Depen
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     
-    categories = db.query(Category).filter(Category.type == "recipe").all()
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
     
     return templates.TemplateResponse("recipe_edit.html", {
         "request": request,
         "current_user": current_user,
         "recipe": recipe,
-        "categories": categories,
         "recipe_ingredients": recipe_ingredients
     })
 
@@ -100,7 +95,6 @@ async def update_recipe(
     request: Request,
     name: str = Form(...),
     instructions: str = Form(""),
-    category_id: int = Form(...),
     ingredients_data: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
@@ -111,7 +105,6 @@ async def update_recipe(
     
     recipe.name = name
     recipe.instructions = instructions if instructions else None
-    recipe.category_id = category_id
     
     # Remove existing ingredients
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()

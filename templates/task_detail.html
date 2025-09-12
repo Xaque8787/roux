@@ -169,8 +169,8 @@
                 <h6><i class="fas fa-industry"></i> Linked Batch</h6>
                 <p><strong>Recipe:</strong> 
                     <a href="/batches/{{ task.batch.id }}" class="text-decoration-none">
-                        {% if task.batch.recipe.category %}
-                            {% set icon, color = get_category_icon(task.batch.recipe.category.name, 'batch') %}
+                        {% if task.batch.category %}
+                            {% set icon, color = get_category_icon(task.batch.category.name, 'batch') %}
                             <i class="fas {{ icon }} {{ color }}"></i>
                         {% endif %}
                         {{ task.batch.recipe.name }}

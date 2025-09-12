@@ -66,7 +66,6 @@ async def create_admin_user(
         create_default_vendor_units(db)
         create_default_vendors(db)
         create_default_par_unit_names(db)
-        from ..utils.helpers import create_default_janitorial_tasks
         create_default_janitorial_tasks(db)
     except Exception as e:
         # If default data creation fails, log it but don't prevent setup completion

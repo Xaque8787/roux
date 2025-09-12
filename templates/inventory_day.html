@@ -225,8 +225,11 @@
                                     {% if task.batch %}
                                     <br><small class="text-muted">
                                         {{ task.batch.recipe.name }}
+                                        {% if task.batch.category %}
+                                        ({{ task.batch.category.name }})
+                                        {% endif %}
                                         {% if task.selected_scale and task.selected_scale != 'full' %}
-                                        ({{ task.selected_scale }})
+                                        - {{ task.selected_scale }}
                                         {% endif %}
                                     </small>
                                     {% endif %}
