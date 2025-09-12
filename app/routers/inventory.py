@@ -57,7 +57,7 @@ async def create_inventory_item(
     par_unit_equals_type: str = Form(...),
     par_unit_equals_amount: float = Form(None),
     par_unit_equals_unit: str = Form(None),
-    category_id: int = Form(None),
+    category_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
@@ -69,7 +69,7 @@ async def create_inventory_item(
         par_unit_equals_type=par_unit_equals_type,
         par_unit_equals_amount=par_unit_equals_amount if par_unit_equals_type == 'custom' else None,
         par_unit_equals_unit=par_unit_equals_unit if par_unit_equals_type == 'custom' else None,
-        category_id=category_id if category_id else None
+        category_id=category_id
     )
     
     db.add(inventory_item)
@@ -764,7 +764,7 @@ async def update_inventory_item(
     name: str = Form(...),
     par_level: float = Form(...),
     batch_id: int = Form(None),
-    category_id: int = Form(None),
+    category_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
@@ -775,7 +775,7 @@ async def update_inventory_item(
     item.name = name
     item.par_level = par_level
     item.batch_id = batch_id if batch_id else None
-    item.category_id = category_id if category_id else None
+    item.category_id = category_id
     
     db.commit()
     
