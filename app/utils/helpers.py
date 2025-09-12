@@ -84,26 +84,23 @@ def create_default_categories(db: Session):
         ("Specials", "dish"),
     ]
     
-    # Check for duplicate category names across different types
-    existing_categories = {}
-    for category in db.query(Category).all():
-        key = (category.name, category.type)
-        existing_categories[key] = True
-    
     for name, cat_type in default_categories:
-        key = (name, cat_type)
-        if key not in existing_categories:
+        # Check if this specific category already exists
+        existing = db.query(Category).filter(
+            Category.name == name,
+            Category.type == cat_type
+        ).first()
+        
+        if not existing:
             category = Category(name=name, type=cat_type)
             db.add(category)
-            existing_categories[key] = True
     
     try:
         db.commit()
+        print(f"Created default categories successfully")
     except Exception as e:
+        print(f"Error creating categories: {e}")
         db.rollback()
-        # If there's still an integrity error, it means categories were created concurrently
-        # This is acceptable for setup, so we can continue
-        pass
 
 def create_default_vendor_units(db: Session):
     """Create default vendor units if they don't exist"""
@@ -183,27 +180,6 @@ def create_default_par_unit_names(db: Session):
         db.rollback()
         pass
 
-def create_default_janitorial_tasks(db: Session):
-    """Create default janitorial tasks if they don't exist"""
-    default_tasks = [
-        ("Clean Kitchen Floors", "Sweep and mop all kitchen floor areas", "daily"),
-        ("Empty Trash Bins", "Empty all trash bins and replace liners", "daily"),
-        ("Sanitize Work Surfaces", "Clean and sanitize all prep surfaces", "daily"),
-        ("Deep Clean Equipment", "Thorough cleaning of kitchen equipment", "manual"),
-        ("Clean Storage Areas", "Organize and clean storage rooms", "manual"),
-    ]
-    
-    for title, instructions, task_type in default_tasks:
-        existing = db.query(JanitorialTask).filter(JanitorialTask.title == title).first()
-        if not existing:
-            task = JanitorialTask(title=title, instructions=instructions, task_type=task_type)
-            db.add(task)
-    
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        pass
 
 def get_today_date():
     """Get today's date as string"""
