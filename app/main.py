@@ -26,9 +26,6 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 # Import dependencies
 from .dependencies import get_current_user
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")
 
@@ -47,8 +44,31 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
 
-# Add template functions
-from .utils.helpers import get_task_icon_and_color
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+# Import and register template functions after database is created
+def get_task_icon_and_color(task):
+    """Get icon and color for a task based on priority system"""
+    # 1. Janitorial tasks always use broom (yellow)
+    if hasattr(task, 'janitorial_task') and task.janitorial_task:
+        return "fa-broom", "#ffc107"
+    
+    # 2. Manual tasks (no inventory item and no batch) use hand (grey)
+    if not hasattr(task, 'inventory_item') or not task.inventory_item:
+        if not hasattr(task, 'batch') or not task.batch:
+            return "fa-hand", "#6c757d"
+    
+    # 3. Inventory item category takes priority (grey color for inventory)
+    if hasattr(task, 'inventory_item') and task.inventory_item and task.inventory_item.category:
+        return task.inventory_item.category.icon or "fa-list-check", "#6c757d"
+    
+    # 4. Fallback to batch category (yellow color for batches)
+    if hasattr(task, 'batch') and task.batch and hasattr(task.batch, 'category') and task.batch.category:
+        return task.batch.category.icon or "fa-industry", "#ffc107"
+    
+    # 5. Default fallback
+    return "fa-list-check", "#6c757d"
 
 def get_task_icon(task):
     """Template function to get task icon and color"""

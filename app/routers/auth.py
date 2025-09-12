@@ -63,13 +63,19 @@ async def create_admin_user(
     # Create default data
     try:
         create_default_categories(db)
+        db.commit()  # Commit categories first
         create_default_vendor_units(db)
+        db.commit()  # Commit vendor units
         create_default_vendors(db)
+        db.commit()  # Commit vendors
         create_default_par_unit_names(db)
+        db.commit()  # Commit par unit names
         create_default_janitorial_tasks(db)
+        db.commit()  # Final commit
     except Exception as e:
         # If default data creation fails, log it but don't prevent setup completion
         print(f"Warning: Could not create some default data: {e}")
+        db.rollback()
     
     # Auto-login the admin user
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

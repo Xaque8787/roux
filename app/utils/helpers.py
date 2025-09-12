@@ -96,8 +96,8 @@ def create_default_categories(db: Session):
         db.commit()
         print(f"Category creation completed. Created {created_count} new categories.")
     except Exception as e:
-        db.rollback()
         print(f"Error creating categories: {e}")
+        raise e
 
 def create_default_vendor_units(db: Session):
     """Create default vendor units if they don't exist"""
@@ -135,8 +135,8 @@ def create_default_vendor_units(db: Session):
         db.commit()
         print(f"Vendor unit creation completed. Created {created_count} new units.")
     except Exception as e:
-        db.rollback()
         print(f"Error creating vendor units: {e}")
+        raise e
 
 def create_default_vendors(db: Session):
     """Create default vendors if they don't exist"""
@@ -163,8 +163,8 @@ def create_default_vendors(db: Session):
         db.commit()
         print(f"Vendor creation completed. Created {created_count} new vendors.")
     except Exception as e:
-        db.rollback()
         print(f"Error creating vendors: {e}")
+        raise e
 
 def create_default_par_unit_names(db: Session):
     """Create default par unit names if they don't exist"""
@@ -198,8 +198,8 @@ def create_default_par_unit_names(db: Session):
         db.commit()
         print(f"Par unit name creation completed. Created {created_count} new units.")
     except Exception as e:
-        db.rollback()
         print(f"Error creating par unit names: {e}")
+        raise e
 
 def create_default_janitorial_tasks(db: Session):
     """Create default janitorial tasks if they don't exist"""
@@ -232,27 +232,4 @@ def create_default_janitorial_tasks(db: Session):
         print(f"Error creating janitorial tasks: {e}")
 
 def get_today_date():
-    """Get today's date as string"""
     return date.today().isoformat()
-
-def get_task_icon_and_color(task):
-    """Get icon and color for a task based on priority system"""
-    # 1. Janitorial tasks always use broom (yellow)
-    if hasattr(task, 'janitorial_task') and task.janitorial_task:
-        return "fa-broom", "#ffc107"
-    
-    # 2. Manual tasks (no inventory item and no batch) use hand (grey)
-    if not hasattr(task, 'inventory_item') or not task.inventory_item:
-        if not hasattr(task, 'batch') or not task.batch:
-            return "fa-hand", "#6c757d"
-    
-    # 3. Inventory item category takes priority (grey color for inventory)
-    if hasattr(task, 'inventory_item') and task.inventory_item and task.inventory_item.category:
-        return task.inventory_item.category.icon or "fa-list-check", "#6c757d"
-    
-    # 4. Fallback to batch category (yellow color for batches)
-    if hasattr(task, 'batch') and task.batch and hasattr(task.batch, 'category') and task.batch.category:
-        return task.batch.category.icon or "fa-industry", "#ffc107"
-    
-    # 5. Default fallback
-    return "fa-list-check", "#6c757d"
