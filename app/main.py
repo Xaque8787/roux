@@ -53,6 +53,7 @@ templates = Jinja2Templates(directory="templates")
 # Add template globals for icon functions
 templates.env.globals['get_category_icon'] = get_category_icon
 templates.env.globals['get_task_icon'] = get_task_icon
+
 # Include routers
 app.include_router(auth.router)
 app.include_router(home.router)

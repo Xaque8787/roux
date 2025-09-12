@@ -1,6 +1,6 @@
 from datetime import date
 from sqlalchemy.orm import Session
-from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
+from ..models import Category, VendorUnit, Vendor, ParUnitName
 
 def create_default_categories(db: Session):
     """Create default categories if they don't exist"""
@@ -136,22 +136,23 @@ def create_default_vendor_units(db: Session):
 
 def create_default_vendors(db: Session):
     """Create default vendors if they don't exist"""
-    print("Starting vendor creation...")
-    
     default_vendors = [
         ("Local Supplier", "Local food supplier"),
         ("Wholesale Market", "Wholesale food market"),
         ("Specialty Vendor", "Specialty ingredient vendor"),
     ]
     
-    created_count = 0
     for name, contact_info in default_vendors:
         existing = db.query(Vendor).filter(Vendor.name == name).first()
         if not existing:
-            print(f"Creating vendor: {name}")
             vendor = Vendor(name=name, contact_info=contact_info)
             db.add(vendor)
-            created_count += 1
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        pass
 
 def create_default_par_unit_names(db: Session):
     """Create default par unit names if they don't exist"""
