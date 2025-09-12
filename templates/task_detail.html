@@ -22,6 +22,19 @@
                 <div class="row">
                     <div class="col-md-6">
                         <p><strong>Description:</strong> {{ task.description }}</p>
+                        <p><strong>Task Type:</strong>
+                            {% set task_icon, task_color = get_task_icon(task) %}
+                            <i class="{{ task_icon }}" style="color: {{ task_color }}"></i>
+                            {% if task.janitorial_task %}
+                                Janitorial Task
+                            {% elif task.batch %}
+                                Batch Task
+                            {% elif task.inventory_item %}
+                                Inventory Task
+                            {% else %}
+                                Manual Task
+                            {% endif %}
+                        </p>
                         <p><strong>Assigned to:</strong>
                             {% if task.assigned_employee_ids %}
                                 {% set employee_ids = task.assigned_employee_ids.split(',') %}
