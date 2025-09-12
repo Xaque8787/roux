@@ -78,6 +78,11 @@
                     {% for recipe in recipes %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
+                            {% if recipe.category %}
+                                {{ recipe.category.icon }}
+                            {% else %}
+                                🔘
+                            {% endif %}
                             <strong>{{ recipe.name }}</strong>
                             {% if recipe.category %}
                             <br><small class="text-muted">{{ recipe.category.name }}</small>
@@ -121,6 +126,28 @@
                         <label for="categoryName" class="form-label">Category Name</label>
                         <input type="text" class="form-control" id="categoryName" name="name" required>
                         <input type="hidden" name="type" value="recipe">
+                        <input type="hidden" name="icon" value="🔘">
+                        <input type="hidden" name="color" value="#6c757d">
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryIcon" class="form-label">Icon (Unicode Emoji)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="categoryIcon" name="icon" placeholder="🔘" maxlength="4" oninput="previewIcon()">
+                            <span class="input-group-text" id="iconPreview">🔘</span>
+                        </div>
+                        <small class="text-muted">Enter a Unicode emoji (e.g., 🍝, 🥗, 🍰)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryColor" class="form-label">Color</label>
+                        <select class="form-select" id="categoryColor" name="color">
+                            <option value="#dc3545">Red</option>
+                            <option value="#ffc107">Yellow</option>
+                            <option value="#28a745">Green</option>
+                            <option value="#17a2b8">Blue</option>
+                            <option value="#6f42c1">Purple</option>
+                            <option value="#fd7e14">Orange</option>
+                            <option value="#6c757d" selected>Grey</option>
+                        </select>
                     </div>
                 </div>
                 <div class="modal-footer">

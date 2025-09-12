@@ -3,47 +3,108 @@ from sqlalchemy.orm import Session
 from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
 
 def create_default_categories(db: Session):
-    """Create default categories if they don't exist"""
+    """Create default categories with emojis if they don't exist"""
+    print("Starting category creation...")
+    
+    # Define categories with their emojis and colors
     default_categories = [
-        ("Proteins", "ingredient"),
-        ("Vegetables", "ingredient"),
-        ("Dairy", "ingredient"),
-        ("Grains", "ingredient"),
-        ("Spices", "ingredient"),
-        ("Appetizers", "recipe"),
-        ("Main Courses", "recipe"),
-        ("Desserts", "recipe"),
-        ("Beverages", "recipe"),
-        ("Production", "batch"),
-        ("Prep", "batch"),
-        ("Hot Food", "dish"),
-        ("Cold Food", "dish"),
-        ("Beverages", "dish"),
-        ("Proteins", "inventory"),
-        ("Vegetables", "inventory"),
-        ("Prepared Items", "inventory"),
+        # Ingredients
+        ("Cheese", "ingredient", "🧀", "#ffc107"),
+        ("Eggs", "ingredient", "🥚", "#ffc107"),
+        ("Dairy", "ingredient", "🐄", "#6f42c1"),
+        ("Produce", "ingredient", "🥕", "#28a745"),
+        ("Meat & Poultry", "ingredient", "🍗", "#dc3545"),
+        ("Seafood", "ingredient", "🐟", "#17a2b8"),
+        ("Soups", "ingredient", "🥣", "#fd7e14"),
+        ("Sauces", "ingredient", "🥘", "#dc3545"),
+        ("Dry Goods", "ingredient", "🌾", "#6c757d"),
+        ("Canned Goods", "ingredient", "🥫", "#6c757d"),
+        ("Frozen", "ingredient", "❄️", "#17a2b8"),
+        ("Dressings", "ingredient", "🫗", "#ffc107"),
+        ("Baking Supplies", "ingredient", "🍞", "#fd7e14"),
+        ("Oils & Fats", "ingredient", "🛢️", "#6c757d"),
+        ("Beverages", "ingredient", "🥤", "#17a2b8"),
+        ("Spices & Seasoning", "ingredient", "🌶️", "#dc3545"),
+        ("Cleaning & Non-Food", "ingredient", "🧼", "#6c757d"),
+        ("General", "ingredient", "✅", "#28a745"),
+        
+        # Batches
+        ("Sauces", "batch", "🥘", "#dc3545"),
+        ("Dressings", "batch", "🫗", "#ffc107"),
+        ("Soups", "batch", "🥣", "#fd7e14"),
+        ("Stocks & Broths", "batch", "🥘", "#dc3545"),
+        ("Dough", "batch", "🍞", "#fd7e14"),
+        ("Marinades", "batch", "🫙", "#6f42c1"),
+        ("Produce", "batch", "🌿", "#28a745"),
+        ("Cheese", "batch", "🧀", "#ffc107"),
+        ("Eggs", "batch", "🥚", "#ffc107"),
+        ("Dairy", "batch", "🐄", "#6f42c1"),
+        ("Protein", "batch", "🍗", "#dc3545"),
+        ("Thaw/Defrost", "batch", "🧊", "#17a2b8"),
+        ("Frozen Prep", "batch", "❄️", "#17a2b8"),
+        ("Spreads & Dips", "batch", "🧈", "#ffc107"),
+        ("Dessert", "batch", "🍨", "#fd7e14"),
+        ("Restock/Rotate", "batch", "🔄", "#6c757d"),
+        ("Manual", "batch", "✋", "#6c757d"),
+        ("Specials", "batch", "⭐", "#ffc107"),
+        ("Misc Tasks", "batch", "✅", "#28a745"),
+        
+        # Inventory (same as batches)
+        ("Sauces", "inventory", "🥘", "#dc3545"),
+        ("Dressings", "inventory", "🫗", "#ffc107"),
+        ("Soups", "inventory", "🥣", "#fd7e14"),
+        ("Stocks & Broths", "inventory", "🥘", "#dc3545"),
+        ("Dough", "inventory", "🍞", "#fd7e14"),
+        ("Marinades", "inventory", "🫙", "#6f42c1"),
+        ("Produce", "inventory", "🌿", "#28a745"),
+        ("Cheese", "inventory", "🧀", "#ffc107"),
+        ("Eggs", "inventory", "🥚", "#ffc107"),
+        ("Dairy", "inventory", "🐄", "#6f42c1"),
+        ("Protein", "inventory", "🍗", "#dc3545"),
+        ("Thaw/Defrost", "inventory", "🧊", "#17a2b8"),
+        ("Frozen Prep", "inventory", "❄️", "#17a2b8"),
+        ("Spreads & Dips", "inventory", "🧈", "#ffc107"),
+        ("Dessert", "inventory", "🍨", "#fd7e14"),
+        ("Restock/Rotate", "inventory", "🔄", "#6c757d"),
+        ("Manual", "inventory", "✋", "#6c757d"),
+        ("Specials", "inventory", "⭐", "#ffc107"),
+        ("Misc Tasks", "inventory", "✅", "#28a745"),
+        
+        # Dishes
+        ("Appetizers", "dish", "🍴", "#6f42c1"),
+        ("Salads", "dish", "🌱", "#28a745"),
+        ("Sandwiches", "dish", "🍔", "#fd7e14"),
+        ("Entrées", "dish", "🍽️", "#dc3545"),
+        ("Sides", "dish", "🍲", "#ffc107"),
+        ("Soups", "dish", "🥣", "#fd7e14"),
+        ("Desserts", "dish", "🍨", "#fd7e14"),
+        ("Beverages", "dish", "🍷", "#6f42c1"),
+        ("Specials", "dish", "⭐", "#ffc107"),
     ]
     
-    # Check for duplicate category names across different types
+    # Check for existing categories to avoid duplicates
     existing_categories = {}
     for category in db.query(Category).all():
         key = (category.name, category.type)
         existing_categories[key] = True
     
-    for name, cat_type in default_categories:
+    created_count = 0
+    for name, cat_type, icon, color in default_categories:
         key = (name, cat_type)
         if key not in existing_categories:
-            category = Category(name=name, type=cat_type)
+            print(f"Creating category: {name} ({cat_type}) with icon {icon}")
+            category = Category(name=name, type=cat_type, icon=icon, color=color)
             db.add(category)
             existing_categories[key] = True
+            created_count += 1
     
     try:
         db.commit()
+        print(f"Category creation completed. Created {created_count} new categories.")
     except Exception as e:
         db.rollback()
-        # If there's still an integrity error, it means categories were created concurrently
-        # This is acceptable for setup, so we can continue
-        pass
+        print(f"Error creating categories: {e}")
+        raise
 
 def create_default_vendor_units(db: Session):
     """Create default vendor units if they don't exist"""
@@ -148,3 +209,35 @@ def create_default_janitorial_tasks(db: Session):
 def get_today_date():
     """Get today's date as string"""
     return date.today().isoformat()
+
+def get_category_emoji(category):
+    """Get emoji for a category, with fallback"""
+    if category and category.icon:
+        return category.icon
+    return "🔘"  # Fallback emoji
+
+def get_task_emoji(task):
+    """Get emoji for a task based on priority rules"""
+    # Janitorial tasks always use broom emoji
+    if hasattr(task, 'janitorial_task_id') and task.janitorial_task_id:
+        return "🧹"
+    
+    # For inventory tasks, use inventory item category first
+    if hasattr(task, 'inventory_item') and task.inventory_item and task.inventory_item.category:
+        return get_category_emoji(task.inventory_item.category)
+    
+    # Fallback to batch category if inventory item has no category but has batch
+    if (hasattr(task, 'inventory_item') and task.inventory_item and 
+        task.inventory_item.batch and task.inventory_item.batch.category):
+        return get_category_emoji(task.inventory_item.batch.category)
+    
+    # For direct batch tasks, use batch category
+    if hasattr(task, 'batch') and task.batch and task.batch.category:
+        return get_category_emoji(task.batch.category)
+    
+    # For manual tasks with category
+    if hasattr(task, 'category') and task.category:
+        return get_category_emoji(task.category)
+    
+    # Final fallback
+    return "🔘"

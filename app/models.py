@@ -128,6 +128,8 @@ class Category(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True)
     type = Column(String)  # 'ingredient', 'recipe', 'batch', 'dish', 'inventory'
+    icon = Column(String)  # Unicode emoji
+    color = Column(String)  # Hex color code
 
 class ParUnitName(Base):
     __tablename__ = "par_unit_names"
@@ -322,6 +324,7 @@ class Batch(Base):
     __tablename__ = "batches"
     id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     
     # Variable yield option
     variable_yield = Column(Boolean, default=False)
@@ -339,6 +342,7 @@ class Batch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     recipe = relationship("Recipe")
+    category = relationship("Category")
     
     @property
     def estimated_labor_cost(self):
@@ -696,6 +700,7 @@ class Task(Base):
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)  # Link to inventory item
     janitorial_task_id = Column(Integer, ForeignKey("janitorial_tasks.id"), nullable=True)  # Link to janitorial task
     batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True)  # Inherited from inventory item
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)  # For manual tasks
     description = Column(String)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
@@ -715,6 +720,7 @@ class Task(Base):
     inventory_item = relationship("InventoryItem")
     janitorial_task = relationship("JanitorialTask")
     batch = relationship("Batch")
+    category = relationship("Category")
     
     @property
     def task_source(self):

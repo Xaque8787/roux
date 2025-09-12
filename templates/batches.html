@@ -28,6 +28,21 @@
                         </select>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <div class="input-group">
+                            <select class="form-select" id="category_id" name="category_id">
+                                <option value="">Select Category</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat.id }}">{{ cat.icon }} {{ cat.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categoryModal">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="variable_yield" name="variable_yield" onchange="toggleYieldFields()">
                         <label class="form-check-label" for="variable_yield">
@@ -124,6 +139,7 @@
                         <thead>
                             <tr>
                                 <th>Recipe</th>
+                                <th>Category</th>
                                 <th>Yield</th>
                                 <th>Est. Labor</th>
                                 <th>Scaling</th>
@@ -137,6 +153,13 @@
                                     <strong>{{ batch.recipe.name }}</strong>
                                     {% if batch.recipe.category %}
                                     <br><small class="text-muted">{{ batch.recipe.category.name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if batch.category %}
+                                        {{ batch.category.icon }} {{ batch.category.name }}
+                                    {% else %}
+                                        🔘 <span class="text-muted">No category</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -185,7 +208,64 @@
     </div>
 </div>
 
+<!-- Category Modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/categories/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="categoryName" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="categoryName" name="name" required>
+                        <input type="hidden" name="type" value="batch">
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryIcon" class="form-label">Icon (Unicode Emoji)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="categoryIcon" name="icon" placeholder="🔘" maxlength="4" oninput="previewIcon()">
+                            <span class="input-group-text" id="iconPreview">🔘</span>
+                        </div>
+                        <small class="text-muted">Enter a Unicode emoji (e.g., 🥘, 🍞, 🥣)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryColor" class="form-label">Color</label>
+                        <select class="form-select" id="categoryColor" name="color">
+                            <option value="#dc3545">Red</option>
+                            <option value="#ffc107">Yellow</option>
+                            <option value="#28a745">Green</option>
+                            <option value="#17a2b8">Blue</option>
+                            <option value="#6f42c1">Purple</option>
+                            <option value="#fd7e14">Orange</option>
+                            <option value="#6c757d" selected>Grey</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+function previewIcon() {
+    const iconInput = document.getElementById('categoryIcon');
+    const iconPreview = document.getElementById('iconPreview');
+    const value = iconInput.value.trim();
+    
+    if (value) {
+        iconPreview.textContent = value;
+    } else {
+        iconPreview.textContent = '🔘';
+    }
+}
+
 function toggleScalingOptions() {
     const checkbox = document.getElementById('can_be_scaled');
     const options = document.getElementById('scalingOptions');

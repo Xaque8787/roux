@@ -227,6 +227,7 @@ async def create_manual_task(
     assigned_to_ids: list[int] = Form([]),
     inventory_item_id: int = Form(None),
     batch_id: int = Form(None),
+    category_id: int = Form(None),
     description: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
@@ -241,6 +242,7 @@ async def create_manual_task(
         assigned_to_id=assigned_to_ids[0] if assigned_to_ids else None,  # Primary assignee
         inventory_item_id=inventory_item_id if inventory_item_id else None,
         batch_id=batch_id if batch_id else None,  # Direct batch assignment or from inventory item
+        category_id=category_id if category_id else None,
         description=description,
         auto_generated=False,
         assigned_employee_ids=','.join(map(str, assigned_to_ids)) if assigned_to_ids else None
@@ -657,6 +659,7 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
     tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
     employees = db.query(User).filter(User.is_active == True).all()
     batches = db.query(Batch).all()  # Add batches for manual task creation
+    categories = db.query(Category).filter(Category.type.in_(["batch", "inventory"])).all()
     
     # Calculate task summaries for completed tasks
     task_summaries = {}
@@ -675,6 +678,7 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
         "tasks": tasks,
         "employees": employees,
         "batches": batches,
+        "categories": categories,
         "task_summaries": task_summaries
     })
 
