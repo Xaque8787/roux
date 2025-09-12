@@ -283,12 +283,6 @@
                             <tr>
                                 <td>
                                     <strong>{{ ing.name }}</strong>
-                                    {% if ing.has_baking_conversion %}
-                                    <br><small class="badge bg-info">Baking</small>
-                                    {% endif %}
-                                    {% if ing.use_item_count_pricing %}
-                                    <br><small class="badge bg-warning">Item Count</small>
-                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if ing.use_item_count_pricing %}
@@ -297,6 +291,9 @@
                                         <span class="badge {% if ing.usage_type == 'weight' %}bg-success{% else %}bg-primary{% endif %}">
                                             {{ ing.usage_type.title() }}
                                         </span>
+                                    {% endif %}
+                                    {% if ing.has_baking_conversion %}
+                                    <br><span class="badge bg-info">Baking</span>
                                     {% endif %}
                                 </td>
                                 <td>
