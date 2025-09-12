@@ -44,7 +44,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Define template functions before initializing templates
+# Define template function for task icons
 def get_task_icon_and_color(task):
     """Get icon and color for a task based on priority system"""
     # 1. Janitorial tasks always use broom (yellow)
@@ -72,10 +72,8 @@ def get_task_icon(task):
     icon, color = get_task_icon_and_color(task)
     return icon, color
 
-# Initialize templates after defining functions
+# Initialize templates and register the function
 templates = Jinja2Templates(directory="templates")
-
-# Add the function to template globals
 templates.env.globals['get_task_icon'] = get_task_icon
 
 # Include routers
