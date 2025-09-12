@@ -282,12 +282,6 @@
                             {% for ing in ingredients %}
                             <tr>
                                 <td>
-                                    {% if ing.category %}
-                                        {% set icon, color = get_category_icon(ing.category.name, 'ingredient') %}
-                                        <i class="fas {{ icon }} {{ color }}"></i>
-                                    {% else %}
-                                        <i class="fas fa-square text-success"></i>
-                                    {% endif %}
                                     <strong>{{ ing.name }}</strong>
                                 </td>
                                 <td>

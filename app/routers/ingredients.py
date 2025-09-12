@@ -32,7 +32,7 @@ async def create_ingredient(
     request: Request,
     name: str = Form(...),
     usage_type: str = Form(...),
-    category_id: int = Form(...),
+    category_id: int = Form(None),
     vendor_id: int = Form(None),
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
@@ -70,7 +70,7 @@ async def create_ingredient(
     ingredient = Ingredient(
         name=name,
         usage_type=usage_type,
-        category_id=category_id,
+        category_id=category_id if category_id else None,
         vendor_id=vendor_id if vendor_id else None,
         vendor_unit_id=vendor_unit_id if vendor_unit_id else None,
         purchase_type=purchase_type,

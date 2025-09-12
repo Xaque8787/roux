@@ -26,7 +26,7 @@ async def dishes_page(request: Request, db: Session = Depends(get_db), current_u
 async def create_dish(
     request: Request,
     name: str = Form(...),
-    category_id: int = Form(...),
+    category_id: int = Form(None),
     sale_price: float = Form(...),
     description: str = Form(""),
     batch_portions_data: str = Form(...),
@@ -35,7 +35,7 @@ async def create_dish(
 ):
     dish = Dish(
         name=name,
-        category_id=category_id,
+        category_id=category_id if category_id else None,
         sale_price=sale_price,
         description=description if description else None
     )
@@ -137,7 +137,7 @@ async def update_dish(
     dish_id: int,
     request: Request,
     name: str = Form(...),
-    category_id: int = Form(...),
+    category_id: int = Form(None),
     sale_price: float = Form(...),
     description: str = Form(""),
     batch_portions_data: str = Form(...),
@@ -149,7 +149,7 @@ async def update_dish(
         raise HTTPException(status_code=404, detail="Dish not found")
     
     dish.name = name
-    dish.category_id = category_id
+    dish.category_id = category_id if category_id else None
     dish.sale_price = sale_price
     dish.description = description if description else None
     

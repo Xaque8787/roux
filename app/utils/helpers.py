@@ -1,116 +1,52 @@
 from datetime import date
 from sqlalchemy.orm import Session
-from ..models import Category, VendorUnit, Vendor, ParUnitName
+from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
 
 def create_default_categories(db: Session):
     """Create default categories if they don't exist"""
-    print("Starting category creation...")
-    
     default_categories = [
-        # Ingredient categories
+        ("Proteins", "ingredient"),
+        ("Vegetables", "ingredient"),
         ("Dairy", "ingredient"),
-        ("Produce", "ingredient"),
-        ("Meat & Poultry", "ingredient"),
-        ("Seafood", "ingredient"),
-        ("Dry Goods", "ingredient"),
-        ("Canned Goods", "ingredient"),
-        ("Frozen", "ingredient"),
-        ("Dressings", "ingredient"),
-        ("Baking Supplies", "ingredient"),
-        ("Oils & Fats", "ingredient"),
-        ("Beverages", "ingredient"),
-        ("Spices & Seasoning", "ingredient"),
-        ("Cleaning & Non-Food", "ingredient"),
-        ("General", "ingredient"),
-        
-        # Batch categories
-        ("Sauces", "batch"),
-        ("Dressings", "batch"),
-        ("Soups", "batch"),
-        ("Stocks & Broths", "batch"),
-        ("Dough", "batch"),
-        ("Marinades", "batch"),
-        ("Produce", "batch"),
-        ("Dairy", "batch"),
-        ("Protein", "batch"),
-        ("Frozen/Thaw", "batch"),
-        ("Spreads & Dips", "batch"),
-        ("Dessert", "batch"),
-        ("Restock/Rotate", "batch"),
-        ("Manual", "batch"),
-        ("Specials", "batch"),
-        ("Misc Tasks", "batch"),
-        
-        # Inventory categories (same as batch)
-        ("Sauces", "inventory"),
-        ("Dressings", "inventory"),
-        ("Soups", "inventory"),
-        ("Stocks & Broths", "inventory"),
-        ("Dough", "inventory"),
-        ("Marinades", "inventory"),
-        ("Produce", "inventory"),
-        ("Dairy", "inventory"),
-        ("Protein", "inventory"),
-        ("Frozen/Thaw", "inventory"),
-        ("Spreads & Dips", "inventory"),
-        ("Dessert", "inventory"),
-        ("Restock/Rotate", "inventory"),
-        ("Manual", "inventory"),
-        ("Specials", "inventory"),
-        ("Misc Tasks", "inventory"),
-        
-        # Recipe categories (use batch categories minus task-specific ones)
-        ("Sauces", "recipe"),
-        ("Dressings", "recipe"),
-        ("Soups", "recipe"),
-        ("Stocks & Broths", "recipe"),
-        ("Dough", "recipe"),
-        ("Marinades", "recipe"),
-        ("Produce", "recipe"),
-        ("Dairy", "recipe"),
-        ("Protein", "recipe"),
-        ("Frozen/Thaw", "recipe"),
-        ("Spreads & Dips", "recipe"),
-        ("Dessert", "recipe"),
-        ("Specials", "recipe"),
-        
-        # Dish categories
-        ("Appetizers", "dish"),
-        ("Salads", "dish"),
-        ("Sandwiches", "dish"),
-        ("Entrées", "dish"),
-        ("Sides", "dish"),
-        ("Soups", "dish"),
-        ("Desserts", "dish"),
+        ("Grains", "ingredient"),
+        ("Spices", "ingredient"),
+        ("Appetizers", "recipe"),
+        ("Main Courses", "recipe"),
+        ("Desserts", "recipe"),
+        ("Beverages", "recipe"),
+        ("Production", "batch"),
+        ("Prep", "batch"),
+        ("Hot Food", "dish"),
+        ("Cold Food", "dish"),
         ("Beverages", "dish"),
-        ("Specials", "dish"),
+        ("Proteins", "inventory"),
+        ("Vegetables", "inventory"),
+        ("Prepared Items", "inventory"),
     ]
     
-    created_count = 0
-    for name, cat_type in default_categories:
-        try:
-            # Check if this specific category already exists
-            existing = db.query(Category).filter(
-                Category.name == name,
-                Category.type == cat_type
-            ).first()
-            
-            if not existing:
-                print(f"Creating category: {name} ({cat_type})")
-                category = Category(name=name, type=cat_type)
-                db.add(category)
-                created_count += 1
-            else:
-                print(f"Category already exists: {name} ({cat_type})")
-        except Exception as e:
-            print(f"Error creating category {name} ({cat_type}): {e}")
+    # Check for duplicate category names across different types
+    existing_categories = {}
+    for category in db.query(Category).all():
+        key = (category.name, category.type)
+        existing_categories[key] = True
     
-    print(f"Category creation completed. Created {created_count} new categories.")
+    for name, cat_type in default_categories:
+        key = (name, cat_type)
+        if key not in existing_categories:
+            category = Category(name=name, type=cat_type)
+            db.add(category)
+            existing_categories[key] = True
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # If there's still an integrity error, it means categories were created concurrently
+        # This is acceptable for setup, so we can continue
+        pass
 
 def create_default_vendor_units(db: Session):
     """Create default vendor units if they don't exist"""
-    print("Starting vendor unit creation...")
-    
     default_units = [
         ("lb", "Pounds"),
         ("oz", "Ounces"),
@@ -128,52 +64,40 @@ def create_default_vendor_units(db: Session):
         ("case", "Case"),
     ]
     
-    created_count = 0
     for name, description in default_units:
-        try:
-            existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
-            if not existing:
-                print(f"Creating vendor unit: {name}")
-                unit = VendorUnit(name=name, description=description)
-                db.add(unit)
-                created_count += 1
-            else:
-                print(f"Vendor unit already exists: {name}")
-        except Exception as e:
-            print(f"Error creating vendor unit {name}: {e}")
+        existing = db.query(VendorUnit).filter(VendorUnit.name == name).first()
+        if not existing:
+            unit = VendorUnit(name=name, description=description)
+            db.add(unit)
     
-    print(f"Vendor unit creation completed. Created {created_count} new units.")
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        pass
 
 def create_default_vendors(db: Session):
     """Create default vendors if they don't exist"""
-    print("Starting vendor creation...")
-    
     default_vendors = [
         ("Local Supplier", "Local food supplier"),
         ("Wholesale Market", "Wholesale food market"),
         ("Specialty Vendor", "Specialty ingredient vendor"),
     ]
     
-    created_count = 0
     for name, contact_info in default_vendors:
-        try:
-            existing = db.query(Vendor).filter(Vendor.name == name).first()
-            if not existing:
-                print(f"Creating vendor: {name}")
-                vendor = Vendor(name=name, contact_info=contact_info)
-                db.add(vendor)
-                created_count += 1
-            else:
-                print(f"Vendor already exists: {name}")
-        except Exception as e:
-            print(f"Error creating vendor {name}: {e}")
+        existing = db.query(Vendor).filter(Vendor.name == name).first()
+        if not existing:
+            vendor = Vendor(name=name, contact_info=contact_info)
+            db.add(vendor)
     
-    print(f"Vendor creation completed. Created {created_count} new vendors.")
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        pass
 
 def create_default_par_unit_names(db: Session):
     """Create default par unit names if they don't exist"""
-    print("Starting par unit name creation...")
-    
     default_par_units = [
         "Tub",
         "Container",
@@ -187,21 +111,39 @@ def create_default_par_unit_names(db: Session):
         "Unit"
     ]
     
-    created_count = 0
     for name in default_par_units:
-        try:
-            existing = db.query(ParUnitName).filter(ParUnitName.name == name).first()
-            if not existing:
-                print(f"Creating par unit name: {name}")
-                par_unit = ParUnitName(name=name)
-                db.add(par_unit)
-                created_count += 1
-            else:
-                print(f"Par unit name already exists: {name}")
-        except Exception as e:
-            print(f"Error creating par unit name {name}: {e}")
+        existing = db.query(ParUnitName).filter(ParUnitName.name == name).first()
+        if not existing:
+            par_unit = ParUnitName(name=name)
+            db.add(par_unit)
     
-    print(f"Par unit name creation completed. Created {created_count} new units.")
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        pass
+
+def create_default_janitorial_tasks(db: Session):
+    """Create default janitorial tasks if they don't exist"""
+    default_tasks = [
+        ("Clean Kitchen Floors", "Sweep and mop all kitchen floor areas", "daily"),
+        ("Empty Trash Bins", "Empty all trash bins and replace liners", "daily"),
+        ("Sanitize Work Surfaces", "Clean and sanitize all prep surfaces", "daily"),
+        ("Deep Clean Equipment", "Thorough cleaning of kitchen equipment", "manual"),
+        ("Clean Storage Areas", "Organize and clean storage rooms", "manual"),
+    ]
+    
+    for title, instructions, task_type in default_tasks:
+        existing = db.query(JanitorialTask).filter(JanitorialTask.title == title).first()
+        if not existing:
+            task = JanitorialTask(title=title, instructions=instructions, task_type=task_type)
+            db.add(task)
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        pass
 
 def get_today_date():
     """Get today's date as string"""

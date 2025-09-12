@@ -26,30 +26,6 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 # Import dependencies
 from .dependencies import get_current_user
 
-# Import icon utilities
-from .utils.icons import get_category_icon
-
-def get_task_icon(task):
-    """
-    Get icon for task based on source and category priority
-    
-    Priority:
-    1. Janitorial tasks -> broom icon
-    2. Inventory item category -> category icon
-    3. Manual tasks -> hand icon
-    """
-    if hasattr(task, 'janitorial_task') and task.janitorial_task:
-        return 'fa-broom', 'text-warning'
-    elif hasattr(task, 'inventory_item') and task.inventory_item and task.inventory_item.category:
-        # Use inventory item category (highest priority for inventory tasks)
-        return get_category_icon(task.inventory_item.category.name, 'inventory')
-    elif hasattr(task, 'batch') and task.batch and task.batch.category:
-        # Use batch category if no inventory item category
-        return get_category_icon(task.batch.category.name, 'batch')
-    else:
-        # Manual task fallback
-        return 'fa-hand', 'text-secondary'
-
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
@@ -70,10 +46,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
-
-# Add template globals for icon functions
-templates.env.globals['get_category_icon'] = get_category_icon
-templates.env.globals['get_task_icon'] = get_task_icon
 
 # Include routers
 app.include_router(auth.router)

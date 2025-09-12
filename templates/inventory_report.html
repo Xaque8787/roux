@@ -143,8 +143,14 @@
                                 <td>
                                     {% if task.auto_generated %}
                                         <span class="badge bg-info">Auto</span>
+                                        {% if task.janitorial_task %}
+                                        <span class="badge bg-warning ms-1">Janitorial</span>
+                                        {% endif %}
                                     {% else %}
                                         <span class="badge bg-secondary">Manual</span>
+                                        {% if task.janitorial_task %}
+                                        <span class="badge bg-warning ms-1">Janitorial</span>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 <td>
