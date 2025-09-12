@@ -32,6 +32,18 @@
                         </select>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select class="form-select" id="category_id" name="category_id" required>
+                            <option value="">Select Category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if batch.category_id == cat.id %}selected{% endif %}>
+                                {% if cat.icon %}<i class="{{ cat.icon }}"></i> {% endif %}{{ cat.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">

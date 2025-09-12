@@ -219,6 +219,8 @@
                             {% for task in tasks %}
                             <tr>
                                 <td>
+                                    {% set task_icon, task_color = get_task_icon(task) %}
+                                    <i class="{{ task_icon }}" style="color: {{ task_color }}"></i>
                                     <small>{{ task.description }}</small>
                                     {% if task.batch %}
                                     <br><small class="text-info">

@@ -47,6 +47,17 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
 
+# Add template functions
+from .utils.helpers import get_task_icon_and_color
+
+def get_task_icon(task):
+    """Template function to get task icon and color"""
+    icon, color = get_task_icon_and_color(task)
+    return icon, color
+
+# Add the function to template globals
+templates.env.globals['get_task_icon'] = get_task_icon
+
 # Include routers
 app.include_router(auth.router)
 app.include_router(home.router)

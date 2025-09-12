@@ -128,6 +128,8 @@ class Category(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True)
     type = Column(String)  # 'ingredient', 'recipe', 'batch', 'dish', 'inventory'
+    icon = Column(String)  # Font Awesome icon name (e.g., 'fa-cheese')
+    color = Column(String)  # Hex color code for section-specific theming
 
 class ParUnitName(Base):
     __tablename__ = "par_unit_names"
@@ -322,6 +324,7 @@ class Batch(Base):
     __tablename__ = "batches"
     id = Column(Integer, primary_key=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    category_id = Column(Integer, ForeignKey("categories.id"))
     
     # Variable yield option
     variable_yield = Column(Boolean, default=False)
@@ -339,6 +342,7 @@ class Batch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     recipe = relationship("Recipe")
+    category = relationship("Category")
     
     @property
     def estimated_labor_cost(self):
