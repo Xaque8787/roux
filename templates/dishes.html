@@ -82,6 +82,12 @@
                     {% for dish in dishes %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
+                            {% if dish.category %}
+                                {% set icon, color = get_category_icon(dish.category.name, 'dish') %}
+                                <i class="fas {{ icon }} {{ color }}"></i>
+                            {% else %}
+                                <i class="fas fa-square text-success"></i>
+                            {% endif %}
                             <strong>{{ dish.name }}</strong>
                             <br><span class="text-success">${{ "%.2f"|format(dish.sale_price) }}</span>
                             {% if dish.category %}

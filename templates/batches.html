@@ -134,6 +134,12 @@
                             {% for batch in batches %}
                             <tr>
                                 <td>
+                                    {% if batch.recipe.category %}
+                                        {% set icon, color = get_category_icon(batch.recipe.category.name, 'batch') %}
+                                        <i class="fas {{ icon }} {{ color }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-square text-success"></i>
+                                    {% endif %}
                                     <strong>{{ batch.recipe.name }}</strong>
                                     {% if batch.recipe.category %}
                                     <br><small class="text-muted">{{ batch.recipe.category.name }}</small>

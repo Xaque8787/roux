@@ -27,7 +27,7 @@ async def create_recipe(
     request: Request,
     name: str = Form(...),
     instructions: str = Form(""),
-    category_id: int = Form(None),
+    category_id: int = Form(...),
     ingredients_data: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
@@ -35,7 +35,7 @@ async def create_recipe(
     recipe = Recipe(
         name=name,
         instructions=instructions if instructions else None,
-        category_id=category_id if category_id else None
+        category_id=category_id
     )
     
     db.add(recipe)
@@ -100,7 +100,7 @@ async def update_recipe(
     request: Request,
     name: str = Form(...),
     instructions: str = Form(""),
-    category_id: int = Form(None),
+    category_id: int = Form(...),
     ingredients_data: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
@@ -111,7 +111,7 @@ async def update_recipe(
     
     recipe.name = name
     recipe.instructions = instructions if instructions else None
-    recipe.category_id = category_id if category_id else None
+    recipe.category_id = category_id
     
     # Remove existing ingredients
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()

@@ -232,6 +232,10 @@
                                 <td>
                                     {% if item.batch %}
                                         <span class="badge bg-success">
+                                            {% if item.batch.recipe.category %}
+                                                {% set icon, color = get_category_icon(item.batch.recipe.category.name, 'batch') %}
+                                                <i class="fas {{ icon }} {{ color }}"></i>
+                                            {% endif %}
                                             {{ item.batch.recipe.name }}
                                             {% if item.batch.variable_yield %}
                                                 (Variable)
