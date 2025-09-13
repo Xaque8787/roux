@@ -226,10 +226,6 @@
                                        {{ task.inventory_item.category.icon or '🔘' }}
                                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
                                        {{ task.inventory_item.batch.category.icon or '🔘' }}
-                                   {% elif task.batch and task.batch.category %}
-                                       {{ task.batch.category.icon or '🔘' }}
-                                   {% elif task.category %}
-                                   <br><small class="text-success">Made: {{ task.made_amount }} {{ task.made_unit }}</small>
                                    {% endif %}
                                     {% if task.batch %}
                                    <br><small class="text-info">{{ task.batch.recipe.name }}

@@ -170,7 +170,7 @@
                     </a>
                 </p>
                 {% if task.batch.category %}
-                <p><strong>Category:</strong> {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}</p>
+                <p><strong>Batch Category:</strong> {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}</p>
                 {% endif %}
                 <p><strong>Estimated Labor:</strong> {{ task.batch.estimated_labor_minutes }} min</p>
                 <p><strong>Estimated Cost:</strong> ${{ "%.2f"|format(task.batch.estimated_labor_cost) }}</p>
@@ -183,9 +183,8 @@
                 </p>
                 {% endif %}
                 {% elif task.janitorial_task %}
-                <h6>🧹 Janitorial Task</h6>
+                <h6>🧹 Janitorial</h6>
                 <p><strong>Title:</strong> {{ task.janitorial_task.title }}</p>
-                <p><strong>Category:</strong> 🧹 Janitorial</p>
                 {% if task.janitorial_task.instructions %}
                 <p><strong>Instructions:</strong></p>
                 <div class="border p-2 bg-light">
@@ -206,13 +205,8 @@
                 <p><small class="text-muted">Labor cost only - no food cost for janitorial tasks</small></p>
                 {% endif %}
                 {% else %}
-                <h6>✋ Manual Task</h6>
+                <h6>✋ Manual</h6>
                 <p><strong>Title:</strong> {{ task.description }}</p>
-                {% if task.category %}
-                <p><strong>Category:</strong> {{ task.category.icon or '✋' }} {{ task.category.name }}</p>
-                {% else %}
-                <p><strong>Category:</strong> ✋ Manual Task</p>
-                {% endif %}
                 {% if task.finished_at and task.assigned_to %}
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
                 {% endif %}
@@ -303,6 +297,22 @@
                         <span class="badge bg-success">Finalized</span>
                     {% else %}
                         <span class="badge bg-warning">In Progress</span>
+                    {% endif %}
+                </p>
+                
+                <p><strong>Task Category:</strong>
+                    {% if task.janitorial_task_id %}
+                        🧹 Janitorial
+                    {% elif task.inventory_item and task.inventory_item.category %}
+                        {{ task.inventory_item.category.icon or '🔘' }} {{ task.inventory_item.category.name }}
+                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
+                        {{ task.inventory_item.batch.category.icon or '🔘' }} {{ task.inventory_item.batch.category.name }}
+                    {% elif task.batch and task.batch.category %}
+                        {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}
+                    {% elif task.category %}
+                        {{ task.category.icon or '🔘' }} {{ task.category.name }}
+                    {% else %}
+                        🔘 Uncategorized
                     {% endif %}
                 </p>
                 {% if inventory_day.employees_working %}
