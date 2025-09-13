@@ -150,20 +150,30 @@
                             {% for batch in batches %}
                             <tr>
                                 <td>
-                                    <strong>{{ batch.recipe.name }}</strong>
-                                    {% if batch.recipe.category %}
-                                    <br><small class="text-muted">{{ batch.recipe.category.name }}</small>
+                                    {% if batch.category %}
+                                        {{ batch.category.icon or '🔘' }}
+                                    {% elif batch.recipe.category %}
+                                        {{ batch.recipe.category.icon or '🔘' }}
+                                    {% else %}
+                                        🔘
                                     {% endif %}
+                                    <strong>{{ batch.recipe.name }}</strong>
                                 </td>
                                 <td>
                                     {% if batch.category %}
-                                        {{ batch.category.icon or '🔘' }} {{ batch.category.name }}
+                                        {{ batch.category.name }}
+                                    {% elif batch.recipe.category %}
+                                        {{ batch.recipe.category.name }}
                                     {% else %}
-                                        🔘 <span class="text-muted">No category</span>
+                                        <span class="text-muted">No category</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }}
+                                    {% if batch.variable_yield %}
+                                        <span class="badge bg-info">Variable Yield</span>
+                                    {% else %}
+                                        {{ batch.yield_amount }} {{ batch.yield_unit }}
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ batch.estimated_labor_minutes }} min<br>
