@@ -84,6 +84,14 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
     actual_total_cost_all_time = 0
     actual_labor_cost_all_time = 0
     
+    # Add missing cost variables
+    week_recipe_cost = 0
+    week_labor_cost = 0
+    month_recipe_cost = 0
+    month_labor_cost = 0
+    all_time_recipe_cost = 0
+    all_time_labor_cost = 0
+    
     for portion in dish_batch_portions:
         expected_total_cost += portion.get_expected_cost(db)
         expected_recipe_cost += portion.get_recipe_cost(db)
@@ -97,6 +105,14 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         actual_labor_cost_month += portion.get_labor_cost(db, 'month_avg')
         actual_total_cost_all_time += portion.get_actual_cost_all_time_avg(db)
         actual_labor_cost_all_time += portion.get_labor_cost(db, 'all_time_avg')
+        
+        # Calculate separate recipe and labor costs for each time period
+        week_recipe_cost += portion.get_recipe_cost(db)
+        week_labor_cost += portion.get_labor_cost(db, 'week_avg')
+        month_recipe_cost += portion.get_recipe_cost(db)
+        month_labor_cost += portion.get_labor_cost(db, 'month_avg')
+        all_time_recipe_cost += portion.get_recipe_cost(db)
+        all_time_labor_cost += portion.get_labor_cost(db, 'all_time_avg')
     
     # Calculate profits and margins
     expected_profit = dish.sale_price - expected_total_cost
@@ -141,6 +157,12 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         "actual_profit_margin_month": actual_profit_margin_month,
         "actual_profit_all_time": actual_profit_all_time,
         "actual_profit_margin_all_time": actual_profit_margin_all_time,
+        "week_recipe_cost": week_recipe_cost,
+        "week_labor_cost": week_labor_cost,
+        "month_recipe_cost": month_recipe_cost,
+        "month_labor_cost": month_labor_cost,
+        "all_time_recipe_cost": all_time_recipe_cost,
+        "all_time_labor_cost": all_time_labor_cost,
         "db": db
     })
 
