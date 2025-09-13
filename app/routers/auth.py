@@ -62,14 +62,22 @@ async def create_admin_user(
     
     # Create default data
     try:
+        print("Creating default categories...")
         create_default_categories(db)
+        print("Creating default vendor units...")
         create_default_vendor_units(db)
+        print("Creating default vendors...")
         create_default_vendors(db)
+        print("Creating default par unit names...")
         create_default_par_unit_names(db)
+        print("Creating default janitorial tasks...")
         create_default_janitorial_tasks(db)
+        print("Default data creation completed successfully!")
     except Exception as e:
         # If default data creation fails, log it but don't prevent setup completion
-        print(f"Warning: Could not create some default data: {e}")
+        print(f"Error creating default data: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Auto-login the admin user
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

@@ -4,7 +4,7 @@ from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
 
 def create_default_categories(db: Session):
     """Create default categories with Unicode emojis if they don't exist"""
-    print("Starting category creation...")
+    print("Starting category creation process...")
     
     # Define categories with their Unicode emojis and colors
     default_categories = [
@@ -100,10 +100,22 @@ def create_default_categories(db: Session):
     
     try:
         db.commit()
-        print(f"Category creation completed. Created {created_count} new categories.")
+        print(f"✅ Category creation completed successfully! Created {created_count} new categories.")
+        
+        # Verify categories were created
+        total_categories = db.query(Category).count()
+        print(f"📊 Total categories in database: {total_categories}")
+        
+        # Show breakdown by type
+        for cat_type in ['ingredient', 'batch', 'inventory', 'dish']:
+            count = db.query(Category).filter(Category.type == cat_type).count()
+            print(f"   {cat_type}: {count} categories")
+            
     except Exception as e:
         db.rollback()
-        print(f"Error creating categories: {e}")
+        print(f"❌ Error creating categories: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 def create_default_vendor_units(db: Session):

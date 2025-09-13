@@ -345,10 +345,10 @@
                             {% for janitorial_task in janitorial_tasks %}
                             <tr>
                                 <td>
-                                    {% if item.category %}
-                                        {{ ing.category.icon or '🔘' }}
+                                    {% if janitorial_task.category %}
+                                        {{ janitorial_task.category.icon or '🧹' }}
                                     {% else %}
-                                        🔘
+                                        🧹
                                     {% endif %}
                                     <strong>{{ janitorial_task.title }}</strong>
                                     {% if janitorial_task.instructions %}
