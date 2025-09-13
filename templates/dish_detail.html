@@ -41,17 +41,31 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ portion.portion_size }}</td>
-                                <td>{{ portion.portion_unit.name if portion.portion_unit else (portion.batch.yield_unit.name if portion.batch.yield_unit else '-') }}</td>
+                                <td>
+                                    {% if portion.use_recipe_portion %}
+                                        {{ (portion.recipe_portion_percent * 100)|round(1) }}% of recipe
+                                    {% else %}
+                                        {{ portion.portion_unit or portion.batch.yield_unit or '-' }}
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if portion.batch.variable_yield %}
-                                        <span class="text-muted">Variable</span>
+                                        {% if portion.use_recipe_portion %}
+                                            ${{ "%.2f"|format(portion.get_expected_cost(db)) }}
+                                        {% else %}
+                                            <span class="text-muted">Variable</span>
+                                        {% endif %}
                                     {% else %}
                                         ${{ "%.2f"|format(portion.get_expected_cost(db)) }}
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if portion.batch.variable_yield %}
-                                        <span class="text-muted">Variable</span>
+                                        {% if portion.use_recipe_portion %}
+                                            ${{ "%.2f"|format(portion.get_actual_cost(db)) }}
+                                        {% else %}
+                                            <span class="text-muted">Variable</span>
+                                        {% endif %}
                                     {% else %}
                                         ${{ "%.2f"|format(portion.get_actual_cost(db)) }}
                                     {% endif %}

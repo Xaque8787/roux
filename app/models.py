@@ -491,6 +491,10 @@ class DishBatchPortion(Base):
     portion_size = Column(Float)
     portion_unit = Column(String)  # Standard unit
     
+    # Recipe portion fields
+    use_recipe_portion = Column(Boolean, default=False)
+    recipe_portion_percent = Column(Float)  # Percentage of recipe (0.0 to 1.0)
+    
     batch = relationship("Batch")
     
     def get_recipe_cost(self, db):
@@ -498,8 +502,17 @@ class DishBatchPortion(Base):
         if not self.batch or not self.portion_size:
             return 0
         
-        if self.batch.variable_yield:
-            return 0  # Can't calculate for variable yield
+        # Handle recipe portion for variable yield batches
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            return round(total_recipe_cost * self.recipe_portion_percent, 2)
+        
+        if self.batch.variable_yield and not self.use_recipe_portion:
+            return 0  # Can't calculate for variable yield without recipe portion
         
         recipe_ingredients = db.query(RecipeIngredient).filter(
             RecipeIngredient.recipe_id == self.batch.recipe_id
@@ -530,8 +543,26 @@ class DishBatchPortion(Base):
         if not self.batch or not self.portion_size:
             return 0
         
-        if self.batch.variable_yield:
-            return 0  # Can't calculate for variable yield
+        # Handle recipe portion for variable yield batches
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            # Get labor cost based on type
+            if labor_type == 'estimated':
+                labor_cost = self.batch.estimated_labor_cost
+            elif labor_type == 'actual':
+                labor_cost = self.batch.get_actual_labor_cost(db)
+            elif labor_type == 'week_avg':
+                labor_cost = self.batch.get_average_labor_cost_week(db)
+            elif labor_type == 'month_avg':
+                labor_cost = self.batch.get_average_labor_cost_month(db)
+            elif labor_type == 'all_time_avg':
+                labor_cost = self.batch.get_average_labor_cost_all_time(db)
+            else:
+                labor_cost = self.batch.estimated_labor_cost
+            
+            return round(labor_cost * self.recipe_portion_percent, 2)
+        
+        if self.batch.variable_yield and not self.use_recipe_portion:
+            return 0  # Can't calculate for variable yield without recipe portion
         
         # Get labor cost based on type
         if labor_type == 'estimated':

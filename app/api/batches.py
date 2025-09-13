@@ -210,3 +210,21 @@ async def get_batch_available_units(batch_id: int, db: Session = Depends(get_db)
     available_units = list(set(available_units))
     
     return available_units
+
+@router.get("/{batch_id}/recipe_cost")
+async def get_batch_recipe_cost(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    # Calculate total recipe cost
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    
+    return {
+        "batch_id": batch_id,
+        "recipe_name": batch.recipe.name,
+        "total_recipe_cost": total_recipe_cost,
+        "estimated_labor_cost": batch.estimated_labor_cost,
+        "actual_labor_cost": batch.get_actual_labor_cost(db)
+    }

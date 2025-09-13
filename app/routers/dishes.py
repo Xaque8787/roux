@@ -50,8 +50,10 @@ async def create_dish(
             dish_batch_portion = DishBatchPortion(
                 dish_id=dish.id,
                 batch_id=portion_data['batch_id'],
-                portion_size=portion_data['portion_size'],
-                portion_unit=portion_data['unit']
+                portion_size=portion_data.get('portion_size'),
+                portion_unit=portion_data.get('unit'),
+                use_recipe_portion=portion_data.get('use_recipe_portion', False),
+                recipe_portion_percent=portion_data.get('recipe_portion_percent')
             )
             db.add(dish_batch_portion)
     except (json.JSONDecodeError, KeyError) as e:
@@ -214,8 +216,10 @@ async def update_dish(
             dish_batch_portion = DishBatchPortion(
                 dish_id=dish.id,
                 batch_id=portion_data['batch_id'],
-                portion_size=portion_data['portion_size'],
-                portion_unit=portion_data['unit']
+                portion_size=portion_data.get('portion_size'),
+                portion_unit=portion_data.get('unit'),
+                use_recipe_portion=portion_data.get('use_recipe_portion', False),
+                recipe_portion_percent=portion_data.get('recipe_portion_percent')
             )
             db.add(dish_batch_portion)
     except (json.JSONDecodeError, KeyError) as e:

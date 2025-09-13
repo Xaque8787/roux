@@ -329,6 +329,26 @@ function showPortionModal(batch, availableUnits) {
                         <small class="text-muted">Enter portion size and select unit</small>
                     </div>
                     <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="useRecipePortionInput" onchange="toggleRecipePortionFields()">
+                            <label class="form-check-label" for="useRecipePortionInput">
+                                Use recipe portion (for variable yield batches)
+                            </label>
+                        </div>
+                        <small class="text-muted">Use percentage of recipe cost instead of fixed portion size</small>
+                    </div>
+                    <div id="recipePortionFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="recipePortionPercentInput" class="form-label">Recipe Portion Percentage</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="recipePortionPercentInput" 
+                                       step="0.1" min="0.1" max="100" placeholder="25">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <small class="text-muted">What percentage of the full recipe does this dish use? (e.g., 25% = 0.25 of recipe)</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
                         <small class="text-muted">Estimated cost: $<span id="estimatedPortionCost">0.00</span></small>
                     </div>
                 </div>
@@ -352,8 +372,20 @@ function showPortionModal(batch, availableUnits) {
     async function updatePortionCost() {
         const portionSize = parseFloat(portionSizeInput.value) || 0;
         const selectedUnit = portionUnitSelect.value;
+        const useRecipePortion = document.querySelector('#useRecipePortionInput').checked;
+        const recipePortionPercent = parseFloat(document.querySelector('#recipePortionPercentInput').value) || 0;
         
-        if (portionSize > 0 && selectedUnit) {
+        if (useRecipePortion && recipePortionPercent > 0) {
+            try {
+                const response = await fetch(`/api/batches/${batch.id}/recipe_cost`);
+                const data = await response.json();
+                const cost = data.total_recipe_cost * (recipePortionPercent / 100);
+                estimatedCost.textContent = cost.toFixed(2);
+            } catch (error) {
+                console.error('Error calculating recipe cost:', error);
+                estimatedCost.textContent = '0.00';
+            }
+        } else if (!useRecipePortion && portionSize > 0 && selectedUnit) {
             try {
                 const response = await fetch(`/api/batches/${batch.id}/cost_per_unit/${selectedUnit}`);
                 const data = await response.json();
@@ -371,6 +403,17 @@ function showPortionModal(batch, availableUnits) {
     portionSizeInput.addEventListener('input', updatePortionCost);
     portionUnitSelect.addEventListener('change', updatePortionCost);
     
+    // Add event listeners for recipe portion fields
+    const useRecipePortionInput = modal.querySelector('#useRecipePortionInput');
+    const recipePortionPercentInput = modal.querySelector('#recipePortionPercentInput');
+    
+    if (useRecipePortionInput) {
+        useRecipePortionInput.addEventListener('change', updatePortionCost);
+    }
+    if (recipePortionPercentInput) {
+        recipePortionPercentInput.addEventListener('input', updatePortionCost);
+    }
+    
     // Initial cost calculation with slight delay to ensure DOM is ready
     setTimeout(updatePortionCost, 100);
     
@@ -383,32 +426,55 @@ function showPortionModal(batch, availableUnits) {
 function addBatchToDish() {
     const portionSizeInput = document.querySelector('#portionSizeInput');
     const portionUnitSelect = document.querySelector('#portionUnitSelect');
+    const useRecipePortionInput = document.querySelector('#useRecipePortionInput');
+    const recipePortionPercentInput = document.querySelector('#recipePortionPercentInput');
     
     const portionSize = parseFloat(portionSizeInput.value);
     const portionUnit = portionUnitSelect.value;
     const portionUnitName = portionUnitSelect.selectedOptions[0].text;
+    const useRecipePortion = useRecipePortionInput.checked;
+    const recipePortionPercent = parseFloat(recipePortionPercentInput.value);
     
-    if (!portionSize || portionSize <= 0) {
-        alert('Please enter a valid portion size.');
-        return;
-    }
-    
-    if (!portionUnit) {
-        alert('Please select a portion unit.');
-        return;
+    if (useRecipePortion) {
+        if (!recipePortionPercent || recipePortionPercent <= 0 || recipePortionPercent > 100) {
+            alert('Please enter a valid recipe portion percentage (0.1 - 100%).');
+            return;
+        }
+    } else {
+        if (!portionSize || portionSize <= 0) {
+            alert('Please enter a valid portion size.');
+            return;
+        }
+        
+        if (!portionUnit) {
+            alert('Please select a portion unit.');
+            return;
+        }
     }
     
     const estimatedCost = parseFloat(document.querySelector('#estimatedPortionCost').textContent);
     
     // Add to selected batches
-    selectedBatches.push({
+    const batchData = {
         batch_id: currentBatchData.id,
         recipe_name: currentBatchData.recipe_name,
-        unit: portionUnit,
-        portion_unit_name: portionUnit,
-        portion_size: portionSize,
-        estimated_cost: estimatedCost
-    });
+        estimated_cost: estimatedCost,
+        use_recipe_portion: useRecipePortion
+    };
+    
+    if (useRecipePortion) {
+        batchData.recipe_portion_percent = recipePortionPercent / 100; // Convert to decimal
+        batchData.portion_size = null;
+        batchData.unit = null;
+        batchData.portion_unit_name = 'recipe %';
+    } else {
+        batchData.unit = portionUnit;
+        batchData.portion_unit_name = portionUnit;
+        batchData.portion_size = portionSize;
+        batchData.recipe_portion_percent = null;
+    }
+    
+    selectedBatches.push(batchData);
     
     // Update display
     updateSelectedBatchesDisplay();
@@ -442,7 +508,12 @@ function updateSelectedBatchesDisplay() {
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <strong>${batch.recipe_name}</strong><br>
-                            <small>${batch.portion_size} ${batch.portion_unit_name} - $${batch.estimated_cost.toFixed(2)}</small>
+                            <small>
+                                ${batch.use_recipe_portion ? 
+                                    `${(batch.recipe_portion_percent * 100).toFixed(1)}% of recipe` : 
+                                    `${batch.portion_size} ${batch.portion_unit_name}`
+                                } - $${batch.estimated_cost.toFixed(2)}
+                            </small>
                         </div>
                         <button type="button" class="btn btn-sm btn-danger" onclick="removeBatch(${index})">
                             <i class="fas fa-times"></i>
@@ -461,5 +532,25 @@ function removeBatch(index) {
     selectedBatches.splice(index, 1);
     updateSelectedBatchesDisplay();
 }
+function toggleRecipePortionFields() {
+    const useRecipePortionInput = document.querySelector('#useRecipePortionInput');
+    const recipePortionFields = document.querySelector('#recipePortionFields');
+    const portionSizeInput = document.querySelector('#portionSizeInput');
+    const portionUnitSelect = document.querySelector('#portionUnitSelect');
+    const recipePortionPercentInput = document.querySelector('#recipePortionPercentInput');
+    
+    if (useRecipePortionInput.checked) {
+        recipePortionFields.style.display = 'block';
+        portionSizeInput.required = false;
+        portionUnitSelect.required = false;
+        recipePortionPercentInput.required = true;
+    } else {
+        recipePortionFields.style.display = 'none';
+        portionSizeInput.required = true;
+        portionUnitSelect.required = true;
+        recipePortionPercentInput.required = false;
+    }
+}
+
 </script>
 {% endblock %}
