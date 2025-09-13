@@ -27,17 +27,12 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 from .dependencies import get_current_user
 
 # Import template helper functions
-from .utils.template_helpers import get_category_emoji, get_task_emoji
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
-
-# Register template functions
-templates.env.globals['get_category_emoji'] = get_category_emoji
-templates.env.globals['get_task_emoji'] = get_task_emoji
 
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")

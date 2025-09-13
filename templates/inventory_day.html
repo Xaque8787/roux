@@ -221,6 +221,21 @@
                                 <td>
                                     <small>{{ task.description }}</small>
                                     <span class="me-1" style="font-size: 1.2em;">{{ get_task_emoji(task) }}</span>
+                                    <span class="me-1" style="font-size: 1.2em;">
+                                        {% if task.janitorial_task_id %}
+                                            🧹
+                                        {% elif task.inventory_item and task.inventory_item.category %}
+                                            {{ task.inventory_item.category.icon or '🔘' }}
+                                        {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
+                                            {{ task.inventory_item.batch.category.icon or '🔘' }}
+                                        {% elif task.batch and task.batch.category %}
+                                            {{ task.batch.category.icon or '🔘' }}
+                                        {% elif task.category %}
+                                            {{ task.category.icon or '🔘' }}
+                                        {% else %}
+                                            🔘
+                                        {% endif %}
+                                    </span>
                                     {% if task.batch %}
                                     <br><small class="text-info">
                                         <i class="fas fa-industry"></i> {{ task.batch.recipe.name }}
