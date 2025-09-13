@@ -493,6 +493,79 @@ class DishBatchPortion(Base):
     
     batch = relationship("Batch")
     
+    def get_recipe_cost(self, db):
+        """Get just the recipe/food cost portion"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
+            return 0  # Can't calculate for variable yield
+        
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == self.batch.recipe_id
+        ).all()
+        
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        recipe_cost_per_yield_unit = total_recipe_cost / self.batch.yield_amount
+        
+        # Handle unit conversion for portion
+        if self.portion_unit == self.batch.yield_unit:
+            return self.portion_size * recipe_cost_per_yield_unit
+        else:
+            # Convert between units (simplified for now)
+            try:
+                if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                    converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                else:
+                    converted_portion = self.portion_size
+                
+                return converted_portion * recipe_cost_per_yield_unit
+            except ValueError:
+                return self.portion_size * recipe_cost_per_yield_unit
+    
+    def get_labor_cost(self, db, labor_type='actual'):
+        """Get just the labor cost portion"""
+        if not self.batch or not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
+            return 0  # Can't calculate for variable yield
+        
+        # Get labor cost based on type
+        if labor_type == 'estimated':
+            labor_cost = self.batch.estimated_labor_cost
+        elif labor_type == 'actual':
+            labor_cost = self.batch.get_actual_labor_cost(db)
+        elif labor_type == 'week_avg':
+            labor_cost = self.batch.get_average_labor_cost_week(db)
+        elif labor_type == 'month_avg':
+            labor_cost = self.batch.get_average_labor_cost_month(db)
+        elif labor_type == 'all_time_avg':
+            labor_cost = self.batch.get_average_labor_cost_all_time(db)
+        else:
+            labor_cost = self.batch.estimated_labor_cost
+        
+        labor_cost_per_yield_unit = labor_cost / self.batch.yield_amount
+        
+        # Handle unit conversion for portion
+        if self.portion_unit == self.batch.yield_unit:
+            return self.portion_size * labor_cost_per_yield_unit
+        else:
+            # Convert between units (simplified for now)
+            try:
+                if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                    converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                else:
+                    converted_portion = self.portion_size
+                
+                return converted_portion * labor_cost_per_yield_unit
+            except ValueError:
+                return self.portion_size * labor_cost_per_yield_unit
+    
     @property
     def expected_cost(self):
         """Calculate expected cost using estimated labor"""

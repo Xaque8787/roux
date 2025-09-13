@@ -103,7 +103,11 @@
                 
                 <hr>
                 <h6>Expected Costs (Estimated Labor)</h6>
-                <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(expected_total_cost) }}</span></p>
+                {% set expected_recipe_cost = dish_batch_portions|sum(attribute='recipe_cost') %}
+                {% set expected_labor_cost = expected_total_cost - expected_recipe_cost %}
+                <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(expected_recipe_cost) }}</span></p>
+                <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(expected_labor_cost) }}</span></p>
+                <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(expected_total_cost) }}</span></p>
                 <p><strong>Profit:</strong> 
                    <span class="{% if expected_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
                        ${{ "%.2f"|format(expected_profit) }}
@@ -126,7 +130,11 @@
                 <div class="row">
                     <div class="col-6">
                         <h6 class="text-primary">Most Recent</h6>
-                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost) }}</span></p>
+                        {% set actual_recipe_cost = dish_batch_portions|sum(attribute='recipe_cost') %}
+                        {% set actual_labor_cost = actual_total_cost - actual_recipe_cost %}
+                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
+                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost) }}</span></p>
+                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost) }}</span></p>
                         <p><strong>Profit:</strong> 
                            <span class="{% if actual_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
                                ${{ "%.2f"|format(actual_profit) }}
@@ -145,7 +153,11 @@
                     </div>
                     <div class="col-6">
                         <h6 class="text-info">Week Average</h6>
-                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost_week) }}</span></p>
+                        {% set week_recipe_cost = dish_batch_portions|sum(attribute='recipe_cost') %}
+                        {% set week_labor_cost = actual_total_cost_week - week_recipe_cost %}
+                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(week_recipe_cost) }}</span></p>
+                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(week_labor_cost) }}</span></p>
+                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_week) }}</span></p>
                         <p><strong>Profit:</strong> 
                            <span class="{% if actual_profit_week >= 0 %}text-success{% else %}text-danger{% endif %}">
                                ${{ "%.2f"|format(actual_profit_week) }}
@@ -167,7 +179,13 @@
                 <div class="row mt-2">
                     <div class="col-6">
                         <h6 class="text-warning">Month Average</h6>
-                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
+                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
+                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost_month) }}</span></p>
+                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
+                        {% set month_labor_cost = actual_total_cost_month - month_recipe_cost %}
+                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(month_recipe_cost) }}</span></p>
+                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(month_labor_cost) }}</span></p>
+                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
                         <p><strong>Profit:</strong> 
                            <span class="{% if actual_profit_month >= 0 %}text-success{% else %}text-danger{% endif %}">
                                ${{ "%.2f"|format(actual_profit_month) }}
@@ -186,7 +204,13 @@
                     </div>
                     <div class="col-6">
                         <h6 class="text-secondary">All Time Average</h6>
-                        <p><strong>Food Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
+                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
+                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost_all_time) }}</span></p>
+                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
+                        {% set all_time_labor_cost = actual_total_cost_all_time - all_time_recipe_cost %}
+                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(all_time_recipe_cost) }}</span></p>
+                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(all_time_labor_cost) }}</span></p>
+                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
                         <p><strong>Profit:</strong> 
                            <span class="{% if actual_profit_all_time >= 0 %}text-success{% else %}text-danger{% endif %}">
                                ${{ "%.2f"|format(actual_profit_all_time) }}
@@ -238,10 +262,10 @@
                 <div class="d-flex justify-content-between mb-1">
                     <small>{{ portion.batch.recipe.name }}</small>
                     <small>
-                        Est: ${{ "%.2f"|format(portion.expected_cost) }}<br>
-                        Recent: ${{ "%.2f"|format(portion.actual_cost) }}<br>
-                        Week: ${{ "%.2f"|format(portion.actual_cost_week_avg) }}<br>
-                        Month: ${{ "%.2f"|format(portion.actual_cost_month_avg) }}
+                        Food: ${{ "%.2f"|format(portion.get_recipe_cost(db)) }} | Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'estimated')) }}<br>
+                        Recent: ${{ "%.2f"|format(portion.get_actual_cost(db)) }} (Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'actual')) }})<br>
+                        Week: ${{ "%.2f"|format(portion.get_actual_cost_week_avg(db)) }} (Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'week_avg')) }})<br>
+                        Month: ${{ "%.2f"|format(portion.get_actual_cost_month_avg(db)) }} (Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'month_avg')) }})
                     </small>
                 </div>
                 {% endfor %}
@@ -249,16 +273,16 @@
                 <div class="d-flex justify-content-between">
                     <small><strong>Recent vs Expected</strong></small>
                     <small>
-                        <strong class="{% if actual_total_cost > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
-                            {% if actual_total_cost > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost - expected_total_cost) }}
+                        <strong class="{% if (actual_total_cost - expected_total_cost) > 0.01 %}text-danger{% elif (actual_total_cost - expected_total_cost) < -0.01 %}text-success{% else %}text-muted{% endif %}">
+                            {% if (actual_total_cost - expected_total_cost) > 0.01 %}+{% endif %}${{ "%.2f"|format(actual_total_cost - expected_total_cost) }}
                         </strong>
                     </small>
                 </div>
                 <div class="d-flex justify-content-between">
                     <small><strong>Week vs Expected</strong></small>
                     <small>
-                        <strong class="{% if actual_total_cost_week > expected_total_cost %}text-danger{% else %}text-success{% endif %}">
-                            {% if actual_total_cost_week > expected_total_cost %}+{% endif %}${{ "%.2f"|format(actual_total_cost_week - expected_total_cost) }}
+                        <strong class="{% if (actual_total_cost_week - expected_total_cost) > 0.01 %}text-danger{% elif (actual_total_cost_week - expected_total_cost) < -0.01 %}text-success{% else %}text-muted{% endif %}">
+                            {% if (actual_total_cost_week - expected_total_cost) > 0.01 %}+{% endif %}${{ "%.2f"|format(actual_total_cost_week - expected_total_cost) }}
                         </strong>
                     </small>
                 </div>
