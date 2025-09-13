@@ -108,11 +108,11 @@
                                 <td>
                                     <small>{{ task.description }}</small>
                                     {% if task.batch %}
-                                    <br><small class="text-info"><i class="fas fa-industry"></i> Batch</small>
+                                   <br><small class="text-info">Batch</small>
                                     {% elif task.janitorial_task %}
-                                    <br><small class="text-warning"><i class="fas fa-broom"></i> Janitorial</small>
+                                   <br><small class="text-warning">🧹 Janitorial</small>
                                     {% else %}
-                                    <br><small class="text-secondary"><i class="fas fa-hand-paper"></i> Manual</small>
+                                   <br><small class="text-secondary">✋ Manual</small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -144,12 +144,12 @@
                                     {% if task.auto_generated %}
                                         <span class="badge bg-info">Auto</span>
                                         {% if task.janitorial_task %}
-                                        <span class="badge bg-warning ms-1">Janitorial</span>
+                                       <span class="badge bg-warning ms-1">🧹</span>
                                         {% endif %}
                                     {% else %}
                                         <span class="badge bg-secondary">Manual</span>
                                         {% if task.janitorial_task %}
-                                        <span class="badge bg-warning ms-1">Janitorial</span>
+                                       <span class="badge bg-warning ms-1">🧹</span>
                                         {% endif %}
                                     {% endif %}
                                 </td>

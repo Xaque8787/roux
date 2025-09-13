@@ -183,7 +183,7 @@
                 </p>
                 {% endif %}
                 {% elif task.janitorial_task %}
-                <h6><i class="fas fa-broom"></i> Janitorial Task</h6>
+                <h6>🧹 Janitorial Task</h6>
                 <p><strong>Title:</strong> {{ task.janitorial_task.title }}</p>
                 {% if task.janitorial_task.instructions %}
                 <p><strong>Instructions:</strong></p>
@@ -205,7 +205,7 @@
                 <p><small class="text-muted">Labor cost only - no food cost for janitorial tasks</small></p>
                 {% endif %}
                 {% else %}
-                <h6><i class="fas fa-hand-paper"></i> Manual Task</h6>
+                <h6>✋ Manual Task</h6>
                 <p><strong>Title:</strong> {{ task.description }}</p>
                 <p><strong>Task Type:</strong> <span class="badge bg-secondary">Manual</span></p>
                 <p><small class="text-muted">Manually created task - no batch or janitorial template linked</small></p>
