@@ -26,6 +26,9 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 # Import dependencies
 from .dependencies import get_current_user
 
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
 # Template helper functions
 def get_category_emoji(category):
     """Get emoji for a category, with fallback"""
@@ -58,9 +61,6 @@ def get_task_emoji(task):
     
     # Final fallback
     return "🔘"
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")

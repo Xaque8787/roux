@@ -196,27 +196,6 @@ def create_default_par_unit_names(db: Session):
         db.rollback()
         pass
 
-def create_default_janitorial_tasks(db: Session):
-    """Create default janitorial tasks if they don't exist"""
-    default_tasks = [
-        ("Clean Kitchen Floors", "Sweep and mop all kitchen floor areas", "daily"),
-        ("Empty Trash Bins", "Empty all trash bins and replace liners", "daily"),
-        ("Sanitize Work Surfaces", "Clean and sanitize all prep surfaces", "daily"),
-        ("Deep Clean Equipment", "Thorough cleaning of kitchen equipment", "manual"),
-        ("Clean Storage Areas", "Organize and clean storage rooms", "manual"),
-    ]
-    
-    for title, instructions, task_type in default_tasks:
-        existing = db.query(JanitorialTask).filter(JanitorialTask.title == title).first()
-        if not existing:
-            task = JanitorialTask(title=title, instructions=instructions, task_type=task_type)
-            db.add(task)
-    
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        pass
 
 def get_today_date():
     """Get today's date as string"""
