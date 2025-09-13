@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
 
 def create_default_categories(db: Session):
-    """Create default categories with emojis if they don't exist"""
+    """Create default categories with Unicode emojis if they don't exist"""
     print("Starting category creation...")
     
-    # Define categories with their emojis and colors
+    # Define categories with their Unicode emojis and colors
     default_categories = [
         # Ingredients
         ("Cheese", "ingredient", "🧀", "#ffc107"),
