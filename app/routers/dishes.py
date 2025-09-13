@@ -112,7 +112,8 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         "actual_profit_month": actual_profit_month,
         "actual_profit_margin_month": actual_profit_margin_month,
         "actual_profit_all_time": actual_profit_all_time,
-        "actual_profit_margin_all_time": actual_profit_margin_all_time
+        "actual_profit_margin_all_time": actual_profit_margin_all_time,
+        "db": db
     })
 
 @router.get("/{dish_id}/edit", response_class=HTMLResponse)

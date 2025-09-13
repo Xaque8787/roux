@@ -120,7 +120,7 @@ async def get_batch_cost_per_unit(batch_id: int, unit: str, db: Session = Depend
     expected_cost_per_yield_unit = expected_total_cost / batch.yield_amount if batch.yield_amount else 0
     
     # Actual cost (with most recent actual labor)
-    actual_total_cost = total_recipe_cost + batch.actual_labor_cost
+    actual_total_cost = total_recipe_cost + batch.get_actual_labor_cost(db)
     actual_cost_per_yield_unit = actual_total_cost / batch.yield_amount if batch.yield_amount else 0
     
     # Convert to requested unit if different from yield unit
