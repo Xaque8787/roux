@@ -511,7 +511,11 @@ class DishBatchPortion(Base):
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
             return round(total_recipe_cost * self.recipe_portion_percent, 2)
         
-        if self.batch.variable_yield and not self.use_recipe_portion:
+        # For non-recipe portion mode, check if we have portion size
+        if not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
             return 0  # Can't calculate for variable yield without recipe portion
         
         recipe_ingredients = db.query(RecipeIngredient).filter(
@@ -540,7 +544,7 @@ class DishBatchPortion(Base):
     
     def get_labor_cost(self, db, labor_type='actual'):
         """Get just the labor cost portion"""
-        if not self.batch or not self.portion_size:
+        if not self.batch:
             return 0
         
         # Handle recipe portion for variable yield batches
@@ -561,7 +565,11 @@ class DishBatchPortion(Base):
             
             return round(labor_cost * self.recipe_portion_percent, 2)
         
-        if self.batch.variable_yield and not self.use_recipe_portion:
+        # For non-recipe portion mode, check if we have portion size
+        if not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
             return 0  # Can't calculate for variable yield without recipe portion
         
         # Get labor cost based on type
@@ -649,12 +657,20 @@ class DishBatchPortion(Base):
     
     def _calculate_cost_with_labor_type(self, db, labor_type):
         """Calculate the cost of this dish batch portion"""
-        if not self.batch or not self.portion_size:
+        if not self.batch:
+            return 0
+        
+        # Handle recipe portion for variable yield batches
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            recipe_cost = self.get_recipe_cost(db)
+            labor_cost = self.get_labor_cost(db, labor_type)
+            return round(recipe_cost + labor_cost, 2)
+        
+        # For non-recipe portion mode, check if we have portion size
+        if not self.portion_size:
             return 0
         
         if self.batch.variable_yield:
-            # For variable yield batches, we can't calculate cost per unit
-            # This would need to be handled by recipe portion system
             return 0
         
         recipe_ingredients = db.query(RecipeIngredient).filter(
