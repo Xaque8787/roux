@@ -108,6 +108,7 @@ async def update_batch(
     recipe_id: int = Form(...),
     category_id: int = Form(None),
     variable_yield: bool = Form(False),
+    variable_yield: bool = Form(False),
     yield_amount: float = Form(None),
     yield_unit: str = Form(None),
     estimated_labor_minutes: int = Form(...),
@@ -127,6 +128,7 @@ async def update_batch(
     
     batch.recipe_id = recipe_id
     batch.category_id = category_id if category_id else None
+    batch.variable_yield = variable_yield
     batch.variable_yield = variable_yield
     batch.yield_amount = yield_amount if not variable_yield else None
     batch.yield_unit = yield_unit if not variable_yield else None

@@ -42,27 +42,32 @@
                         </select>
                     </div>
                     
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="variable_yield" name="variable_yield" 
+                               {% if batch.variable_yield %}checked{% endif %} onchange="toggleYieldFields()">
+                        <label class="form-check-label" for="variable_yield">
+                            Variable Yield (undetermined amount)
+                        </label>
+                    </div>
+                    
+                    <div id="yieldFields" {% if batch.variable_yield %}style="display: none;"{% endif %}>
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="yield_amount" class="form-label">Yield Amount</label>
                                 <input type="number" class="form-control" id="yield_amount" name="yield_amount" 
-                                       step="0.01" value="{{ batch.yield_amount }}" required>
+                                       step="0.01" value="{{ batch.yield_amount or '' }}" {% if not batch.variable_yield %}required{% endif %}>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="yield_unit_id" class="form-label">Yield Unit</label>
-                                <select class="form-select" id="yield_unit_id" name="yield_unit_id" required>
+                                <label for="yield_unit" class="form-label">Yield Unit</label>
+                                <select class="form-select" id="yield_unit" name="yield_unit" {% if not batch.variable_yield %}required{% endif %}>
                                     <option value="">Select Unit</option>
-                                    {% for unit in usage_units %}
-                                    <option value="{{ unit.id }}" {% if batch.yield_unit_id == unit.id %}selected{% endif %}>
-                                        {{ unit.name }}
-                                    </option>
-                                    {% endfor %}
                                 </select>
                             </div>
                         </div>
+                    </div>
                     </div>
                     
                     <div class="mb-3">
@@ -150,59 +155,82 @@ function toggleScalingOptions() {
     }
 }
 
+function toggleYieldFields() {
+    const checkbox = document.getElementById('variable_yield');
+    const yieldFields = document.getElementById('yieldFields');
+    const yieldAmountInput = document.getElementById('yield_amount');
+    const yieldUnitSelect = document.getElementById('yield_unit');
+    
+    if (checkbox.checked) {
+        yieldFields.style.display = 'none';
+        yieldAmountInput.required = false;
+        yieldUnitSelect.required = false;
+    } else {
+        yieldFields.style.display = 'block';
+        yieldAmountInput.required = true;
+        yieldUnitSelect.required = true;
+    }
+}
+
 async function loadRecipeUsageUnits() {
     const recipeSelect = document.getElementById('recipe_id');
-    const yieldUnitSelect = document.getElementById('yield_unit_id');
-    const currentYieldUnitId = {{ batch.yield_unit_id if batch.yield_unit_id else 'null' }};
+    const yieldUnitSelect = document.getElementById('yield_unit');
+    const currentYieldUnit = '{{ batch.yield_unit or "" }}';
     
     if (!recipeSelect.value) {
         // Show all usage units if no recipe selected
-        showAllUnits(currentYieldUnitId);
+        showAllUnits(currentYieldUnit);
         return;
     }
     
     try {
         const response = await fetch(`/api/recipes/${recipeSelect.value}/usage_units`);
-        const usageUnits = await response.json();
+        const availableUnits = await response.json();
         
         yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
-        usageUnits.forEach(unit => {
+        availableUnits.forEach(unit => {
             const option = document.createElement('option');
-            option.value = unit.id;
-            option.textContent = unit.name;
-            if (unit.id === currentYieldUnitId) {
+            option.value = unit;
+            option.textContent = unit;
+            if (unit === currentYieldUnit) {
                 option.selected = true;
             }
             yieldUnitSelect.appendChild(option);
         });
         
         // If no units found from recipe, show all units
-        if (usageUnits.length === 0) {
-            showAllUnits(currentYieldUnitId);
+        if (availableUnits.length === 0) {
+            showAllUnits(currentYieldUnit);
         }
     } catch (error) {
         console.error('Error loading usage units:', error);
-        showAllUnits(currentYieldUnitId);
+        showAllUnits(currentYieldUnit);
     }
 }
 
-function showAllUnits(currentYieldUnitId) {
-    const yieldUnitSelect = document.getElementById('yield_unit_id');
+function showAllUnits(currentYieldUnit) {
+    const yieldUnitSelect = document.getElementById('yield_unit');
     yieldUnitSelect.innerHTML = '<option value="">Select Unit</option>';
     
-    {% for unit in usage_units %}
-    const option{{ unit.id }} = document.createElement('option');
-    option{{ unit.id }}.value = {{ unit.id }};
-    option{{ unit.id }}.textContent = '{{ unit.name }}';
-    if ({{ unit.id }} === currentYieldUnitId) {
-        option{{ unit.id }}.selected = true;
-    }
-    yieldUnitSelect.appendChild(option{{ unit.id }});
-    {% endfor %}
+    // Add common units as fallback
+    const commonUnits = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
+    commonUnits.forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit;
+        if (unit === currentYieldUnit) {
+            option.selected = true;
+        }
+        yieldUnitSelect.appendChild(option);
+    });
 }
 
 // Load usage units on page load if recipe is already selected
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize yield fields based on current state
+    toggleYieldFields();
+    
+    // Load recipe units if recipe is selected
     if (document.getElementById('recipe_id').value) {
         loadRecipeUsageUnits();
     }
