@@ -72,7 +72,6 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
     
     dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
     
-    # Calculate costs
     # Calculate costs dynamically for each portion
     expected_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
     expected_labor_cost = sum(portion.get_labor_cost(db, 'estimated') for portion in dish_batch_portions)
@@ -121,12 +120,15 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         "actual_total_cost": actual_total_cost,
         "actual_recipe_cost": actual_recipe_cost,
         "actual_labor_cost": actual_labor_cost,
+        "week_recipe_cost": week_recipe_cost,
+        "week_labor_cost": week_labor_cost,
         "actual_total_cost_week": actual_total_cost_week,
-        "actual_labor_cost_week": actual_labor_cost_week,
+        "month_recipe_cost": month_recipe_cost,
+        "month_labor_cost": month_labor_cost,
         "actual_total_cost_month": actual_total_cost_month,
-        "actual_labor_cost_month": actual_labor_cost_month,
+        "all_time_recipe_cost": all_time_recipe_cost,
+        "all_time_labor_cost": all_time_labor_cost,
         "actual_total_cost_all_time": actual_total_cost_all_time,
-        "actual_labor_cost_all_time": actual_labor_cost_all_time,
         "expected_profit": expected_profit,
         "expected_profit_margin": expected_profit_margin,
         "actual_profit": actual_profit,
@@ -137,12 +139,6 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         "actual_profit_margin_month": actual_profit_margin_month,
         "actual_profit_all_time": actual_profit_all_time,
         "actual_profit_margin_all_time": actual_profit_margin_all_time,
-        "week_recipe_cost": week_recipe_cost,
-        "week_labor_cost": week_labor_cost,
-        "month_recipe_cost": month_recipe_cost,
-        "month_labor_cost": month_labor_cost,
-        "all_time_recipe_cost": all_time_recipe_cost,
-        "all_time_labor_cost": all_time_labor_cost,
         "db": db
     })
 
