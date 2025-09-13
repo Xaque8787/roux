@@ -10,9 +10,9 @@
     </div>
 </div>
 
-<div class="row mt-4">
+<div class="row mt-4 g-3">
     {% if current_user.role == "admin" %}
-    <div class="col-md-4 mb-3">
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-users fa-3x text-dark mb-3"></i>
@@ -24,7 +24,7 @@
     </div>
     {% endif %}
     
-    <div class="col-md-4 mb-3">
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-carrot fa-3x text-success mb-3"></i>
@@ -39,7 +39,7 @@
         </div>
     </div>
     
-    <div class="col-md-4 mb-3">
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-book fa-3x text-info mb-3"></i>
@@ -54,7 +54,7 @@
         </div>
     </div>
     
-    <div class="col-md-4 mb-3">
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-industry fa-3x text-warning mb-3"></i>
@@ -68,13 +68,11 @@
             </div>
         </div>
     </div>
-</div>
-
-<div class="row">
-    <div class="col-md-4 mb-3">
+    
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
-                <i class="fas fa-plate-wheat fa-3x text-primary mb-3"></i>
+                <i class="fas fa-utensils fa-3x text-primary mb-3"></i>
                 <h5 class="card-title">Dishes</h5>
                 <p class="card-text">Create menu items and calculate profitability.</p>
                 {% if current_user.role == "admin" %}
@@ -86,7 +84,7 @@
         </div>
     </div>
     
-    <div class="col-md-4 mb-3">
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-boxes fa-3x text-secondary mb-3"></i>
@@ -102,7 +100,7 @@
     </div>
     
     {% if current_user.role == "admin" %}
-    <div class="col-md-4 mb-3">
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-bolt fa-3x text-danger mb-3"></i>
