@@ -57,14 +57,14 @@
                     
                     <h6>Batch Portions:</h6>
                     <div class="mb-3">
-                        <label for="batchSearch" class="form-label">Search & Select Batch</label>
-                        <div class="position-relative">
+                        <div class="input-group">
                             <input type="text" class="form-control" id="batchSearch" 
-                                   placeholder="Type to search batches..." autocomplete="off">
-                            <div id="batchDropdown" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;">
-                                <!-- Batch options will appear here -->
-                            </div>
+                                   placeholder="Search for batches..." autocomplete="off">
+                            <button type="button" class="btn btn-outline-secondary" id="addBatchBtn">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
                         </div>
+                        <div id="batchSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
                     </div>
                     
                     <div id="selectedBatches" class="mb-3">
@@ -96,37 +96,56 @@ document.addEventListener('DOMContentLoaded', function() {
     selectedBatches.push({
         batch_id: {{ portion.batch_id }},
         recipe_name: "{{ portion.batch.recipe.name }}",
-        unit: "{{ portion.portion_unit or portion.batch.yield_unit }}",
-        portion_unit_name: "{{ portion.portion_unit or portion.batch.yield_unit }}",
+        unit: "{{ portion.portion_unit or portion.batch.yield_unit or '' }}",
+        portion_unit_name: "{{ portion.portion_unit or portion.batch.yield_unit or '' }}",
         portion_size: {{ portion.portion_size }},
-        estimated_cost: {{ portion.expected_cost if portion.expected_cost else 0 }}
+        estimated_cost: {{ portion.get_expected_cost(db) }},
+        use_recipe_portion: {{ portion.use_recipe_portion|lower }},
+        recipe_portion_percent: {{ portion.recipe_portion_percent or 0 }}
     });
     {% endfor %}
     
     updateSelectedBatchesDisplay();
     
-    // Load all batches for dropdown
-    loadAllBatches();
-    
     const batchSearch = document.getElementById('batchSearch');
-    const dropdown = document.getElementById('batchDropdown');
+    const suggestions = document.getElementById('batchSuggestions');
     
-    // Search functionality
+    let searchTimeout;
+    
+    // Search batches as user types
     batchSearch.addEventListener('input', function() {
-        const query = this.value.toLowerCase().trim();
-        filterBatches(query);
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length === 0) {
+            loadAllBatches();
+            return;
+        }
+        
+        if (query.length < 2) {
+            suggestions.style.display = 'none';
+            return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+            fetch(`/api/batches/search?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    displayBatchSuggestions(data);
+                })
+                .catch(error => console.error('Error:', error));
+        }, 300);
     });
     
-    // Show all batches when focused
+    // Show all batches when field is focused
     batchSearch.addEventListener('focus', function() {
-        filterBatches('');
-        dropdown.style.display = 'block';
+        loadAllBatches();
     });
     
-    // Hide dropdown when clicking outside
+    // Hide suggestions when clicking outside
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('#batchSearch') && !e.target.closest('#batchDropdown')) {
-            dropdown.style.display = 'none';
+        if (!e.target.closest('#batchSearch') && !e.target.closest('#batchSuggestions')) {
+            suggestions.style.display = 'none';
         }
     });
     
@@ -136,69 +155,46 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-async function loadAllBatches() {
-    try {
-        const response = await fetch('/api/batches/all');
-        if (!response.ok) {
-            throw new Error('Failed to load batches');
-        }
-        allBatches = await response.json();
-        console.log('Loaded batches:', allBatches);
-        filterBatches(''); // Show all batches initially
-    } catch (error) {
-        console.error('Error loading batches:', error);
-        document.getElementById('batchDropdown').innerHTML = '<div class="dropdown-item-text text-danger">Error loading batches</div>';
-    }
+function loadAllBatches() {
+    fetch('/api/batches/all')
+        .then(response => response.json())
+        .then(data => {
+            displayBatchSuggestions(data);
+        })
+        .catch(error => console.error('Error loading all batches:', error));
 }
 
-function filterBatches(query) {
-    const dropdown = document.getElementById('batchDropdown');
+function displayBatchSuggestions(batches) {
+    const suggestions = document.getElementById('batchSuggestions');
     
-    if (!allBatches || allBatches.length === 0) {
-        dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No batches available</div>';
-        dropdown.style.display = 'block';
+    if (batches.length === 0) {
+        suggestions.style.display = 'none';
         return;
     }
     
-    const filteredBatches = allBatches.filter(batch => 
-        batch.recipe_name.toLowerCase().includes(query) ||
-        (batch.category && batch.category.toLowerCase().includes(query))
-    );
-    
-    dropdown.innerHTML = '';
-    
-    if (filteredBatches.length === 0) {
-        dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No batches found</div>';
-    } else {
-        filteredBatches.forEach(batch => {
-            const item = document.createElement('a');
-            item.className = 'dropdown-item';
-            item.href = '#';
-            item.innerHTML = `
-                <strong>${batch.recipe_name}</strong><br>
-                <small>Yield: ${batch.yield_amount || 'Variable'} ${batch.yield_unit || ''} - $${batch.cost_per_unit.toFixed(4)}/unit</small>
-                ${batch.category ? `<br><small class="text-muted">${batch.category}</small>` : ''}
-            `;
-            
-            item.addEventListener('click', function(e) {
-                e.preventDefault();
-                selectBatch(batch);
-                document.getElementById('batchSearch').value = batch.recipe_name;
-                dropdown.style.display = 'none';
-            });
-            
-            dropdown.appendChild(item);
+    suggestions.innerHTML = '';
+    batches.forEach(batch => {
+        const item = document.createElement('a');
+        item.className = 'dropdown-item';
+        item.href = '#';
+        item.innerHTML = `
+            <strong>${batch.recipe_name}</strong><br>
+            <small>Yield: ${batch.yield_amount || 'Variable'} ${batch.yield_unit || ''} - $${batch.cost_per_unit.toFixed(4)}/unit</small>
+            ${batch.category ? `<br><small class="text-muted">${batch.category}</small>` : ''}
+        `;
+        
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            selectBatch(batch);
         });
-    }
+        
+        suggestions.appendChild(item);
+    });
     
-    if (query || document.getElementById('batchSearch') === document.activeElement) {
-        dropdown.style.display = 'block';
-    }
+    suggestions.style.display = 'block';
 }
 
 function selectBatch(batch) {
-    console.log('Selected batch:', batch);
-    
     // Check if batch already selected
     if (selectedBatches.find(sb => sb.batch_id === batch.id)) {
         alert('This batch is already added to the dish.');
@@ -206,22 +202,24 @@ function selectBatch(batch) {
     }
     
     currentBatchData = batch;
+    document.getElementById('batchSearch').value = batch.recipe_name;
+    document.getElementById('batchSuggestions').style.display = 'none';
+    
+    // Show portion size selection
     showPortionSizeSelection(batch);
 }
 
 function showPortionSizeSelection(batch) {
     // First load available portion units for this batch
-    console.log('Loading portion units for batch:', batch.id);
     fetch(`/api/batches/${batch.id}/portion_units`)
         .then(response => response.json())
         .then(units => {
-            console.log('Loaded units:', units);
             showPortionModal(batch, units);
         })
         .catch(error => {
             console.error('Error loading portion units:', error);
             // Fallback to just yield unit
-            showPortionModal(batch, [{id: batch.yield_unit_id, name: batch.yield_unit}]);
+            showPortionModal(batch, [{id: batch.yield_unit, name: batch.yield_unit}]);
         });
 }
 
