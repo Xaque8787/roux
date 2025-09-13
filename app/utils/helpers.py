@@ -12,7 +12,7 @@ def create_default_categories(db: Session):
         ("Cheese", "ingredient", "🧀", "#ffc107"),
         ("Eggs", "ingredient", "🥚", "#ffc107"),
         ("Dairy", "ingredient", "🐄", "#6f42c1"),
-        ("Produce", "ingredient", "🥕", "#28a745"),
+        ("Produce", "ingredient", "🌿", "#28a745"),
         ("Meat & Poultry", "ingredient", "🍗", "#dc3545"),
         ("Seafood", "ingredient", "🐟", "#17a2b8"),
         ("Soups", "ingredient", "🥣", "#fd7e14"),
