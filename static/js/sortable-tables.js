@@ -4,8 +4,11 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Sortable tables script loaded');
+    
     // Find all tables with sortable class
     const sortableTables = document.querySelectorAll('.table-sortable');
+    console.log('Found sortable tables:', sortableTables.length);
     
     sortableTables.forEach(table => {
         initializeSortableTable(table);
@@ -14,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeSortableTable(table) {
     const headers = table.querySelectorAll('thead th[data-sortable]');
+    console.log('Found sortable headers:', headers.length);
     
     headers.forEach((header, index) => {
         // Add sorting indicator
@@ -23,6 +27,7 @@ function initializeSortableTable(table) {
         
         // Add click event
         header.addEventListener('click', function() {
+            console.log('Sorting column:', index);
             sortTable(table, index, header);
         });
     });
@@ -34,6 +39,8 @@ function sortTable(table, columnIndex, header) {
     const sortType = header.getAttribute('data-sort-type') || 'text';
     const currentDirection = header.getAttribute('data-sort-direction') || 'asc';
     const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+    
+    console.log('Sorting:', sortType, 'direction:', newDirection);
     
     // Clear all other sort indicators
     table.querySelectorAll('thead th .sort-icon').forEach(icon => {
@@ -122,6 +129,8 @@ const style = document.createElement('style');
 style.textContent = `
     .table-sortable thead th[data-sortable] {
         position: relative;
+        cursor: pointer;
+        user-select: none;
     }
     
     .table-sortable thead th[data-sortable]:hover {
