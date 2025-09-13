@@ -33,7 +33,6 @@
                         <div class="input-group">
                             <select class="form-select" id="category_id" name="category_id">
                                 <option value="">Select Category</option>
-                                {% for cat in categories %}
                                 <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
                                 {% endfor %}
                             </select>

@@ -254,7 +254,13 @@
                                         <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ item.category.name if item.category else '-' }}</td>
+                               <td>
+                                   {% if item.category %}
+                                       {{ item.category.icon or '🔘' }} {{ item.category.name }}
+                                   {% else %}
+                                       -
+                                   {% endif %}
+                               </td>
                                 <td>
                                     {% if current_user.role == "admin" %}
                                     <a href="/inventory/items/{{ item.id }}/edit" class="btn btn-sm btn-warning">

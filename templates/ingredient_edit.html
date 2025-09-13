@@ -34,7 +34,6 @@
                                     <option value="">Select Category</option>
                                     {% for cat in categories %}
                                     <option value="{{ cat.id }}" {% if ingredient.category_id == cat.id %}selected{% endif %}>{{ cat.icon or '🔘' }} {{ cat.name }}</option>
-                                    <option value="{{ cat.id }}" {% if ingredient.category_id == cat.id %}selected{% endif %}>{{ cat.icon or '🔘' }} {{ cat.name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>

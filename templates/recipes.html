@@ -33,7 +33,6 @@
                                 <option value="">Select Category</option>
                                 {% for cat in categories %}
                                 <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
-                                <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
                                 {% endfor %}
                             </select>
                             <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categoryModal">
