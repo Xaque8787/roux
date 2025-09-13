@@ -159,7 +159,7 @@
         
         <div class="card mt-3">
             <div class="card-header">
-                <h5><i class="fas fa-industry"></i> Task Details</h5>
+                <h5><i class="fas fa-info-circle"></i> Task Details</h5>
             </div>
             <div class="card-body">
                 {% if task.batch %}
@@ -205,12 +205,30 @@
                 <p><small class="text-muted">Labor cost only - no food cost for janitorial tasks</small></p>
                 {% endif %}
                 {% else %}
-                <h6>✋ Manual</h6>
-                <p><strong>Title:</strong> {{ task.description }}</p>
+                <h6>Manual Task</h6>
+                <p><strong>Description:</strong> {{ task.description }}</p>
                 {% if task.finished_at and task.assigned_to %}
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
                 {% endif %}
                 {% endif %}
+                
+                <hr>
+                <h6>Task Category</h6>
+                <p>
+                    {% if task.janitorial_task_id %}
+                        🧹 Janitorial
+                    {% elif task.inventory_item and task.inventory_item.category %}
+                        {{ task.inventory_item.category.icon or '🔘' }} {{ task.inventory_item.category.name }}
+                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
+                        {{ task.inventory_item.batch.category.icon or '🔘' }} {{ task.inventory_item.batch.category.name }}
+                    {% elif task.batch and task.batch.category %}
+                        {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}
+                    {% elif task.category %}
+                        {{ task.category.icon or '🔘' }} {{ task.category.name }}
+                    {% else %}
+                        🔘 Uncategorized
+                    {% endif %}
+                </p>
             </div>
         </div>
         
