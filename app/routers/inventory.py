@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import date, timedelta
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
