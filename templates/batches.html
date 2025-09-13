@@ -61,7 +61,7 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="yield_unit" class="form-label">Yield Unit</label>
-                                <select class="form-select" id="yield_unit" name="yield_unit" required>
+                                    <option value="{{ cat.id }}">{{ get_category_emoji(cat) }} {{ cat.name }}</option>
                                     <option value="">Select Unit</option>
                                 </select>
                             </div>

@@ -536,7 +536,7 @@
                         <select class="form-select" id="modal_category_id" name="category_id">
                             <option value="">No category</option>
                             {% for cat in categories %}
-                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
+                            <option value="{{ cat.id }}">{{ get_category_emoji(cat) }} {{ cat.name }}</option>
                             {% endfor %}
                         </select>
                         <small class="text-muted">Select category for manual tasks (affects task icon)</small>
