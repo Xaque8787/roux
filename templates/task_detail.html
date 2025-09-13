@@ -50,13 +50,6 @@
                                 <span class="text-warning">Unassigned</span>
                             {% endif %}
                         </p>
-                        <p><strong>Type:</strong> 
-                            {% if task.auto_generated %}
-                                <span class="badge bg-info">Auto-generated</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Manual</span>
-                            {% endif %}
-                        </p>
                         <p><strong>Status:</strong> 
                             {% if task.status == "not_started" %}
                                 <span class="badge bg-secondary">Not Started</span>
@@ -204,8 +197,10 @@
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
                 <p><small class="text-muted">Labor cost only - no food cost for janitorial tasks</small></p>
                 {% endif %}
-                {% else %}
-                <h6>Manual Task</h6>
+                {% endif %}
+                
+                {% if not task.batch and not task.janitorial_task %}
+                <h6>Task Details</h6>
                 <p><strong>Description:</strong> {{ task.description }}</p>
                 {% if task.finished_at and task.assigned_to %}
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
@@ -213,10 +208,10 @@
                 {% endif %}
                 
                 <hr>
-                <h6>Task Category</h6>
+                <h6>Category</h6>
                 <p>
                     {% if task.janitorial_task_id %}
-                        🧹 Janitorial
+                        🧹 Janitorial Task
                     {% elif task.inventory_item and task.inventory_item.category %}
                         {{ task.inventory_item.category.icon or '🔘' }} {{ task.inventory_item.category.name }}
                     {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
