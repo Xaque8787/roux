@@ -103,8 +103,6 @@
                 
                 <hr>
                 <h6>Expected Costs (Estimated Labor)</h6>
-                {% set expected_recipe_cost = dish_batch_portions|sum(attribute='recipe_cost') %}
-                {% set expected_labor_cost = expected_total_cost - expected_recipe_cost %}
                 <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(expected_recipe_cost) }}</span></p>
                 <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(expected_labor_cost) }}</span></p>
                 <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(expected_total_cost) }}</span></p>
@@ -130,8 +128,6 @@
                 <div class="row">
                     <div class="col-6">
                         <h6 class="text-primary">Most Recent</h6>
-                        {% set actual_recipe_cost = dish_batch_portions|sum(attribute='recipe_cost') %}
-                        {% set actual_labor_cost = actual_total_cost - actual_recipe_cost %}
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost) }}</span></p>
@@ -153,8 +149,6 @@
                     </div>
                     <div class="col-6">
                         <h6 class="text-info">Week Average</h6>
-                        {% set week_recipe_cost = dish_batch_portions|sum(attribute='recipe_cost') %}
-                        {% set week_labor_cost = actual_total_cost_week - week_recipe_cost %}
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(week_recipe_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(week_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_week) }}</span></p>
@@ -179,10 +173,6 @@
                 <div class="row mt-2">
                     <div class="col-6">
                         <h6 class="text-warning">Month Average</h6>
-                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
-                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost_month) }}</span></p>
-                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
-                        {% set month_labor_cost = actual_total_cost_month - month_recipe_cost %}
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(month_recipe_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(month_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
@@ -204,10 +194,6 @@
                     </div>
                     <div class="col-6">
                         <h6 class="text-secondary">All Time Average</h6>
-                        <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
-                        <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost_all_time) }}</span></p>
-                        <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
-                        {% set all_time_labor_cost = actual_total_cost_all_time - all_time_recipe_cost %}
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(all_time_recipe_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(all_time_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
