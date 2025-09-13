@@ -499,7 +499,7 @@ class DishBatchPortion(Base):
     
     def get_recipe_cost(self, db):
         """Get just the recipe/food cost portion"""
-        if not self.batch or not self.portion_size:
+        if not self.batch:
             return 0
         
         # Handle recipe portion for variable yield batches
@@ -510,6 +510,10 @@ class DishBatchPortion(Base):
             
             total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
             return round(total_recipe_cost * self.recipe_portion_percent, 2)
+        
+        # For regular portion mode, check if we have portion size
+        if not self.portion_size:
+            return 0
         
         # For non-recipe portion mode, check if we have portion size
         if not self.portion_size:
