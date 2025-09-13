@@ -62,6 +62,10 @@ def get_task_emoji(task):
     # Final fallback
     return "🔘"
 
+# Register template functions after they are defined
+templates.env.globals['get_category_emoji'] = get_category_emoji
+templates.env.globals['get_task_emoji'] = get_task_emoji
+
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")
 
@@ -79,10 +83,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
-
-# Register template functions
-templates.env.globals['get_category_emoji'] = get_category_emoji
-templates.env.globals['get_task_emoji'] = get_task_emoji
 
 # Include routers
 app.include_router(auth.router)
