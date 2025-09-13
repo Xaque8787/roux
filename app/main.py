@@ -29,6 +29,9 @@ from .dependencies import get_current_user
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Initialize templates
+templates = Jinja2Templates(directory="templates")
+
 # Template helper functions
 def get_category_emoji(category):
     """Get emoji for a category, with fallback"""
@@ -62,7 +65,7 @@ def get_task_emoji(task):
     # Final fallback
     return "🔘"
 
-# Register template functions after they are defined
+# Register template functions
 templates.env.globals['get_category_emoji'] = get_category_emoji
 templates.env.globals['get_task_emoji'] = get_task_emoji
 
@@ -80,9 +83,6 @@ app.add_middleware(
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Initialize templates
-templates = Jinja2Templates(directory="templates")
 
 # Include routers
 app.include_router(auth.router)
