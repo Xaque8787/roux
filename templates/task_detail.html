@@ -56,9 +56,6 @@
                             {% else %}
                                 <span class="badge bg-secondary">Manual</span>
                             {% endif %}
-                            {% if task.janitorial_task %}
-                                <span class="badge bg-warning ms-1">Janitorial</span>
-                            {% endif %}
                         </p>
                         <p><strong>Status:</strong> 
                             {% if task.status == "not_started" %}
@@ -172,6 +169,9 @@
                         {{ task.batch.recipe.name }}
                     </a>
                 </p>
+                {% if task.batch.category %}
+                <p><strong>Category:</strong> {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}</p>
+                {% endif %}
                 <p><strong>Estimated Labor:</strong> {{ task.batch.estimated_labor_minutes }} min</p>
                 <p><strong>Estimated Cost:</strong> ${{ "%.2f"|format(task.batch.estimated_labor_cost) }}</p>
                 {% if task.finished_at and task.assigned_to %}
@@ -185,6 +185,7 @@
                 {% elif task.janitorial_task %}
                 <h6>🧹 Janitorial Task</h6>
                 <p><strong>Title:</strong> {{ task.janitorial_task.title }}</p>
+                <p><strong>Category:</strong> 🧹 Janitorial</p>
                 {% if task.janitorial_task.instructions %}
                 <p><strong>Instructions:</strong></p>
                 <div class="border p-2 bg-light">
@@ -207,8 +208,11 @@
                 {% else %}
                 <h6>✋ Manual Task</h6>
                 <p><strong>Title:</strong> {{ task.description }}</p>
-                <p><strong>Task Type:</strong> <span class="badge bg-secondary">Manual</span></p>
-                <p><small class="text-muted">Manually created task - no batch or janitorial template linked</small></p>
+                {% if task.category %}
+                <p><strong>Category:</strong> {{ task.category.icon or '✋' }} {{ task.category.name }}</p>
+                {% else %}
+                <p><strong>Category:</strong> ✋ Manual Task</p>
+                {% endif %}
                 {% if task.finished_at and task.assigned_to %}
                 <p><strong>Labor Cost:</strong> ${{ "%.2f"|format(task.labor_cost) }}</p>
                 {% endif %}

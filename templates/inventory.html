@@ -222,7 +222,14 @@
                         <tbody>
                             {% for item in inventory_items %}
                             <tr>
-                                <td>{{ item.name }}</td>
+                                <td>
+                                    {% if item.category %}
+                                        {{ item.category.icon or '🔘' }}
+                                    {% else %}
+                                        🔘
+                                    {% endif %}
+                                    <strong>{{ item.name }}</strong>
+                                </td>
                                 <td>
                                     {{ item.par_level }}
                                     {% if item.par_unit_name %}
@@ -255,11 +262,7 @@
                                     {% endif %}
                                 </td>
                                <td>
-                                   {% if item.category %}
-                                       {{ item.category.icon or '🔘' }} {{ item.category.name }}
-                                   {% else %}
-                                       -
-                                   {% endif %}
+                                   {{ item.category.name if item.category else '-' }}
                                </td>
                                 <td>
                                     {% if current_user.role == "admin" %}
