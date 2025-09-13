@@ -375,96 +375,75 @@ class Batch(Base):
     
     @property
     def actual_labor_cost(self):
-        """Calculate actual labor cost from most recent completed task"""
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            # Get most recent completed task for this batch
-            from .models import Task
-            recent_task = db.query(Task).filter(
-                Task.batch_id == self.id,
-                Task.finished_at.isnot(None)
-            ).order_by(Task.finished_at.desc()).first()
-            
-            if recent_task:
-                return recent_task.labor_cost
-            return self.estimated_labor_cost  # Fallback to estimated
-        finally:
-            db.close()
+        """Fallback to estimated labor cost - use get_actual_labor_cost(db) for real data"""
+        return self.estimated_labor_cost
     
     @property
     def average_labor_cost_week(self):
-        """Average labor cost from past week's completed tasks"""
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        from datetime import datetime, timedelta
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import Task
-            week_ago = datetime.utcnow() - timedelta(days=7)
-            
-            tasks = db.query(Task).filter(
-                Task.batch_id == self.id,
-                Task.finished_at.isnot(None),
-                Task.finished_at >= week_ago
-            ).all()
-            
-            if tasks:
-                return sum(task.labor_cost for task in tasks) / len(tasks)
-            return self.estimated_labor_cost
-        finally:
-            db.close()
+        """Fallback to estimated labor cost - use get_average_labor_cost_week(db) for real data"""
+        return self.estimated_labor_cost
     
     @property
     def average_labor_cost_month(self):
-        """Average labor cost from past month's completed tasks"""
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        from datetime import datetime, timedelta
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            from .models import Task
-            month_ago = datetime.utcnow() - timedelta(days=30)
-            
-            tasks = db.query(Task).filter(
-                Task.batch_id == self.id,
-                Task.finished_at.isnot(None),
-                Task.finished_at >= month_ago
-            ).all()
-            
-            if tasks:
-                return sum(task.labor_cost for task in tasks) / len(tasks)
-            return self.estimated_labor_cost
-        finally:
-            db.close()
+        """Fallback to estimated labor cost - use get_average_labor_cost_month(db) for real data"""
+        return self.estimated_labor_cost
 
     @property
     def average_labor_cost_all_time(self):
-        """Average labor cost from all completed tasks"""
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
+        """Fallback to estimated labor cost - use get_average_labor_cost_all_time(db) for real data"""
+        return self.estimated_labor_cost
+    
+    def get_actual_labor_cost(self, db):
+        """Calculate actual labor cost from most recent completed task"""
+        recent_task = db.query(Task).filter(
+            Task.batch_id == self.id,
+            Task.finished_at.isnot(None)
+        ).order_by(Task.finished_at.desc()).first()
         
-        try:
-            from .models import Task
-            tasks = db.query(Task).filter(
-                Task.batch_id == self.id,
-                Task.finished_at.isnot(None)
-            ).all()
-            
-            if tasks:
-                return sum(task.labor_cost for task in tasks) / len(tasks)
-            return self.estimated_labor_cost
-        finally:
-            db.close()
+        if recent_task:
+            return recent_task.labor_cost
+        return self.estimated_labor_cost
+    
+    def get_average_labor_cost_week(self, db):
+        """Average labor cost from past week's completed tasks"""
+        from datetime import datetime, timedelta
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        
+        tasks = db.query(Task).filter(
+            Task.batch_id == self.id,
+            Task.finished_at.isnot(None),
+            Task.finished_at >= week_ago
+        ).all()
+        
+        if tasks:
+            return sum(task.labor_cost for task in tasks) / len(tasks)
+        return self.estimated_labor_cost
+    
+    def get_average_labor_cost_month(self, db):
+        """Average labor cost from past month's completed tasks"""
+        from datetime import datetime, timedelta
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        
+        tasks = db.query(Task).filter(
+            Task.batch_id == self.id,
+            Task.finished_at.isnot(None),
+            Task.finished_at >= month_ago
+        ).all()
+        
+        if tasks:
+            return sum(task.labor_cost for task in tasks) / len(tasks)
+        return self.estimated_labor_cost
+    
+    def get_average_labor_cost_all_time(self, db):
+        """Average labor cost from all completed tasks"""
+        tasks = db.query(Task).filter(
+            Task.batch_id == self.id,
+            Task.finished_at.isnot(None)
+        ).all()
+        
+        if tasks:
+            return sum(task.labor_cost for task in tasks) / len(tasks)
+        return self.estimated_labor_cost
 
 class Dish(Base):
     __tablename__ = "dishes"
@@ -489,29 +468,54 @@ class DishBatchPortion(Base):
     @property
     def expected_cost(self):
         """Calculate expected cost using estimated labor"""
-        return self._calculate_cost_with_labor_type('estimated')
+        # This property is deprecated - use get_expected_cost(db) instead
+        return 0
     
     @property
     def actual_cost(self):
         """Calculate actual cost using most recent actual labor"""
-        return self._calculate_cost_with_labor_type('actual')
+        # This property is deprecated - use get_actual_cost(db) instead
+        return 0
     
     @property
     def actual_cost_week_avg(self):
         """Calculate actual cost using week average labor"""
-        return self._calculate_cost_with_labor_type('week_avg')
+        # This property is deprecated - use get_actual_cost_week_avg(db) instead
+        return 0
     
     @property
     def actual_cost_month_avg(self):
         """Calculate actual cost using month average labor"""
-        return self._calculate_cost_with_labor_type('month_avg')
+        # This property is deprecated - use get_actual_cost_month_avg(db) instead
+        return 0
     
     @property
     def actual_cost_all_time_avg(self):
         """Calculate actual cost using all-time average labor"""
-        return self._calculate_cost_with_labor_type('all_time_avg')
+        # This property is deprecated - use get_actual_cost_all_time_avg(db) instead
+        return 0
     
-    def _calculate_cost_with_labor_type(self, labor_type):
+    def get_expected_cost(self, db):
+        """Calculate expected cost using estimated labor"""
+        return self._calculate_cost_with_labor_type(db, 'estimated')
+    
+    def get_actual_cost(self, db):
+        """Calculate actual cost using most recent actual labor"""
+        return self._calculate_cost_with_labor_type(db, 'actual')
+    
+    def get_actual_cost_week_avg(self, db):
+        """Calculate actual cost using week average labor"""
+        return self._calculate_cost_with_labor_type(db, 'week_avg')
+    
+    def get_actual_cost_month_avg(self, db):
+        """Calculate actual cost using month average labor"""
+        return self._calculate_cost_with_labor_type(db, 'month_avg')
+    
+    def get_actual_cost_all_time_avg(self, db):
+        """Calculate actual cost using all-time average labor"""
+        return self._calculate_cost_with_labor_type(db, 'all_time_avg')
+    
+    def _calculate_cost_with_labor_type(self, db, labor_type):
         """Calculate the cost of this dish batch portion"""
         if not self.batch or not self.portion_size:
             return 0
@@ -519,72 +523,63 @@ class DishBatchPortion(Base):
         if self.batch.variable_yield:
             return 0
         
-        from sqlalchemy.orm import sessionmaker
-        from .database import engine
-        Session = sessionmaker(bind=engine)
-        db = Session()
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == self.batch.recipe_id
+        ).all()
         
-        try:
-            from .models import RecipeIngredient
-            recipe_ingredients = db.query(RecipeIngredient).filter(
-                RecipeIngredient.recipe_id == self.batch.recipe_id
-            ).all()
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        
+        # Get labor cost based on type
+        if labor_type == 'estimated':
+            labor_cost = self.batch.estimated_labor_cost
+        elif labor_type == 'actual':
+            labor_cost = self.batch.get_actual_labor_cost(db)
+        elif labor_type == 'week_avg':
+            labor_cost = self.batch.get_average_labor_cost_week(db)
+        elif labor_type == 'month_avg':
+            labor_cost = self.batch.get_average_labor_cost_month(db)
+        elif labor_type == 'all_time_avg':
+            labor_cost = self.batch.get_average_labor_cost_all_time(db)
+        else:
+            labor_cost = self.batch.estimated_labor_cost
+        
+        total_batch_cost = total_recipe_cost + labor_cost
+        cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
+        
+        # Handle unit conversion
+        if self.portion_unit == self.batch.yield_unit:
+            return self.portion_size * cost_per_yield_unit
+        else:
+            # Convert between units
+            usage_type = None
+            for ri in recipe_ingredients:
+                ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+                if ingredient and ingredient.usage_type:
+                    usage_type = ingredient.usage_type
+                    break
             
-            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-            
-            # Get labor cost based on type
-            if labor_type == 'estimated':
-                labor_cost = self.batch.estimated_labor_cost
-            elif labor_type == 'actual':
-                labor_cost = self.batch.actual_labor_cost
-            elif labor_type == 'week_avg':
-                labor_cost = self.batch.average_labor_cost_week
-            elif labor_type == 'month_avg':
-                labor_cost = self.batch.average_labor_cost_month
-            elif labor_type == 'all_time_avg':
-                labor_cost = self.batch.average_labor_cost_all_time
-            else:
-                labor_cost = self.batch.estimated_labor_cost
-            
-            total_batch_cost = total_recipe_cost + labor_cost
-            cost_per_yield_unit = total_batch_cost / self.batch.yield_amount
-            
-            # Handle unit conversion
-            if self.portion_unit == self.batch.yield_unit:
-                return self.portion_size * cost_per_yield_unit
-            else:
-                # Convert between units
-                usage_type = None
-                for ri in recipe_ingredients:
-                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
-                    ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
-                    if ingredient and ingredient.usage_type:
-                        usage_type = ingredient.usage_type
-                        break
+            try:
+                if usage_type == 'weight' and self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif usage_type == 'volume' and self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                    converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                    converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                else:
+                    converted_portion = self.portion_size
                 
-                try:
-                    if usage_type == 'weight' and self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
-                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif usage_type == 'volume' and self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
-                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
-                        converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
-                        converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
-                    else:
-                        converted_portion = self.portion_size
-                    
-                    return converted_portion * cost_per_yield_unit
-                except ValueError:
-                    return self.portion_size * cost_per_yield_unit
-        finally:
-            db.close()
+                return converted_portion * cost_per_yield_unit
+            except ValueError:
+                return self.portion_size * cost_per_yield_unit
     
     # Keep the old cost property for backward compatibility
     @property
     def cost(self):
         """Backward compatibility - returns actual cost"""
-        return self.actual_cost
+        # This property is deprecated - use get_actual_cost(db) instead
+        return 0
     
 
 class InventoryItem(Base):
