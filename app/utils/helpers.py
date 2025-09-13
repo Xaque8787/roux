@@ -70,6 +70,27 @@ def create_default_categories(db: Session):
         ("Specials", "inventory", "⭐", "#ffc107"),
         ("Misc Tasks", "inventory", "✅", "#28a745"),
         
+        # Recipes (same as batches and inventory)
+        ("Sauces", "recipe", "🥘", "#dc3545"),
+        ("Dressings", "recipe", "🫗", "#ffc107"),
+        ("Soups", "recipe", "🥣", "#fd7e14"),
+        ("Stocks & Broths", "recipe", "🥘", "#dc3545"),
+        ("Dough", "recipe", "🍞", "#fd7e14"),
+        ("Marinades", "recipe", "🫙", "#6f42c1"),
+        ("Produce", "recipe", "🌿", "#28a745"),
+        ("Cheese", "recipe", "🧀", "#ffc107"),
+        ("Eggs", "recipe", "🥚", "#ffc107"),
+        ("Dairy", "recipe", "🐄", "#6f42c1"),
+        ("Protein", "recipe", "🍗", "#dc3545"),
+        ("Thaw/Defrost", "recipe", "🧊", "#17a2b8"),
+        ("Frozen Prep", "recipe", "❄️", "#17a2b8"),
+        ("Spreads & Dips", "recipe", "🧈", "#ffc107"),
+        ("Dessert", "recipe", "🍨", "#fd7e14"),
+        ("Restock/Rotate", "recipe", "🔄", "#6c757d"),
+        ("Manual", "recipe", "✋", "#6c757d"),
+        ("Specials", "recipe", "⭐", "#ffc107"),
+        ("Misc Tasks", "recipe", "✅", "#28a745"),
+        
         # Dishes
         ("Appetizers", "dish", "🍴", "#6f42c1"),
         ("Salads", "dish", "🌱", "#28a745"),
