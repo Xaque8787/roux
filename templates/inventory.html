@@ -208,14 +208,14 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped table-sm">
+                    <table class="table table-striped table-sm table-sortable">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Par Level & Unit</th>
-                                <th>Linked Batch</th>
-                                <th>Par Unit Equals</th>
-                                <th>Category</th>
+                                <th data-sortable data-sort-type="text">Name</th>
+                                <th data-sortable data-sort-type="number">Par Level & Unit</th>
+                                <th data-sortable data-sort-type="text">Linked Batch</th>
+                                <th data-sortable data-sort-type="text">Par Unit Equals</th>
+                                <th data-sortable data-sort-type="text">Category</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -342,11 +342,11 @@
             <div class="card-body">
                 {% if janitorial_tasks %}
                 <div class="table-responsive">
-                    <table class="table table-striped table-sm">
+                    <table class="table table-striped table-sm table-sortable">
                         <thead>
                             <tr>
-                                <th>Title</th>
-                                <th>Type</th>
+                                <th data-sortable data-sort-type="text">Title</th>
+                                <th data-sortable data-sort-type="text">Type</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
