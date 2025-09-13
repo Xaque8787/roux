@@ -34,7 +34,7 @@
                                     <option value="">Select Category</option>
                                     {% for cat in categories %}
                                     <option value="{{ cat.id }}" {% if recipe.category_id == cat.id %}selected{% endif %}>
-                                        {{ cat.name }}
+                                        {{ cat.icon or '🔘' }} {{ cat.name }}
                                     </option>
                                     {% endfor %}
                                 </select>
