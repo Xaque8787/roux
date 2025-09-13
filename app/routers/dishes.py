@@ -71,11 +71,18 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
     dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
     
     # Calculate costs
-    expected_total_cost = sum(portion.get_expected_cost(db) for portion in dish_batch_portions)
-    actual_total_cost = sum(portion.get_actual_cost(db) for portion in dish_batch_portions)
-    actual_total_cost_week = sum(portion.get_actual_cost_week_avg(db) for portion in dish_batch_portions)
-    actual_total_cost_month = sum(portion.get_actual_cost_month_avg(db) for portion in dish_batch_portions)
-    actual_total_cost_all_time = sum(portion.get_actual_cost_all_time_avg(db) for portion in dish_batch_portions)
+    expected_total_cost = 0
+    actual_total_cost = 0
+    actual_total_cost_week = 0
+    actual_total_cost_month = 0
+    actual_total_cost_all_time = 0
+    
+    for portion in dish_batch_portions:
+        expected_total_cost += portion.get_expected_cost(db)
+        actual_total_cost += portion.get_actual_cost(db)
+        actual_total_cost_week += portion.get_actual_cost_week_avg(db)
+        actual_total_cost_month += portion.get_actual_cost_month_avg(db)
+        actual_total_cost_all_time += portion.get_actual_cost_all_time_avg(db)
     
     # Calculate profits and margins
     expected_profit = dish.sale_price - expected_total_cost

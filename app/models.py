@@ -395,8 +395,15 @@ class Batch(Base):
     
     def get_actual_labor_cost(self, db):
         """Calculate actual labor cost from most recent completed task"""
+        from sqlalchemy import or_, and_
         recent_task = db.query(Task).filter(
-            Task.batch_id == self.id,
+            or_(
+                Task.batch_id == self.id,
+                and_(
+                    Task.inventory_item_id.isnot(None),
+                    Task.inventory_item.has(InventoryItem.batch_id == self.id)
+                )
+            ),
             Task.finished_at.isnot(None)
         ).order_by(Task.finished_at.desc()).first()
         
@@ -407,10 +414,17 @@ class Batch(Base):
     def get_average_labor_cost_week(self, db):
         """Average labor cost from past week's completed tasks"""
         from datetime import datetime, timedelta
+        from sqlalchemy import or_, and_
         week_ago = datetime.utcnow() - timedelta(days=7)
         
         tasks = db.query(Task).filter(
-            Task.batch_id == self.id,
+            or_(
+                Task.batch_id == self.id,
+                and_(
+                    Task.inventory_item_id.isnot(None),
+                    Task.inventory_item.has(InventoryItem.batch_id == self.id)
+                )
+            ),
             Task.finished_at.isnot(None),
             Task.finished_at >= week_ago
         ).all()
@@ -422,10 +436,17 @@ class Batch(Base):
     def get_average_labor_cost_month(self, db):
         """Average labor cost from past month's completed tasks"""
         from datetime import datetime, timedelta
+        from sqlalchemy import or_, and_
         month_ago = datetime.utcnow() - timedelta(days=30)
         
         tasks = db.query(Task).filter(
-            Task.batch_id == self.id,
+            or_(
+                Task.batch_id == self.id,
+                and_(
+                    Task.inventory_item_id.isnot(None),
+                    Task.inventory_item.has(InventoryItem.batch_id == self.id)
+                )
+            ),
             Task.finished_at.isnot(None),
             Task.finished_at >= month_ago
         ).all()
@@ -436,8 +457,15 @@ class Batch(Base):
     
     def get_average_labor_cost_all_time(self, db):
         """Average labor cost from all completed tasks"""
+        from sqlalchemy import or_, and_
         tasks = db.query(Task).filter(
-            Task.batch_id == self.id,
+            or_(
+                Task.batch_id == self.id,
+                and_(
+                    Task.inventory_item_id.isnot(None),
+                    Task.inventory_item.has(InventoryItem.batch_id == self.id)
+                )
+            ),
             Task.finished_at.isnot(None)
         ).all()
         
@@ -521,6 +549,8 @@ class DishBatchPortion(Base):
             return 0
         
         if self.batch.variable_yield:
+            # For variable yield batches, we can't calculate cost per unit
+            # This would need to be handled by recipe portion system
             return 0
         
         recipe_ingredients = db.query(RecipeIngredient).filter(

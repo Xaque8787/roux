@@ -42,8 +42,20 @@
                                 </td>
                                 <td>{{ portion.portion_size }}</td>
                                 <td>{{ portion.portion_unit.name if portion.portion_unit else (portion.batch.yield_unit.name if portion.batch.yield_unit else '-') }}</td>
-                                <td>${{ "%.2f"|format(portion.get_expected_cost(db) if portion.batch and not portion.batch.variable_yield else 0) }}</td>
-                                <td>${{ "%.2f"|format(portion.get_actual_cost(db) if portion.batch and not portion.batch.variable_yield else 0) }}</td>
+                                <td>
+                                    {% if portion.batch.variable_yield %}
+                                        <span class="text-muted">Variable</span>
+                                    {% else %}
+                                        ${{ "%.2f"|format(portion.get_expected_cost(db)) }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if portion.batch.variable_yield %}
+                                        <span class="text-muted">Variable</span>
+                                    {% else %}
+                                        ${{ "%.2f"|format(portion.get_actual_cost(db)) }}
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

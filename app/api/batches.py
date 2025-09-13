@@ -111,6 +111,15 @@ async def get_batch_cost_per_unit(batch_id: int, unit: str, db: Session = Depend
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
+    if batch.variable_yield:
+        return {
+            "batch_id": batch_id,
+            "unit": unit,
+            "expected_cost_per_unit": 0,
+            "actual_cost_per_unit": 0,
+            "error": "Variable yield batches cannot provide cost per unit"
+        }
+    
     # Calculate base costs
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
