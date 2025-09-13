@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from datetime import date, timedelta
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
-from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay, 
+from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay,
                      InventoryDayItem, Task, User, JanitorialTask, JanitorialTaskDay)
 from ..utils.helpers import get_today_date
 from datetime import datetime
@@ -491,7 +491,9 @@ async def task_detail(
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    task = db.query(Task).options(
+        joinedload(Task.batch).joinedload(Batch.recipe)
+    ).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     

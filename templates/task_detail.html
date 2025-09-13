@@ -162,6 +162,16 @@
                         {{ task.batch.recipe.name }}
                     </a>
                 </p>
+                
+                {% if task.batch.recipe.instructions %}
+                <div class="mt-3">
+                    <h6><i class="fas fa-list-ol"></i> Recipe Instructions</h6>
+                    <div class="border p-3 bg-light rounded">
+                        {{ task.batch.recipe.instructions|replace('\n', '<br>')|safe }}
+                    </div>
+                </div>
+                {% endif %}
+                
                 {% if task.batch.category %}
                 <p><strong>Batch Category:</strong> {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}</p>
                 {% endif %}
