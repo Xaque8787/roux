@@ -29,6 +29,23 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
+                                <label class="form-label">Usage Type</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="usage_type" id="weight" value="weight" 
+                                               {% if ingredient.usage_type == 'weight' %}checked{% endif %} onchange="updateAvailableUnits()">
+                                        <label class="form-check-label" for="weight">Usage by Weight</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="usage_type" id="volume" value="volume"
+                                               {% if ingredient.usage_type == 'volume' %}checked{% endif %} onchange="updateAvailableUnits()">
+                                        <label class="form-check-label" for="volume">Usage by Volume</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
                                 <label for="category_id" class="form-label">Category</label>
                                 <select class="form-select" id="category_id" name="category_id">
                                     <option value="">Select Category</option>
@@ -38,6 +55,9 @@
                                 </select>
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="vendor_id" class="form-label">Vendor</label>
@@ -46,6 +66,19 @@
                                     {% for vendor in vendors %}
                                     <option value="{{ vendor.id }}" {% if ingredient.vendor_id == vendor.id %}selected{% endif %}>
                                         {{ vendor.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="vendor_unit_id" class="form-label">Vendor Unit</label>
+                                <select class="form-select" id="vendor_unit_id" name="vendor_unit_id" onchange="loadVendorUnitConversions()">
+                                    <option value="">Select Unit</option>
+                                    {% for unit in vendor_units %}
+                                    <option value="{{ unit.id }}" {% if ingredient.vendor_unit_id == unit.id %}selected{% endif %}>
+                                        {{ unit.name }} ({{ unit.description }})
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -72,52 +105,104 @@
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="vendor_unit_id" class="form-label">Vendor Unit</label>
-                                <select class="form-select" id="vendor_unit_id" name="vendor_unit_id" onchange="loadVendorUnitConversions()">
-                                    <option value="">Select Unit</option>
-                                    {% for unit in vendor_units %}
-                                    <option value="{{ unit.id }}" {% if ingredient.vendor_unit_id == unit.id %}selected{% endif %}>
-                                        {{ unit.name }} ({{ unit.description }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="purchase_unit_name" class="form-label">Container Type</label>
                                 <input type="text" class="form-control" id="purchase_unit_name" name="purchase_unit_name" 
                                        value="{{ ingredient.purchase_unit_name }}" placeholder="e.g. Case, Bag, Sack, Box" required>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="purchase_weight_volume" class="form-label">Total Weight/Volume</label>
-                                <input type="number" class="form-control" id="purchase_weight_volume" name="purchase_weight_volume" 
-                                       step="0.01" value="{{ ingredient.purchase_weight_volume or '' }}" required>
-                                <small class="text-muted">Total weight/volume in vendor units</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
                                 <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
                                        step="0.01" value="{{ ingredient.purchase_total_cost }}" required>
                             </div>
                         </div>
+                        <div class="col-md-4">
+                            <div class="mb-3 form-check mt-4">
+                                <input type="checkbox" class="form-check-input" id="use_item_count_pricing" name="use_item_count_pricing"
+                                       {% if ingredient.use_item_count_pricing %}checked{% endif %} onchange="toggleItemCountPricing()">
+                                <label class="form-check-label" for="use_item_count_pricing">
+                                    Use item count pricing
+                                </label>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="breakable_case" name="breakable_case"
-                               {% if ingredient.breakable_case %}checked{% endif %}>
-                        <label class="form-check-label" for="breakable_case">
-                            Breakable Case?
-                        </label>
+                    <!-- Net Weight/Volume Section -->
+                    <div id="netWeightVolumeSection" {% if ingredient.use_item_count_pricing %}style="display: none;"{% endif %}>
+                        <h6 class="mt-3">Net Weight/Volume</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">{% if ingredient.usage_type == 'weight' %}Weight{% else %}Volume{% endif %}</span> per Item</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
+                                               step="0.01" value="{{ ingredient.net_weight_volume_item or '' }}" onchange="calculateNetCase(); calculateCostPreview();">
+                                        <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview();">
+                                            <!-- Options populated by JavaScript -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Cost per Unit</label>
+                                    <div class="form-control-plaintext" id="costPerUnitDisplay">
+                                        <span class="text-muted">${{ "%.4f"|format(ingredient.cost_per_net_unit) }}/{{ ingredient.net_unit or 'unit' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Item Count Pricing Section -->
+                    <div id="itemCountPricingSection" {% if not ingredient.use_item_count_pricing %}style="display: none;"{% endif %}>
+                        <h6 class="mt-3">Item Count Pricing</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Total Items</label>
+                                    <div class="form-control-plaintext">
+                                        <strong>{{ ingredient.total_item_count }} items</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Cost per Item</label>
+                                    <div class="form-control-plaintext">
+                                        <strong>${{ "%.2f"|format(ingredient.cost_per_item) }}/item</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="breakable_case" name="breakable_case"
+                                           {% if ingredient.breakable_case %}checked{% endif %}>
+                                    <label class="form-check-label" for="breakable_case">
+                                        Breakable Case?
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="has_baking_conversion" name="has_baking_conversion"
+                                           {% if ingredient.has_baking_conversion %}checked{% endif %} onchange="toggleBakingConversion()">
+                                    <label class="form-check-label" for="has_baking_conversion">
+                                        Baking Measurements
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Item Level (for cases) -->
@@ -146,35 +231,45 @@
                         </div>
                     </div>
                     
-                    <!-- Usage Level -->
-                    <h6 class="mt-3">Usage Units</h6>
-                    <div class="mb-3">
-                        <small class="text-muted">Select usage units and enter conversion factors. 
-                        <i class="fas fa-info-circle text-info" title="Conversion factors may be pre-populated based on vendor unit selection"></i>
-                        </small>
-                    </div>
-                    
-                    <div id="usageUnits">
-                        {% for unit in usage_units %}
-                        {% set conversion_factor = existing_conversions.get(unit.id, '') %}
-                        <div class="mb-2">
-                            <div class="input-group input-group-sm">
-                                <div class="input-group-text">
-                                    <input class="form-check-input" type="checkbox" id="unit_{{ unit.id }}" 
-                                           {% if conversion_factor %}checked{% endif %}
-                                           onchange="toggleConversion({{ unit.id }})">
+                    <!-- Baking Measurements Conversion -->
+                    <div id="bakingConversionFields" {% if not ingredient.has_baking_conversion %}style="display: none;"{% endif %}>
+                        <h6 class="mt-3">Baking Conversion</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="baking_measurement_unit" class="form-label">Baking Measurement</label>
+                                    <select class="form-select" id="baking_measurement_unit" name="baking_measurement_unit">
+                                        <option value="cup" {% if ingredient.baking_measurement_unit == 'cup' %}selected{% endif %}>1 cup</option>
+                                        <option value="3/4_cup" {% if ingredient.baking_measurement_unit == '3/4_cup' %}selected{% endif %}>3/4 cup</option>
+                                        <option value="2/3_cup" {% if ingredient.baking_measurement_unit == '2/3_cup' %}selected{% endif %}>2/3 cup</option>
+                                        <option value="1/2_cup" {% if ingredient.baking_measurement_unit == '1/2_cup' %}selected{% endif %}>1/2 cup</option>
+                                        <option value="1/3_cup" {% if ingredient.baking_measurement_unit == '1/3_cup' %}selected{% endif %}>1/3 cup</option>
+                                        <option value="1/4_cup" {% if ingredient.baking_measurement_unit == '1/4_cup' %}selected{% endif %}>1/4 cup</option>
+                                        <option value="1/8_cup" {% if ingredient.baking_measurement_unit == '1/8_cup' %}selected{% endif %}>1/8 cup</option>
+                                        <option value="tbsp" {% if ingredient.baking_measurement_unit == 'tbsp' %}selected{% endif %}>1 tbsp</option>
+                                        <option value="tsp" {% if ingredient.baking_measurement_unit == 'tsp' %}selected{% endif %}>1 tsp</option>
+                                    </select>
                                 </div>
-                                <span class="input-group-text">{{ unit.name }}</span>
-                                <input type="number" class="form-control" name="conversion_{{ unit.id }}" 
-                                       step="0.01" placeholder="Conversion factor" 
-                                       value="{{ conversion_factor }}"
-                                       {% if not conversion_factor %}disabled{% endif %}
-                                       {% if conversion_factor %}required{% endif %}>
-                                <span class="input-group-text" id="auto_{{ unit.id }}" style="display: none;">
-                                    <i class="fas fa-magic text-info" title="Auto-populated from vendor unit"></i>
-                                </span>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="baking_weight_amount" class="form-label">Equals</label>
+                                    <input type="number" class="form-control" id="baking_weight_amount" name="baking_weight_amount" 
+                                           step="0.01" value="{{ ingredient.baking_weight_amount or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="baking_weight_unit" class="form-label">Weight Unit</label>
+                                    <select class="form-select" id="baking_weight_unit" name="baking_weight_unit">
+                                        <option value="oz" {% if ingredient.baking_weight_unit == 'oz' %}selected{% endif %}>Ounces</option>
+                                        <option value="g" {% if ingredient.baking_weight_unit == 'g' %}selected{% endif %}>Grams</option>
+                                        <option value="lb" {% if ingredient.baking_weight_unit == 'lb' %}selected{% endif %}>Pounds</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
+                        <small class="text-muted">Example: 1 cup = 2 ounces. This allows conversion between all baking measurements.</small>
                         {% endfor %}
                     </div>
                     
@@ -193,6 +288,10 @@
 <script>
 // Toggle case fields based on purchase type
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize
+    updateAvailableUnits();
+    toggleItemCountPricing();
+    
     const singleRadio = document.getElementById('single');
     const caseRadio = document.getElementById('case');
     const caseFields = document.getElementById('caseFields');
@@ -207,7 +306,185 @@ document.addEventListener('DOMContentLoaded', function() {
     
     singleRadio.addEventListener('change', toggleCaseFields);
     caseRadio.addEventListener('change', toggleCaseFields);
+    
+    // Add event listeners for cost calculation
+    document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_weight_volume_item').addEventListener('input', function() {
+        calculateNetCase();
+        calculateCostPreview();
+    });
+    document.getElementById('net_unit').addEventListener('change', function() {
+        calculateNetCase();
+        calculateCostPreview();
+    });
+    document.getElementById('items_per_case').addEventListener('input', function() {
+        calculateNetCase();
+        calculateCostPreview();
+    });
 });
+
+// Weight and volume unit options
+const WEIGHT_UNITS = {
+    'lb': 'Pounds',
+    'oz': 'Ounces', 
+    'g': 'Grams',
+    'kg': 'Kilograms'
+};
+
+const VOLUME_UNITS = {
+    'gal': 'Gallons',
+    'qt': 'Quarts',
+    'pt': 'Pints',
+    'cup': 'Cups',
+    'fl_oz': 'Fluid Ounces',
+    'l': 'Liters',
+    'ml': 'Milliliters'
+};
+
+// Update available units based on usage type
+function updateAvailableUnits() {
+    const usageType = document.querySelector('input[name="usage_type"]:checked').value;
+    const netUnitSelect = document.getElementById('net_unit');
+    const netTypeLabel = document.getElementById('netTypeLabel');
+    
+    // Update labels
+    if (usageType === 'weight') {
+        netTypeLabel.textContent = 'Weight';
+    } else {
+        netTypeLabel.textContent = 'Volume';
+    }
+    
+    // Clear and populate unit options
+    netUnitSelect.innerHTML = '';
+    const units = usageType === 'weight' ? WEIGHT_UNITS : VOLUME_UNITS;
+    
+    Object.entries(units).forEach(([value, label]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        if (value === '{{ ingredient.net_unit }}') {
+            option.selected = true;
+        }
+        netUnitSelect.appendChild(option);
+    });
+    
+    calculateNetCase();
+    calculateCostPreview();
+}
+
+// Toggle item count pricing
+function toggleItemCountPricing() {
+    const checkbox = document.getElementById('use_item_count_pricing');
+    const netWeightVolumeSection = document.getElementById('netWeightVolumeSection');
+    const itemCountPricingSection = document.getElementById('itemCountPricingSection');
+    const netWeightVolumeInput = document.getElementById('net_weight_volume_item');
+    const netUnitSelect = document.getElementById('net_unit');
+    const purchaseTotalCost = document.getElementById('purchase_total_cost');
+    
+    if (checkbox.checked) {
+        // Show item count pricing, hide weight/volume
+        netWeightVolumeSection.style.display = 'none';
+        itemCountPricingSection.style.display = 'block';
+        
+        // Make weight/volume inputs not required
+        netWeightVolumeInput.required = false;
+        netUnitSelect.required = false;
+    } else {
+        // Show weight/volume, hide item count pricing
+        netWeightVolumeSection.style.display = 'block';
+        itemCountPricingSection.style.display = 'none';
+        
+        // Make weight/volume inputs required again when not using item count pricing
+        netWeightVolumeInput.required = true;
+        netUnitSelect.required = true;
+    }
+    
+    calculateCostPreview();
+}
+
+// Toggle baking conversion fields
+function toggleBakingConversion() {
+    const checkbox = document.getElementById('has_baking_conversion');
+    const fields = document.getElementById('bakingConversionFields');
+    
+    if (checkbox.checked) {
+        fields.style.display = 'block';
+    } else {
+        fields.style.display = 'none';
+    }
+}
+
+// Calculate net case from item
+function calculateNetCase() {
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    const itemWeightDisplay = document.getElementById('itemWeightDisplay');
+    const netUnit = document.getElementById('net_unit').value;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    
+    if (!itemWeightDisplay) return; // Element doesn't exist
+    
+    if (purchaseType === "case") {
+        if (netItem > 0 && itemsPerCase > 0) {
+            const netCase = (netItem * itemsPerCase).toFixed(2);
+            itemWeightDisplay.innerHTML = `<strong>${netCase} ${netUnit} total</strong>`;
+        } else {
+            itemWeightDisplay.innerHTML = '<span class="text-muted">Enter net weight per item and items per case</span>';
+        }
+    } else {
+        // For single items
+        if (netItem > 0) {
+            itemWeightDisplay.innerHTML = `<strong>${netItem} ${netUnit}</strong>`;
+        } else {
+            itemWeightDisplay.innerHTML = '<span class="text-muted">Enter net weight per item</span>';
+        }
+    }
+}
+
+// Calculate cost preview
+function calculateCostPreview() {
+    const useItemCountPricing = document.getElementById('use_item_count_pricing').checked;
+    const totalCost = parseFloat(document.getElementById('purchase_total_cost').value) || 0;
+    const costPerUnitDisplay = document.getElementById('costPerUnitDisplay');
+    
+    if (!costPerUnitDisplay) return;
+    
+    if (useItemCountPricing) {
+        const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+        const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+        
+        let itemCount = purchaseType === 'case' ? itemsPerCase : 1;
+        
+        if (totalCost > 0 && itemCount > 0) {
+            const costPerItem = (totalCost / itemCount).toFixed(2);
+            costPerUnitDisplay.innerHTML = `<strong>$${costPerItem}/item</strong>`;
+        } else {
+            costPerUnitDisplay.innerHTML = '<span class="text-muted">Enter cost and item details</span>';
+        }
+    } else {
+        const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+        const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+        const netUnit = document.getElementById('net_unit').value;
+        
+        // Calculate total net amount based on purchase type
+        let totalNet = 0;
+        if (purchaseType === 'case') {
+            const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+            if (netItem > 0 && itemsPerCase > 0) {
+                totalNet = netItem * itemsPerCase;
+            }
+        } else {
+            totalNet = netItem;
+        }
+        
+        if (totalCost > 0 && totalNet > 0) {
+            const costPerUnit = (totalCost / totalNet).toFixed(4);
+            costPerUnitDisplay.innerHTML = `<strong>$${costPerUnit}/${netUnit}</strong>`;
+        } else {
+            costPerUnitDisplay.innerHTML = '<span class="text-muted">Enter cost and weight/volume details</span>';
+        }
+    }
+}
 
 // Toggle conversion factor input
 function toggleConversion(unitId) {
@@ -228,68 +505,5 @@ function toggleConversion(unitId) {
     }
 }
 
-// Calculate item weight for cases
-function calculateItemWeight() {
-    const caseRadio = document.getElementById('case');
-    const totalWeight = parseFloat(document.getElementById('purchase_weight_volume').value) || 0;
-    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
-    const vendorUnitSelect = document.getElementById('vendor_unit_id');
-    const itemWeightDisplay = document.getElementById('itemWeightDisplay');
-    
-    if (caseRadio.checked && totalWeight > 0 && itemsPerCase > 0) {
-        const itemWeight = totalWeight / itemsPerCase;
-        const vendorUnitName = vendorUnitSelect.selectedOptions[0]?.text.split(' (')[0] || '';
-        itemWeightDisplay.innerHTML = `<strong>${itemWeight.toFixed(3)} ${vendorUnitName} per item</strong>`;
-    } else {
-        itemWeightDisplay.innerHTML = '<span class="text-muted">Enter total weight and items per case</span>';
-    }
-}
-
-// Load vendor unit conversions and pre-populate
-async function loadVendorUnitConversions() {
-    const vendorUnitSelect = document.getElementById('vendor_unit_id');
-    const vendorUnitId = vendorUnitSelect.value;
-    
-    calculateItemWeight(); // Update item weight display
-    
-    if (!vendorUnitId) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/vendor_units/${vendorUnitId}/conversions`);
-        const conversions = await response.json();
-        
-        // Pre-populate conversion factors
-        Object.entries(conversions).forEach(([usageUnitId, conversionFactor]) => {
-            const checkbox = document.getElementById(`unit_${usageUnitId}`);
-            const input = document.querySelector(`input[name="conversion_${usageUnitId}"]`);
-            const autoIcon = document.getElementById(`auto_${usageUnitId}`);
-            
-            if (checkbox && input && !input.value) { // Only populate if empty
-                checkbox.checked = true;
-                input.disabled = false;
-                input.required = true;
-                input.value = conversionFactor;
-                if (autoIcon) {
-                    autoIcon.style.display = 'block';
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Error loading vendor unit conversions:', error);
-    }
-}
-
-// Add event listeners for weight calculation
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('purchase_weight_volume').addEventListener('input', calculateItemWeight);
-    document.getElementById('items_per_case').addEventListener('input', calculateItemWeight);
-    
-    // Load conversions if vendor unit is already selected
-    if (document.getElementById('vendor_unit_id').value) {
-        loadVendorUnitConversions();
-    }
-});
 </script>
 {% endblock %}

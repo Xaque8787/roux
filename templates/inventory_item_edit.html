@@ -24,23 +24,95 @@
                         <label for="name" class="form-label">Item Name</label>
                         <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" required>
                     </div>
+                    
+                    <div class="mb-3">
+                        <label for="par_unit_name_id" class="form-label">Par Unit Name</label>
+                        <select class="form-select" id="par_unit_name_id" name="par_unit_name_id">
+                            <option value="">Select Par Unit Name</option>
+                            {% for par_unit in par_unit_names %}
+                            <option value="{{ par_unit.id }}" {% if item.par_unit_name_id == par_unit.id %}selected{% endif %}>
+                                {{ par_unit.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
                     <div class="mb-3">
                         <label for="par_level" class="form-label">Par Level</label>
                         <input type="number" class="form-control" id="par_level" name="par_level" 
                                step="0.01" value="{{ item.par_level }}" required>
                     </div>
+                    
                     <div class="mb-3">
                         <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
-                        <select class="form-select" id="batch_id" name="batch_id">
+                        <select class="form-select" id="batch_id" name="batch_id" onchange="updateParUnitEquals()">
                             <option value="">No batch linked</option>
                             {% for batch in batches %}
                             <option value="{{ batch.id }}" {% if item.batch_id == batch.id %}selected{% endif %}>
-                                {{ batch.recipe.name }} ({{ batch.yield_amount }} {{ batch.yield_unit.name if batch.yield_unit else '' }})
+                                {{ batch.recipe.name }}
+                                {% if batch.variable_yield %}
+                                    (Variable Yield)
+                                {% else %}
+                                    ({{ batch.yield_amount }} {{ batch.yield_unit }})
+                                {% endif %}
                             </option>
                             {% endfor %}
                         </select>
                         <small class="text-muted">Link to a batch for labor cost tracking</small>
                     </div>
+                    
+                    <div id="parUnitEqualsSection">
+                        <h6>Par Unit Equals</h6>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="par_unit_equals_type" id="auto" value="auto"
+                                       {% if item.par_unit_equals_type == 'auto' %}checked{% endif %}>
+                                <label class="form-check-label" for="auto">
+                                    Auto (Batch Yield ÷ Par Level)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="par_unit_equals_type" id="par_unit_itself" value="par_unit_itself"
+                                       {% if item.par_unit_equals_type == 'par_unit_itself' %}checked{% endif %}>
+                                <label class="form-check-label" for="par_unit_itself">
+                                    Par Unit Itself
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="par_unit_equals_type" id="custom" value="custom"
+                                       {% if item.par_unit_equals_type == 'custom' %}checked{% endif %}>
+                                <label class="form-check-label" for="custom">
+                                    Custom
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div id="customParUnitEquals" {% if item.par_unit_equals_type != 'custom' %}style="display: none;"{% endif %}>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="par_unit_equals_amount" class="form-label">Amount</label>
+                                        <input type="number" class="form-control" id="par_unit_equals_amount" name="par_unit_equals_amount" 
+                                               step="0.01" value="{{ item.par_unit_equals_amount or '' }}">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="par_unit_equals_unit" class="form-label">Unit</label>
+                                        <select class="form-select" id="par_unit_equals_unit" name="par_unit_equals_unit">
+                                            <option value="">Select Unit</option>
+                                            <!-- Options will be populated by JavaScript -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="parUnitEqualsPreview" class="alert alert-info">
+                            <small>Current calculation preview will appear here</small>
+                        </div>
+                    </div>
+                    
                     <div class="mb-3">
                         <label for="category_id" class="form-label">Category</label>
                         <select class="form-select" id="category_id" name="category_id">
@@ -62,4 +134,170 @@
         </div>
     </div>
 </div>
+
+<script>
+function updateParUnitEquals() {
+    const batchSelect = document.getElementById('batch_id');
+    const parUnitEqualsSection = document.getElementById('parUnitEqualsSection');
+    const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
+    
+    // Always show par unit equals section
+    parUnitEqualsSection.style.display = 'block';
+    
+    if (batchSelect.value) {
+        const selectedOption = batchSelect.selectedOptions[0];
+        const batchText = selectedOption.textContent;
+        const isVariable = batchText.includes('Variable Yield');
+        
+        // Load available units for the batch
+        loadAvailableUnitsForBatch(batchSelect.value, isVariable);
+        
+        // Show/hide auto option based on variable yield
+        const autoOption = document.getElementById('auto');
+        if (isVariable) {
+            autoOption.style.display = 'none';
+            autoOption.disabled = true;
+            // Default to par_unit_itself for variable yield
+            if (!document.querySelector('input[name="par_unit_equals_type"]:checked')) {
+                document.getElementById('par_unit_itself').checked = true;
+            }
+        } else {
+            autoOption.style.display = 'block';
+            autoOption.disabled = false;
+        }
+    } else {
+        // No batch selected - default to par_unit_itself
+        if (!document.querySelector('input[name="par_unit_equals_type"]:checked')) {
+            document.getElementById('par_unit_itself').checked = true;
+        }
+        const autoOption = document.getElementById('auto');
+        autoOption.style.display = 'none';
+        autoOption.disabled = true;
+    }
+    
+    updateParUnitEqualsPreview();
+}
+
+async function loadAvailableUnitsForBatch(batchId, isVariable) {
+    try {
+        let units = [];
+        
+        if (isVariable) {
+            // For variable yield batches, show all weight and volume units  
+            units = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
+        } else {
+            // For fixed yield batches, try to get batch-specific units
+            try {
+                const response = await fetch(`/api/batches/${batchId}/available_units`);
+                units = await response.json();
+            } catch (error) {
+                console.log('Batch units not available, using default fallback');
+                units = ['lb', 'oz', 'g', 'kg', 'gal', 'qt', 'pt', 'cup', 'fl_oz', 'l', 'ml'];
+            }
+        }
+        
+        // Populate the dropdown
+        const parUnitEqualsUnitSelect = document.getElementById('par_unit_equals_unit');
+        const currentValue = parUnitEqualsUnitSelect.value;
+        parUnitEqualsUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+        
+        units.forEach(unit => {
+            const option = document.createElement('option');
+            option.value = unit;
+            option.textContent = unit;
+            if (unit === currentValue || unit === '{{ item.par_unit_equals_unit }}') {
+                option.selected = true;
+            }
+            parUnitEqualsUnitSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading available units:', error);
+    }
+}
+
+function updateParUnitEqualsPreview() {
+    const preview = document.getElementById('parUnitEqualsPreview');
+    const selectedType = document.querySelector('input[name="par_unit_equals_type"]:checked');
+    
+    if (!selectedType) {
+        preview.innerHTML = '<small>Select options to see par unit equals calculation</small>';
+        preview.className = 'alert alert-info';
+        return;
+    }
+    
+    const batchSelect = document.getElementById('batch_id');
+    const parLevelInput = document.getElementById('par_level');
+    
+    if (selectedType.value === 'auto' && batchSelect.value && parLevelInput.value) {
+        // For existing items, we need to get batch info from the selected option text
+        const selectedOption = batchSelect.selectedOptions[0];
+        const batchText = selectedOption.textContent;
+        
+        // Try to extract yield info from the text (format: "Recipe Name (amount unit)")
+        const yieldMatch = batchText.match(/\(([0-9.]+)\s+([a-zA-Z_]+)\)/);
+        if (yieldMatch) {
+            const yieldAmount = parseFloat(yieldMatch[1]);
+            const yieldUnit = yieldMatch[2];
+            const parLevel = parseFloat(parLevelInput.value);
+            
+            if (yieldAmount && parLevel > 0) {
+                const parUnitEquals = (yieldAmount / parLevel).toFixed(2);
+                preview.innerHTML = `<strong>Auto Calculation:</strong> ${yieldAmount} ${yieldUnit} ÷ ${parLevel} = ${parUnitEquals} ${yieldUnit} per par unit`;
+                preview.className = 'alert alert-success';
+            }
+        } else {
+            preview.innerHTML = '<small>Cannot calculate auto - batch yield info not available</small>';
+            preview.className = 'alert alert-warning';
+        }
+    } else if (selectedType.value === 'par_unit_itself') {
+        preview.innerHTML = '<strong>Par Unit Itself:</strong> Each par unit equals 1 unit of itself';
+        preview.className = 'alert alert-success';
+    } else if (selectedType.value === 'custom') {
+        const amount = document.getElementById('par_unit_equals_amount').value;
+        const unit = document.getElementById('par_unit_equals_unit').value;
+        
+        if (amount && unit) {
+            preview.innerHTML = `<strong>Custom:</strong> Each par unit equals ${amount} ${unit}`;
+            preview.className = 'alert alert-success';
+        } else {
+            preview.innerHTML = '<small>Enter custom amount and unit</small>';
+            preview.className = 'alert alert-warning';
+        }
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize par unit equals on load
+    updateParUnitEquals();
+    
+    // Par unit equals type change
+    document.querySelectorAll('input[name="par_unit_equals_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const customSection = document.getElementById('customParUnitEquals');
+            const customAmountInput = document.getElementById('par_unit_equals_amount');
+            const customUnitSelect = document.getElementById('par_unit_equals_unit');
+            
+            if (this.value === 'custom') {
+                customSection.style.display = 'block';
+                customAmountInput.required = true;
+                customUnitSelect.required = true;
+            } else {
+                customSection.style.display = 'none';
+                customAmountInput.required = false;
+                customUnitSelect.required = false;
+            }
+            
+            updateParUnitEqualsPreview();
+        });
+    });
+    
+    // Par level change
+    document.getElementById('par_level').addEventListener('input', updateParUnitEqualsPreview);
+    
+    // Custom values change
+    document.getElementById('par_unit_equals_amount').addEventListener('input', updateParUnitEqualsPreview);
+    document.getElementById('par_unit_equals_unit').addEventListener('change', updateParUnitEqualsPreview);
+});
+</script>
 {% endblock %}

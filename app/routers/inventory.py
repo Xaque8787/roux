@@ -757,13 +757,15 @@ async def inventory_item_edit_page(item_id: int, request: Request, db: Session =
     
     categories = db.query(Category).filter(Category.type == "inventory").all()
     batches = db.query(Batch).all()
+    par_unit_names = db.query(ParUnitName).all()
     
     return templates.TemplateResponse("inventory_item_edit.html", {
         "request": request,
         "current_user": current_user,
         "item": item,
         "categories": categories,
-        "batches": batches
+        "batches": batches,
+        "par_unit_names": par_unit_names
     })
 
 @router.post("/items/{item_id}/edit")
@@ -771,8 +773,12 @@ async def update_inventory_item(
     item_id: int,
     request: Request,
     name: str = Form(...),
+    par_unit_name_id: int = Form(None),
     par_level: float = Form(...),
     batch_id: int = Form(None),
+    par_unit_equals_type: str = Form(...),
+    par_unit_equals_amount: float = Form(None),
+    par_unit_equals_unit: str = Form(None),
     category_id: int = Form(None),
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
@@ -782,8 +788,12 @@ async def update_inventory_item(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
     item.name = name
+    item.par_unit_name_id = par_unit_name_id if par_unit_name_id else None
     item.par_level = par_level
     item.batch_id = batch_id if batch_id else None
+    item.par_unit_equals_type = par_unit_equals_type
+    item.par_unit_equals_amount = par_unit_equals_amount if par_unit_equals_type == 'custom' else None
+    item.par_unit_equals_unit = par_unit_equals_unit if par_unit_equals_type == 'custom' else None
     item.category_id = category_id if category_id else None
     
     db.commit()
