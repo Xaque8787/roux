@@ -346,7 +346,7 @@
                             <tr>
                                 <td>
                                     {% if item.category %}
-                                        {{ item.category.icon }}
+                                        {{ ing.category.icon or '🔘' }}
                                     {% else %}
                                         🔘
                                     {% endif %}
