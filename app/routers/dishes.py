@@ -73,48 +73,26 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
     dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
     
     # Calculate costs
-    expected_total_cost = 0
-    expected_recipe_cost = 0
-    expected_labor_cost = 0
-    actual_total_cost = 0
-    actual_recipe_cost = 0
-    actual_labor_cost = 0
-    actual_total_cost_week = 0
-    actual_labor_cost_week = 0
-    actual_total_cost_month = 0
-    actual_labor_cost_month = 0
-    actual_total_cost_all_time = 0
-    actual_labor_cost_all_time = 0
+    # Calculate costs dynamically for each portion
+    expected_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
+    expected_labor_cost = sum(portion.get_labor_cost(db, 'estimated') for portion in dish_batch_portions)
+    expected_total_cost = expected_recipe_cost + expected_labor_cost
     
-    # Add missing cost variables
-    week_recipe_cost = 0
-    week_labor_cost = 0
-    month_recipe_cost = 0
-    month_labor_cost = 0
-    all_time_recipe_cost = 0
-    all_time_labor_cost = 0
+    actual_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
+    actual_labor_cost = sum(portion.get_labor_cost(db, 'actual') for portion in dish_batch_portions)
+    actual_total_cost = actual_recipe_cost + actual_labor_cost
     
-    for portion in dish_batch_portions:
-        expected_total_cost += portion.get_expected_cost(db)
-        expected_recipe_cost += portion.get_recipe_cost(db)
-        expected_labor_cost += portion.get_labor_cost(db, 'estimated')
-        actual_total_cost += portion.get_actual_cost(db)
-        actual_recipe_cost += portion.get_recipe_cost(db)
-        actual_labor_cost += portion.get_labor_cost(db, 'actual')
-        actual_total_cost_week += portion.get_actual_cost_week_avg(db)
-        actual_labor_cost_week += portion.get_labor_cost(db, 'week_avg')
-        actual_total_cost_month += portion.get_actual_cost_month_avg(db)
-        actual_labor_cost_month += portion.get_labor_cost(db, 'month_avg')
-        actual_total_cost_all_time += portion.get_actual_cost_all_time_avg(db)
-        actual_labor_cost_all_time += portion.get_labor_cost(db, 'all_time_avg')
-        
-        # Calculate separate recipe and labor costs for each time period
-        week_recipe_cost += portion.get_recipe_cost(db)
-        week_labor_cost += portion.get_labor_cost(db, 'week_avg')
-        month_recipe_cost += portion.get_recipe_cost(db)
-        month_labor_cost += portion.get_labor_cost(db, 'month_avg')
-        all_time_recipe_cost += portion.get_recipe_cost(db)
-        all_time_labor_cost += portion.get_labor_cost(db, 'all_time_avg')
+    week_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
+    week_labor_cost = sum(portion.get_labor_cost(db, 'week_avg') for portion in dish_batch_portions)
+    actual_total_cost_week = week_recipe_cost + week_labor_cost
+    
+    month_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
+    month_labor_cost = sum(portion.get_labor_cost(db, 'month_avg') for portion in dish_batch_portions)
+    actual_total_cost_month = month_recipe_cost + month_labor_cost
+    
+    all_time_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
+    all_time_labor_cost = sum(portion.get_labor_cost(db, 'all_time_avg') for portion in dish_batch_portions)
+    actual_total_cost_all_time = all_time_recipe_cost + all_time_labor_cost
     
     # Calculate profits and margins
     expected_profit = dish.sale_price - expected_total_cost

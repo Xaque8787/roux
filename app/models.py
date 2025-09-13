@@ -937,7 +937,12 @@ class Task(Base):
     def labor_cost(self):
         """Calculate labor cost for this task"""
         if self.total_time_minutes > 0:
+            # Use highest wage from assigned employees, or batch estimated wage if unassigned
             wage = self.highest_hourly_wage
+            if wage == 0 and self.batch:
+                # No assigned employee, use batch's estimated hourly rate
+                wage = self.batch.hourly_labor_rate
+            
             if wage > 0:
                 return (self.total_time_minutes / 60) * wage
         return 0
