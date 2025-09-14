@@ -275,7 +275,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show all ingredients when field is focused
     ingredientSearch.addEventListener('focus', function() {
-        loadAllIngredients();
+        if (allIngredients.length > 0) {
+            filterIngredients('');
+        }
+        ingredientSuggestions.style.display = 'block';
     });
     
     // Hide suggestions when clicking outside
@@ -601,10 +604,10 @@ async function loadAllIngredients() {
         }
         allIngredients = await response.json();
         console.log('Loaded ingredients:', allIngredients.length);
-        filterIngredients(''); // Show all ingredients initially
+        // Don't show dropdown on page load - wait for user interaction
     } catch (error) {
         console.error('Error loading ingredients:', error);
-        document.getElementById('ingredientSuggestions').innerHTML = '<div class="dropdown-item-text text-danger">Error loading ingredients</div>';
+        // Don't show error dropdown on page load either
     }
 }
 

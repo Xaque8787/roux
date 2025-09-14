@@ -108,7 +108,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show all ingredients when focused
     ingredientSearch.addEventListener('focus', function() {
-        filterIngredients('');
+        if (allIngredients.length > 0) {
+            filterIngredients('');
+        }
         dropdown.style.display = 'block';
     });
     
@@ -133,10 +135,10 @@ async function loadAllIngredients() {
         }
         allIngredients = await response.json();
         console.log('Loaded ingredients:', allIngredients);
-        filterIngredients(''); // Show all ingredients initially
+        // Don't show dropdown on page load - wait for user interaction
     } catch (error) {
         console.error('Error loading ingredients:', error);
-        document.getElementById('ingredientDropdown').innerHTML = '<div class="dropdown-item-text text-danger">Error loading ingredients</div>';
+        // Don't show error dropdown on page load either
     }
 }
 
