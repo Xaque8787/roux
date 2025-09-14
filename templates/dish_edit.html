@@ -645,7 +645,7 @@ function showIngredientPortionSelection(ingredient) {
         
         if (quantity > 0 && selectedUnit && ingredientId) {
             // Calculate cost using ingredient's cost per unit method
-            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${encodeURIComponent(selectedUnit)}`)
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${selectedUnit}`)
                 .then(response => response.json())
                 .then(data => {
                     const cost = quantity * data.cost_per_unit;

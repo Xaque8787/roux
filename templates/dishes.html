@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         searchTimeout = setTimeout(() => {
-            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${encodeURIComponent(selectedUnit)}`)
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${selectedUnit}`)
                 .then(response => response.json())
                 .then(data => {
                     displayBatchSuggestions(data);

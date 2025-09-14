@@ -41,12 +41,12 @@ VOLUME_CONVERSIONS = {
 
 BAKING_MEASUREMENTS = {
     'cup': 1.0,      # Base unit: cups
-    '3/4_cup': 0.75,
-    '2/3_cup': 0.667,
-    '1/2_cup': 0.5,
-    '1/3_cup': 0.333,
-    '1/4_cup': 0.25,
-    '1/8_cup': 0.125,
+    '3_4_cup': 0.75,
+    '2_3_cup': 0.667,
+    '1_2_cup': 0.5,
+    '1_3_cup': 0.333,
+    '1_4_cup': 0.25,
+    '1_8_cup': 0.125,
     'tbsp': 16.0,    # 16 tbsp per cup
     'tsp': 48.0,     # 48 tsp per cup
 }
