@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         searchTimeout = setTimeout(() => {
-            fetch(`/api/batches/search?q=${encodeURIComponent(query)}`)
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${encodeURIComponent(selectedUnit)}`)
                 .then(response => response.json())
                 .then(data => {
                     displayBatchSuggestions(data);
@@ -450,7 +450,7 @@ function showPortionModal(batch, availableUnits) {
             }
         } else if (!useRecipePortion && portionSize > 0 && selectedUnit) {
             try {
-                const response = await fetch(`/api/batches/${batch.id}/cost_per_unit/${selectedUnit}`);
+                const response = await fetch(`/api/batches/${batch.id}/cost_per_unit/${encodeURIComponent(selectedUnit)}`);
                 const data = await response.json();
                 const cost = portionSize * data.expected_cost_per_unit;
                 estimatedCost.textContent = cost.toFixed(2);
@@ -725,7 +725,7 @@ function showIngredientPortionSelection(ingredient) {
         
         if (quantity > 0 && selectedUnit) {
             try {
-                const response = await fetch(`/api/ingredients/${ingredient.id}/cost_per_unit/${selectedUnit}`);
+                const response = await fetch(`/api/ingredients/${ingredient.id}/cost_per_unit/${encodeURIComponent(selectedUnit)}`);
                 const data = await response.json();
                 const cost = quantity * data.cost_per_unit;
                 estimatedCost.textContent = cost.toFixed(2);
