@@ -246,33 +246,27 @@ class Ingredient(Base):
             if (self.baking_measurement_unit and self.baking_weight_amount and 
                 self.baking_weight_unit and self.baking_weight_amount > 0):
                 
-                # Step 1: Convert net unit to baking weight unit (e.g., lb to oz)
+                # Step 1: Get cost per baking weight unit (e.g., cost per ounce)
                 try:
-                    if self.net_unit in WEIGHT_CONVERSIONS and self.baking_weight_unit in WEIGHT_CONVERSIONS:
-                        net_in_baking_weight_unit = convert_weight(1, self.net_unit, self.baking_weight_unit)
-                    else:
-                        return 0  # Can't convert between units
+                    cost_per_baking_weight_unit = self.get_cost_per_unit(self.baking_weight_unit)
                 except ValueError:
                     return 0
                 
-                # Step 2: Calculate how many baking measurement units per net unit
-                # Example: 1 lb = 16 oz, and 1 cup = 6 oz, so 1 lb = 16/6 = 2.67 cups
-                baking_units_per_net_unit = net_in_baking_weight_unit / self.baking_weight_amount
+                # Step 2: Calculate cost for the defined baking measurement
+                # Example: 1 cup = 5 oz, so cost per cup = 5 * cost_per_oz
+                cost_per_defined_measurement = self.baking_weight_amount * cost_per_baking_weight_unit
                 
-                # Step 3: Convert from the defined baking measurement to the requested unit
-                # Example: if we defined "1 cup = 6 oz" and want "1/2 cup", we need to convert
+                # Step 3: Convert from defined measurement to requested measurement
+                # Example: if defined "1 cup = 5 oz" and want "1/2 cup"
                 if self.baking_measurement_unit in BAKING_MEASUREMENTS and unit in BAKING_MEASUREMENTS:
-                    # Convert from defined measurement to cups, then to target measurement
-                    defined_measurement_in_cups = 1.0 / BAKING_MEASUREMENTS[self.baking_measurement_unit]
-                    target_measurement_in_cups = 1.0 / BAKING_MEASUREMENTS[unit]
+                    # Calculate ratio between defined measurement and requested measurement
+                    # Example: 1 cup vs 1/2 cup = 1.0 vs 0.5 = ratio of 2.0
+                    defined_ratio = BAKING_MEASUREMENTS[self.baking_measurement_unit]
+                    requested_ratio = BAKING_MEASUREMENTS[unit]
+                    conversion_factor = defined_ratio / requested_ratio
                     
-                    # How many target units equal one defined measurement unit
-                    target_per_defined = defined_measurement_in_cups / target_measurement_in_cups
-                    
-                    # How many target units per net unit
-                    target_units_per_net_unit = baking_units_per_net_unit * target_per_defined
-                    
-                    return round(self.cost_per_net_unit / target_units_per_net_unit, 4)
+                    # Cost per requested unit = cost per defined unit / conversion factor
+                    return round(cost_per_defined_measurement / conversion_factor, 4)
                 else:
                     return 0
             else:
