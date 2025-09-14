@@ -298,7 +298,7 @@ function showUnitSelection(ingredient) {
                         <label class="form-label">Usage Unit</label>
                         <select class="form-select" id="usageUnitSelect">
                             ${availableUnits.map(unit => 
-                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${unit}</option>`
+                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${formatUnitDisplay(unit)}</option>`
                             ).join('')}
                         </select>
                     </div>
@@ -334,7 +334,7 @@ function showUnitSelection(ingredient) {
         
         if (quantity > 0 && selectedUnit && ingredientId) {
             // Calculate cost using ingredient's cost per unit method
-            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${selectedUnit}`)
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${encodeURIComponent(selectedUnit)}`)
                 .then(response => response.json())
                 .then(data => {
                     const cost = quantity * data.cost_per_unit;
@@ -356,6 +356,20 @@ function showUnitSelection(ingredient) {
     modal.addEventListener('hidden.bs.modal', function() {
         document.body.removeChild(modal);
     });
+}
+
+function formatUnitDisplay(unit) {
+    // Convert internal unit format to display format
+    const unitDisplayMap = {
+        '3_4_cup': '3/4 cup',
+        '2_3_cup': '2/3 cup', 
+        '1_2_cup': '1/2 cup',
+        '1_3_cup': '1/3 cup',
+        '1_4_cup': '1/4 cup',
+        '1_8_cup': '1/8 cup'
+    };
+    
+    return unitDisplayMap[unit] || unit;
 }
 
 function addIngredientToRecipe() {
