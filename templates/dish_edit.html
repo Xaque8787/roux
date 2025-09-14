@@ -73,6 +73,24 @@
                     
                     <input type="hidden" name="batch_portions_data" id="batchPortionsData">
                     
+                    <h6>Ingredient Portions:</h6>
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="ingredientSearch" 
+                                   placeholder="Search for ingredients..." autocomplete="off">
+                            <button type="button" class="btn btn-outline-secondary" id="addIngredientBtn">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                        <div id="ingredientSuggestions" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+                    
+                    <div id="selectedIngredients" class="mb-3">
+                        <!-- Selected ingredients will appear here -->
+                    </div>
+                    
+                    <input type="hidden" name="ingredient_portions_data" id="ingredientPortionsData">
+                    
                     <div class="d-flex justify-content-between mt-4">
                         <a href="/dishes/{{ dish.id }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
@@ -87,8 +105,11 @@
 
 <script>
 let selectedBatches = [];
+let selectedIngredients = [];
 let allBatches = [];
+let allIngredients = [];
 let currentBatchData = null;
+let currentIngredientData = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Load existing batch portions
@@ -105,13 +126,30 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     {% endfor %}
     
+    // Load existing ingredient portions
+    {% for portion in dish_ingredient_portions %}
+    selectedIngredients.push({
+        ingredient_id: {{ portion.ingredient_id }},
+        ingredient_name: "{{ portion.ingredient.name }}",
+        quantity: {{ portion.quantity }},
+        unit: "{{ portion.unit }}",
+        estimated_cost: {{ portion.cost }}
+    });
+    {% endfor %}
+    
     updateSelectedBatchesDisplay();
+    updateSelectedIngredientsDisplay();
     
     // Load all batches for dropdown
     loadAllBatches();
     
+    // Load all ingredients for dropdown
+    loadAllIngredients();
+    
     const batchSearch = document.getElementById('batchSearch');
     const dropdown = document.getElementById('batchDropdown');
+    const ingredientSearch = document.getElementById('ingredientSearch');
+    const ingredientSuggestions = document.getElementById('ingredientSuggestions');
     
     // Search functionality
     batchSearch.addEventListener('input', function() {
@@ -130,11 +168,27 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!e.target.closest('#batchSearch') && !e.target.closest('#batchDropdown')) {
             dropdown.style.display = 'none';
         }
+        if (!e.target.closest('#ingredientSearch') && !e.target.closest('#ingredientSuggestions')) {
+            ingredientSuggestions.style.display = 'none';
+        }
     });
     
     // Form submission
     document.getElementById('dishEditForm').addEventListener('submit', function(e) {
         document.getElementById('batchPortionsData').value = JSON.stringify(selectedBatches);
+        document.getElementById('ingredientPortionsData').value = JSON.stringify(selectedIngredients);
+    });
+    
+    // Search ingredients as user types
+    ingredientSearch.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        filterIngredients(query);
+    });
+    
+    // Show all ingredients when focused
+    ingredientSearch.addEventListener('focus', function() {
+        filterIngredients('');
+        ingredientSuggestions.style.display = 'block';
     });
 });
 
@@ -460,6 +514,231 @@ function updateSelectedBatchesDisplay() {
 function removeBatch(index) {
     selectedBatches.splice(index, 1);
     updateSelectedBatchesDisplay();
+}
+
+async function loadAllIngredients() {
+    try {
+        const response = await fetch('/api/ingredients/all');
+        if (!response.ok) {
+            throw new Error('Failed to load ingredients');
+        }
+        allIngredients = await response.json();
+        console.log('Loaded ingredients:', allIngredients);
+        filterIngredients(''); // Show all ingredients initially
+    } catch (error) {
+        console.error('Error loading ingredients:', error);
+        document.getElementById('ingredientSuggestions').innerHTML = '<div class="dropdown-item-text text-danger">Error loading ingredients</div>';
+    }
+}
+
+function filterIngredients(query) {
+    const suggestions = document.getElementById('ingredientSuggestions');
+    
+    const filteredIngredients = allIngredients.filter(ingredient => 
+        ingredient.name.toLowerCase().includes(query) ||
+        (ingredient.category && ingredient.category.toLowerCase().includes(query))
+    );
+    
+    suggestions.innerHTML = '';
+    
+    if (filteredIngredients.length === 0) {
+        suggestions.innerHTML = '<div class="dropdown-item-text text-muted">No ingredients found</div>';
+    } else {
+        filteredIngredients.forEach(ingredient => {
+            const item = document.createElement('a');
+            item.className = 'dropdown-item';
+            item.href = '#';
+            item.innerHTML = `
+                <strong>${ingredient.name}</strong><br>
+                <small>Available units: ${ingredient.available_units.join(', ')}</small>
+                ${ingredient.category ? `<br><small class="text-muted">${ingredient.category}</small>` : ''}
+            `;
+            
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectIngredient(ingredient);
+                document.getElementById('ingredientSearch').value = ingredient.name;
+                suggestions.style.display = 'none';
+            });
+            
+            suggestions.appendChild(item);
+        });
+    }
+    
+    if (query || document.getElementById('ingredientSearch') === document.activeElement) {
+        suggestions.style.display = 'block';
+    }
+}
+
+function selectIngredient(ingredient) {
+    console.log('Selected ingredient:', ingredient);
+    
+    // Check if ingredient already selected
+    if (selectedIngredients.find(si => si.ingredient_id === ingredient.id)) {
+        alert('This ingredient is already added to the dish.');
+        return;
+    }
+    
+    // Check if ingredient has available units
+    if (!ingredient.available_units || ingredient.available_units.length === 0) {
+        alert('This ingredient has no available units defined.');
+        return;
+    }
+    
+    currentIngredientData = ingredient;
+    showIngredientPortionSelection(ingredient);
+}
+
+function showIngredientPortionSelection(ingredient) {
+    const availableUnits = ingredient.available_units;
+    console.log('Available units:', availableUnits);
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add ${ingredient.name}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Usage Unit</label>
+                        <select class="form-select" id="ingredientUsageUnitSelect">
+                            ${availableUnits.map(unit => 
+                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${unit}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Quantity</label>
+                        <input type="number" class="form-control" id="ingredientUsageQuantityInput" step="0.01" min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Estimated cost: $<span id="estimatedIngredientUsageCost">0.00</span></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="addIngredientToDish()">Add Ingredient</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+    
+    // Update cost estimate when quantity or unit changes
+    const quantityInput = modal.querySelector('#ingredientUsageQuantityInput');
+    const usageUnitSelect = modal.querySelector('#ingredientUsageUnitSelect');
+    const estimatedCost = modal.querySelector('#estimatedIngredientUsageCost');
+    
+    function updateCost() {
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const selectedUnit = usageUnitSelect.value;
+        const ingredientId = usageUnitSelect.selectedOptions[0]?.dataset.ingredientId;
+        
+        if (quantity > 0 && selectedUnit && ingredientId) {
+            // Calculate cost using ingredient's cost per unit method
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${selectedUnit}`)
+                .then(response => response.json())
+                .then(data => {
+                    const cost = quantity * data.cost_per_unit;
+                    estimatedCost.textContent = cost.toFixed(2);
+                })
+                .catch(error => {
+                    console.error('Error calculating cost:', error);
+                    estimatedCost.textContent = '0.00';
+                });
+        } else {
+            estimatedCost.textContent = '0.00';
+        }
+    }
+    
+    quantityInput.addEventListener('input', updateCost);
+    usageUnitSelect.addEventListener('change', updateCost);
+    
+    // Clean up modal when closed
+    modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+    });
+}
+
+function addIngredientToDish() {
+    const usageUnitSelect = document.querySelector('#ingredientUsageUnitSelect');
+    const quantityInput = document.querySelector('#ingredientUsageQuantityInput');
+    
+    const quantity = parseFloat(quantityInput.value);
+    if (!quantity || quantity <= 0) {
+        alert('Please enter a valid quantity.');
+        return;
+    }
+    
+    const selectedUnit = usageUnitSelect.value;
+    const estimatedCost = parseFloat(document.querySelector('#estimatedIngredientUsageCost').textContent);
+    
+    // Add to selected ingredients
+    selectedIngredients.push({
+        ingredient_id: currentIngredientData.id,
+        ingredient_name: currentIngredientData.name,
+        unit: selectedUnit,
+        quantity: quantity,
+        estimated_cost: estimatedCost
+    });
+    
+    // Update display
+    updateSelectedIngredientsDisplay();
+    
+    // Clear search field
+    document.getElementById('ingredientSearch').value = '';
+    
+    // Close modal
+    const modal = document.querySelector('.modal.show');
+    if (modal) {
+        bootstrap.Modal.getInstance(modal).hide();
+    }
+}
+
+function updateSelectedIngredientsDisplay() {
+    const container = document.getElementById('selectedIngredients');
+    
+    if (selectedIngredients.length === 0) {
+        container.innerHTML = '<p class="text-muted">No ingredients added yet.</p>';
+        return;
+    }
+    
+    let html = '<h6>Selected Ingredients:</h6>';
+    let totalCost = 0;
+    
+    selectedIngredients.forEach((ingredient, index) => {
+        totalCost += ingredient.estimated_cost;
+        html += `
+            <div class="card mb-2">
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${ingredient.ingredient_name}</strong><br>
+                            <small>${ingredient.quantity} ${ingredient.unit} - $${ingredient.estimated_cost.toFixed(2)}</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="removeIngredient(${index})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `<div class="alert alert-secondary"><strong>Ingredient Cost Total: $${totalCost.toFixed(2)}</strong></div>`;
+    container.innerHTML = html;
+}
+
+function removeIngredient(index) {
+    selectedIngredients.splice(index, 1);
+    updateSelectedIngredientsDisplay();
 }
 
 function toggleRecipePortionFields() {

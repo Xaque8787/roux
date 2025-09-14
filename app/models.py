@@ -496,6 +496,24 @@ class DishBatchPortion(Base):
     recipe_portion_percent = Column(Float)  # Percentage of recipe (0.0 to 1.0)
     
     batch = relationship("Batch")
+
+class DishIngredientPortion(Base):
+    __tablename__ = "dish_ingredient_portions"
+    id = Column(Integer, primary_key=True)
+    dish_id = Column(Integer, ForeignKey("dishes.id"))
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
+    quantity = Column(Float, nullable=False)
+    unit = Column(String, nullable=False)  # Standard unit
+    
+    ingredient = relationship("Ingredient")
+    
+    @property
+    def cost(self):
+        """Calculate the cost of this dish ingredient portion"""
+        if self.ingredient and self.unit and self.quantity:
+            cost_per_unit = self.ingredient.get_cost_per_unit(self.unit)
+            return round(self.quantity * cost_per_unit, 2)
+        return 0
     
     def get_recipe_cost(self, db):
         """Get just the recipe/food cost portion"""

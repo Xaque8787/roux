@@ -87,6 +87,43 @@
                         </tfoot>
                     </table>
                 </div>
+                
+                {% if dish_ingredient_portions %}
+                <h6 class="mt-4">Ingredient Portions</h6>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Ingredient</th>
+                                <th>Quantity</th>
+                                <th>Unit</th>
+                                <th>Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for portion in dish_ingredient_portions %}
+                            <tr>
+                                <td>
+                                    <strong>{{ portion.ingredient.name }}</strong>
+                                    {% if portion.ingredient.category %}
+                                    <br><small class="text-muted">{{ portion.ingredient.category.name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>{{ portion.quantity }}</td>
+                                <td>{{ portion.unit }}</td>
+                                <td>${{ "%.2f"|format(portion.cost) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-secondary">
+                                <th colspan="3">Ingredient Total:</th>
+                                <th>${{ "%.2f"|format(ingredient_cost) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% endif %}
                 {% else %}
                 <p class="text-muted">No batch portions added to this dish yet.</p>
                 {% endif %}
@@ -118,6 +155,7 @@
                 <hr>
                 <h6>Expected Costs (Estimated Labor)</h6>
                 <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(expected_recipe_cost) }}</span></p>
+                <p><strong>Ingredient Cost:</strong> <span class="text-info">${{ "%.2f"|format(ingredient_cost) }}</span></p>
                 <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(expected_labor_cost) }}</span></p>
                 <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(expected_total_cost) }}</span></p>
                 <p><strong>Profit:</strong> 
@@ -143,6 +181,7 @@
                     <div class="col-6">
                         <h6 class="text-primary">Most Recent</h6>
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(actual_recipe_cost) }}</span></p>
+                        <p><strong>Ingredient Cost:</strong> <span class="text-info">${{ "%.2f"|format(ingredient_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(actual_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost) }}</span></p>
                         <p><strong>Profit:</strong> 
@@ -164,6 +203,7 @@
                     <div class="col-6">
                         <h6 class="text-info">Week Average</h6>
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(week_recipe_cost) }}</span></p>
+                        <p><strong>Ingredient Cost:</strong> <span class="text-info">${{ "%.2f"|format(ingredient_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(week_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_week) }}</span></p>
                         <p><strong>Profit:</strong> 
@@ -188,6 +228,7 @@
                     <div class="col-6">
                         <h6 class="text-warning">Month Average</h6>
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(month_recipe_cost) }}</span></p>
+                        <p><strong>Ingredient Cost:</strong> <span class="text-info">${{ "%.2f"|format(month_labor_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(month_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_month) }}</span></p>
                         <p><strong>Profit:</strong> 
@@ -209,6 +250,7 @@
                     <div class="col-6">
                         <h6 class="text-secondary">All Time Average</h6>
                         <p><strong>Food Cost:</strong> <span class="text-warning">${{ "%.2f"|format(all_time_recipe_cost) }}</span></p>
+                        <p><strong>Ingredient Cost:</strong> <span class="text-info">${{ "%.2f"|format(ingredient_cost) }}</span></p>
                         <p><strong>Labor Cost:</strong> <span class="text-info">${{ "%.2f"|format(all_time_labor_cost) }}</span></p>
                         <p><strong>Total Cost:</strong> <span class="text-primary">${{ "%.2f"|format(actual_total_cost_all_time) }}</span></p>
                         <p><strong>Profit:</strong> 
@@ -266,6 +308,14 @@
                         Recent: ${{ "%.2f"|format(portion.get_actual_cost(db)) }} (Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'actual')) }})<br>
                         Week: ${{ "%.2f"|format(portion.get_actual_cost_week_avg(db)) }} (Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'week_avg')) }})<br>
                         Month: ${{ "%.2f"|format(portion.get_actual_cost_month_avg(db)) }} (Labor: ${{ "%.2f"|format(portion.get_labor_cost(db, 'month_avg')) }})
+                    </small>
+                </div>
+                {% endfor %}
+                {% for portion in dish_ingredient_portions %}
+                <div class="d-flex justify-content-between mb-1">
+                    <small>{{ portion.ingredient.name }} (ingredient)</small>
+                    <small>
+                        Cost: ${{ "%.2f"|format(portion.cost) }} ({{ portion.quantity }} {{ portion.unit }})
                     </small>
                 </div>
                 {% endfor %}

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 import json
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
-from ..models import Dish, Category, DishBatchPortion, Batch
+from ..models import Dish, Category, DishBatchPortion, DishIngredientPortion, Batch
 
 router = APIRouter(prefix="/dishes", tags=["dishes"])
 templates = Jinja2Templates(directory="templates")
@@ -30,6 +30,7 @@ async def create_dish(
     sale_price: float = Form(...),
     description: str = Form(""),
     batch_portions_data: str = Form(...),
+    ingredient_portions_data: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
@@ -60,6 +61,21 @@ async def create_dish(
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid batch portions data")
     
+    # Parse and add ingredient portions
+    try:
+        ingredient_portions = json.loads(ingredient_portions_data)
+        for portion_data in ingredient_portions:
+            dish_ingredient_portion = DishIngredientPortion(
+                dish_id=dish.id,
+                ingredient_id=portion_data['ingredient_id'],
+                quantity=portion_data['quantity'],
+                unit=portion_data['unit']
+            )
+            db.add(dish_ingredient_portion)
+    except (json.JSONDecodeError, KeyError) as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid ingredient portions data")
+    
     db.commit()
     
     return RedirectResponse(url="/dishes", status_code=302)
@@ -71,27 +87,29 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Dish not found")
     
     dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
+    dish_ingredient_portions = db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).all()
     
     # Calculate costs dynamically for each portion
     expected_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
     expected_labor_cost = sum(portion.get_labor_cost(db, 'estimated') for portion in dish_batch_portions)
-    expected_total_cost = expected_recipe_cost + expected_labor_cost
+    ingredient_cost = sum(portion.cost for portion in dish_ingredient_portions)
+    expected_total_cost = expected_recipe_cost + expected_labor_cost + ingredient_cost
     
     actual_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
     actual_labor_cost = sum(portion.get_labor_cost(db, 'actual') for portion in dish_batch_portions)
-    actual_total_cost = actual_recipe_cost + actual_labor_cost
+    actual_total_cost = actual_recipe_cost + actual_labor_cost + ingredient_cost
     
     week_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
     week_labor_cost = sum(portion.get_labor_cost(db, 'week_avg') for portion in dish_batch_portions)
-    actual_total_cost_week = week_recipe_cost + week_labor_cost
+    actual_total_cost_week = week_recipe_cost + week_labor_cost + ingredient_cost
     
     month_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
     month_labor_cost = sum(portion.get_labor_cost(db, 'month_avg') for portion in dish_batch_portions)
-    actual_total_cost_month = month_recipe_cost + month_labor_cost
+    actual_total_cost_month = month_recipe_cost + month_labor_cost + ingredient_cost
     
     all_time_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
     all_time_labor_cost = sum(portion.get_labor_cost(db, 'all_time_avg') for portion in dish_batch_portions)
-    actual_total_cost_all_time = all_time_recipe_cost + all_time_labor_cost
+    actual_total_cost_all_time = all_time_recipe_cost + all_time_labor_cost + ingredient_cost
     
     # Calculate profits and margins
     expected_profit = dish.sale_price - expected_total_cost
@@ -114,6 +132,8 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         "current_user": current_user,
         "dish": dish,
         "dish_batch_portions": dish_batch_portions,
+        "dish_ingredient_portions": dish_ingredient_portions,
+        "ingredient_cost": ingredient_cost,
         "expected_total_cost": expected_total_cost,
         "expected_recipe_cost": expected_recipe_cost,
         "expected_labor_cost": expected_labor_cost,
@@ -150,13 +170,15 @@ async def dish_edit_page(dish_id: int, request: Request, db: Session = Depends(g
     
     categories = db.query(Category).filter(Category.type == "dish").all()
     dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
+    dish_ingredient_portions = db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).all()
     
     return templates.TemplateResponse("dish_edit.html", {
         "request": request,
         "current_user": current_user,
         "dish": dish,
         "categories": categories,
-        "dish_batch_portions": dish_batch_portions
+        "dish_batch_portions": dish_batch_portions,
+        "dish_ingredient_portions": dish_ingredient_portions
     })
 
 @router.post("/{dish_id}/edit")
@@ -168,6 +190,7 @@ async def update_dish(
     sale_price: float = Form(...),
     description: str = Form(""),
     batch_portions_data: str = Form(...),
+    ingredient_portions_data: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
@@ -182,6 +205,9 @@ async def update_dish(
     
     # Remove existing batch portions
     db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
+    
+    # Remove existing ingredient portions
+    db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).delete()
     
     # Parse and add new batch portions
     try:
@@ -200,6 +226,21 @@ async def update_dish(
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid batch portions data")
     
+    # Parse and add new ingredient portions
+    try:
+        ingredient_portions = json.loads(ingredient_portions_data)
+        for portion_data in ingredient_portions:
+            dish_ingredient_portion = DishIngredientPortion(
+                dish_id=dish.id,
+                ingredient_id=portion_data['ingredient_id'],
+                quantity=portion_data['quantity'],
+                unit=portion_data['unit']
+            )
+            db.add(dish_ingredient_portion)
+    except (json.JSONDecodeError, KeyError) as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid ingredient portions data")
+    
     db.commit()
     
     return RedirectResponse(url=f"/dishes/{dish_id}", status_code=302)
@@ -212,6 +253,9 @@ async def delete_dish(dish_id: int, db: Session = Depends(get_db), current_user 
     
     # Delete dish batch portions first
     db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
+    
+    # Delete dish ingredient portions
+    db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).delete()
     
     db.delete(dish)
     db.commit()
