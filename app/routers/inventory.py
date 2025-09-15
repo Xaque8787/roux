@@ -383,11 +383,9 @@ async def assign_multiple_employees_to_task(
     # Store all assigned employee IDs
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
     
-    db.commit()
-    
-    # Broadcast task assignment
+    # Broadcast BEFORE committing to ensure connections are still active
     try:
-        assigned_employees = [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()]
+        assigned_employees = [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else []
         await broadcast_task_update(day_id, task_id, "task_assigned", {
             "assigned_employees": assigned_employees,
             "primary_assignee": assigned_employees[0] if assigned_employees else None,
@@ -397,6 +395,8 @@ async def assign_multiple_employees_to_task(
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
         pass
+    
+    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -470,21 +470,21 @@ async def pause_task(
     if task.status != "in_progress":
         raise HTTPException(status_code=400, detail="Task is not in progress")
     
+    # Broadcast BEFORE committing
+    try:
+        await broadcast_task_update(day_id, task_id, "task_paused", {
+            "paused_at": datetime.utcnow().isoformat(),
+            "paused_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted task pause for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task pause: {e}")
+        pass
+    
     task.paused_at = datetime.utcnow()
     task.is_paused = True
     db.commit()
     
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.post("/day/{day_id}/tasks/{task_id}/resume")
-async def resume_task(
-    day_id: int,
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
     if task.status != "paused":
@@ -514,6 +514,19 @@ async def finish_task(
     
     if task.status not in ["in_progress", "paused"]:
         raise HTTPException(status_code=400, detail="Task cannot be finished")
+    
+    # Broadcast BEFORE committing
+    try:
+        await broadcast_task_update(day_id, task_id, "task_completed", {
+            "finished_at": datetime.utcnow().isoformat(),
+            "total_time": task.total_time_minutes,
+            "labor_cost": task.labor_cost,
+            "completed_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted task completion for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task completion: {e}")
+        pass
     
     # Handle paused task
     if task.is_paused and task.paused_at:
@@ -553,17 +566,10 @@ async def finish_task_with_amount(
     task.made_amount = made_amount
     task.made_unit = made_unit
     
-    # Finish the task
-    task.finished_at = datetime.utcnow()
-    task.is_paused = False
-    task.paused_at = None
-    
-    db.commit()
-    
-    # Broadcast task completion with amount
+    # Broadcast BEFORE committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
-            "finished_at": task.finished_at.isoformat(),
+            "finished_at": datetime.utcnow().isoformat(),
             "total_time": task.total_time_minutes,
             "made_amount": task.made_amount,
             "made_unit": task.made_unit,
@@ -575,19 +581,13 @@ async def finish_task_with_amount(
         print(f"❌ Error broadcasting task completion: {e}")
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.post("/day/{day_id}/tasks/{task_id}/notes")
-async def update_task_notes(
-    day_id: int,
-    task_id: int,
-    notes: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    # Finish the task
+    task.finished_at = datetime.utcnow()
+    task.is_paused = False
+    task.paused_at = None
+    
+    db.commit()
+    
     
     task.notes = notes if notes.strip() else None
     db.commit()

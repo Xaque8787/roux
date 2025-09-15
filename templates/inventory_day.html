@@ -278,6 +278,7 @@
                                         <small class="text-warning">Unassigned</small>
                                     {% endif %}
                                 </td>
+                                <td class="task-status-cell" data-task-id="{{ task.id }}">
                                 <td class="task-status-cell">
                                     {% if task.status == "not_started" %}
                                         {% if task.requires_scale_selection %}
@@ -315,7 +316,6 @@
                                         <span class="badge bg-primary">In Progress</span>
                                         {% endif %}
                                     {% elif task.status == "paused" %}
-                                        {% if task.requires_made_amount %}
                                         <button type="button" class="btn btn-success btn-sm" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                             <i class="fas fa-check"></i> Finish & Enter Amount
                                         </button>
@@ -337,7 +337,7 @@
                                         <small>{{ task.total_time_minutes }} min</small>
                                         {% if task.finished_at and task.assigned_employees|length > 0 %}
                                         <br><small class="text-success">${{ "%.2f"|format(task.labor_cost) }}</small>
-                                        {% endif %}
+                                <td class="task-actions-cell" data-task-id="{{ task.id }}">
                                     {% else %}
                                         <small class="text-muted">-</small>
                                     {% endif %}
