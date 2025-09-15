@@ -478,4 +478,121 @@
             </div>
             <div class="card-body">
                 {% for task_id, summary in task_summaries.items() %}
-                {% set task = tasks|
+                {% set task = tasks|selectattr('id', 'equalto', task_id)|first %}
+                {% if task %}
+                <div class="card mb-2">
+                    <div class="card-body p-2">
+                        <h6 class="mb-1">{{ task.description }}</h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <small><strong>Par Level:</strong> {{ "%.1f"|format(summary.par_level) }} {{ summary.par_unit_name }}</small>
+                                <br><small><strong>Initial:</strong> {{ "%.1f"|format(summary.initial_inventory) }} {{ summary.par_unit_name }}</small>
+                                {% if summary.made_amount %}
+                                <br><small><strong>Made:</strong> {{ summary.made_amount }} {{ summary.made_unit }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="col-6">
+                                <small><strong>Final:</strong> {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }}</small>
+                                {% if summary.par_unit_equals %}
+                                <br><small><strong>Equals:</strong> {{ "%.2f"|format(summary.par_unit_equals) }} {{ summary.par_unit_equals_unit or '' }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Manual Task Modal -->
+<div class="modal fade" id="addTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Manual Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="taskDescription" class="form-label">Task Description</label>
+                        <input type="text" class="form-control" id="taskDescription" name="description" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskAssignedTo" class="form-label">Assign To (Multiple Selection)</label>
+                        <select class="form-select" id="taskAssignedTo" name="assigned_to_ids" multiple>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl/Cmd to select multiple employees</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskInventoryItem" class="form-label">Link to Inventory Item (Optional)</label>
+                        <select class="form-select" id="taskInventoryItem" name="inventory_item_id">
+                            <option value="">No inventory item</option>
+                            {% for day_item in inventory_day_items %}
+                            <option value="{{ day_item.inventory_item.id }}">{{ day_item.inventory_item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskBatch" class="form-label">Link to Batch (Optional)</label>
+                        <select class="form-select" id="taskBatch" name="batch_id">
+                            <option value="">No batch</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskCategory" class="form-label">Category (Optional)</label>
+                        <select class="form-select" id="taskCategory" name="category_id">
+                            <option value="">No category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Task Modal -->
+<div class="modal fade" id="assignTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="assignTaskForm" method="post">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="assignTaskTo" class="form-label">Assign To (Multiple Selection)</label>
+                        <select class="form-select" id="assignTaskTo" name="assigned_to_ids" multiple required>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl/Cmd to select multiple employees</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
