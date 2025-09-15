@@ -634,6 +634,16 @@ async def finalize_inventory_day(
     inventory_day.finalized = True
     db.commit()
     
+    # Broadcast day finalization
+    try:
+        await broadcast_day_update(day_id, "day_finalized", {
+            "finalized_at": datetime.utcnow().isoformat()
+        })
+        print(f"✅ Broadcasted day finalization for day {day_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting day finalization: {e}")
+        pass
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.get("/reports/{day_id}")
