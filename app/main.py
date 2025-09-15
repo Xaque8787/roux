@@ -1,22 +1,41 @@
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import FastAPI, Request, HTTPException
+from fastapi import Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, and_
+from datetime import datetime, timedelta
 import json
 
-from .database import engine, get_db
-from .models import Base, User
-from .routers import auth, home, employees, ingredients, recipes, batches, dishes, inventory, utilities, categories, vendors, par_unit_names
-from .api import ingredients as ingredients_api, recipes as recipes_api, batches as batches_api, tasks as tasks_api
-from .websocket import manager
-from .auth import verify_jwt
+# Import database and models
+from .database import engine
+from .dependencies import get_db
+from .models import Base, Task, Batch, InventoryItem
+
+# Import routers
+from .routers import (
+    auth, home, employees, ingredients, recipes, batches, 
+    dishes, inventory, utilities, categories, vendors, par_unit_names
+)
+
+# Import API routers
+from .api import ingredients as api_ingredients, batches as api_batches, recipes as api_recipes, tasks as api_tasks
+
+# Import dependencies
+from .dependencies import get_current_user
+
+# Import template helper functions
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Food Cost Management System")
+# Initialize templates
+templates = Jinja2Templates(directory="templates")
+
+# Initialize FastAPI app
+app = FastAPI(title="Food Cost Management System", version="1.0.0")
 
 # Add CORS middleware
 app.add_middleware(
@@ -45,85 +64,88 @@ app.include_router(vendors.router)
 app.include_router(par_unit_names.router)
 
 # Include API routers
-app.include_router(ingredients_api.router)
-app.include_router(recipes_api.router)
-app.include_router(batches_api.router)
-app.include_router(tasks_api.router)
+app.include_router(api_ingredients.router)
+app.include_router(api_batches.router)
+app.include_router(api_recipes.router)
+app.include_router(api_tasks.router)
 
-# WebSocket endpoint for real-time updates
-@app.websocket("/ws/inventory/{day_id}")
-async def websocket_endpoint(
-    websocket: WebSocket, 
-    day_id: int,
-    token: str = Query(...),
-    db: Session = Depends(get_db)
-):
-    try:
-        # Verify JWT token
-        payload = verify_jwt(token)
-        username = payload.get("sub")
-        
-        # Get user from database
-        user = db.query(User).filter(User.username == username).first()
-        if not user or not user.is_active:
-            await websocket.close(code=1008, reason="Invalid user")
-            return
-        
-        # Connect to WebSocket manager
-        user_info = {
-            "user_id": user.id,
-            "username": user.username
+# Additional API endpoint for batch labor stats
+@app.get("/api/batches/{batch_id}/labor_stats")
+async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    completed_tasks = db.query(Task).filter(
+        or_(
+            Task.batch_id == batch_id,
+            and_(
+                Task.inventory_item_id.isnot(None),
+                Task.inventory_item.has(InventoryItem.batch_id == batch_id)
+            )
+        ),
+        Task.finished_at.isnot(None)
+    ).order_by(Task.finished_at.desc()).all()
+    
+    if not completed_tasks:
+        return {
+            "task_count": 0,
+            "most_recent_cost": batch.estimated_labor_cost,
+            "average_week": batch.estimated_labor_cost,
+            "average_month": batch.estimated_labor_cost,
+            "average_all_time": batch.estimated_labor_cost,
+            "week_task_count": 0,
+            "month_task_count": 0
         }
-        
-        await manager.connect(websocket, day_id, user_info)
-        
-        try:
-            while True:
-                # Keep connection alive and handle incoming messages
-                data = await websocket.receive_text()
-                message = json.loads(data)
-                
-                # Handle different message types
-                if message.get("type") == "ping":
-                    await websocket.send_text(json.dumps({"type": "pong"}))
-                elif message.get("type") == "task_update":
-                    # Broadcast task update to all connected clients
-                    await manager.broadcast_task_update(day_id, message.get("data", {}))
-                elif message.get("type") == "inventory_update":
-                    # Broadcast inventory update to all connected clients
-                    await manager.broadcast_inventory_update(day_id, message.get("data", {}))
-                
-        except WebSocketDisconnect:
-            manager.disconnect(websocket)
-            
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        await websocket.close(code=1011, reason="Internal server error")
+    
+    # Calculate statistics
+    most_recent = completed_tasks[0]
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    week_tasks = [t for t in completed_tasks if t.finished_at >= week_ago]
+    month_tasks = [t for t in completed_tasks if t.finished_at >= month_ago]
+    
+    return {
+        "task_count": len(completed_tasks),
+        "most_recent_cost": most_recent.labor_cost,
+        "most_recent_date": most_recent.finished_at.strftime('%Y-%m-%d'),
+        "average_week": sum(t.labor_cost for t in week_tasks) / len(week_tasks) if week_tasks else batch.estimated_labor_cost,
+        "average_month": sum(t.labor_cost for t in month_tasks) / len(month_tasks) if month_tasks else batch.estimated_labor_cost,
+        "average_all_time": sum(t.labor_cost for t in completed_tasks) / len(completed_tasks),
+        "week_task_count": len(week_tasks),
+        "month_task_count": len(month_tasks)
+    }
 
 # Error handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 401 and exc.headers and "Location" in exc.headers:
+        return RedirectResponse(url=exc.headers["Location"], status_code=302)
+    
+    return templates.TemplateResponse("error.html", {
+        "request": request,
+        "status_code": exc.status_code,
+        "detail": exc.detail
+    }, status_code=exc.status_code)
+
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    templates = Jinja2Templates(directory="templates")
     return templates.TemplateResponse("error.html", {
         "request": request,
         "status_code": 404,
         "detail": "Page not found"
     }, status_code=404)
 
-@app.exception_handler(403)
-async def forbidden_handler(request: Request, exc):
-    templates = Jinja2Templates(directory="templates")
-    return templates.TemplateResponse("error.html", {
-        "request": request,
-        "status_code": 403,
-        "detail": "Access forbidden"
-    }, status_code=403)
-
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
-    templates = Jinja2Templates(directory="templates")
     return templates.TemplateResponse("error.html", {
         "request": request,
         "status_code": 500,
         "detail": "Internal server error"
     }, status_code=500)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
