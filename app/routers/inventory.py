@@ -414,6 +414,17 @@ async def start_task(
     if task.status != "not_started":
         raise HTTPException(status_code=400, detail="Task already started")
     
+    # Broadcast BEFORE committing
+    try:
+        await broadcast_task_update(day_id, task_id, "task_started", {
+            "started_at": datetime.utcnow().isoformat(),
+            "started_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted task start for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task start: {e}")
+        pass
+    
     task.started_at = datetime.utcnow()
     task.is_paused = False
     db.commit()
@@ -434,6 +445,18 @@ async def start_task_with_scale(
     
     if task.status != "not_started":
         raise HTTPException(status_code=400, detail="Task already started")
+    
+    # Broadcast BEFORE committing
+    try:
+        await broadcast_task_update(day_id, task_id, "task_started", {
+            "started_at": datetime.utcnow().isoformat(),
+            "started_by": current_user.full_name or current_user.username,
+            "scale": selected_scale
+        })
+        print(f"✅ Broadcasted task start with scale for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task start: {e}")
+        pass
     
     # Set scale information
     task.selected_scale = selected_scale
