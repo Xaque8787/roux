@@ -98,8 +98,7 @@ async def create_inventory_day(
         task = Task(
             day_id=inventory_day.id,
             janitorial_task_id=janitorial_task.id,
-            description=janitorial_task.title,
-            assigned_to_id=None
+            description=janitorial_task.title
         )
         db.add(task)
     
@@ -417,16 +416,33 @@ async def update_inventory_day(
     
     # Generate tasks if requested
     if 'generate_tasks' in form_data:
-        # Remove existing auto-generated batch tasks that haven't been started (keep manual ones and started tasks)
+        # Remove existing unstarted batch tasks (keep started/completed tasks and all janitorial tasks)
         existing_tasks = db.query(Task).filter(Task.day_id == day_id).all()
         for task in existing_tasks:
-            if task.inventory_item_id and task.batch_id and not task.started_at:
+            # Only remove unstarted batch tasks (preserve started/completed and janitorial tasks)
+            if (task.inventory_item_id and task.batch_id and 
+                not task.started_at and not task.janitorial_task_id):
                 db.delete(task)
         
         # Create new tasks for items below par
         inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
         for day_item in inventory_day_items:
             if day_item.quantity < day_item.inventory_item.par_level and day_item.inventory_item.batch:
+                # Check if task already exists for this item
+                existing_task = db.query(Task).filter(
+                    Task.day_id == day_id,
+                    Task.inventory_item_id == day_item.inventory_item.id,
+                    Task.batch_id == day_item.inventory_item.batch.id
+                ).first()
+                
+                if not existing_task:
+                    task = Task(
+                        day_id=day_id,
+                        inventory_item_id=day_item.inventory_item.id,
+                        batch_id=day_item.inventory_item.batch.id,
+                        description=f"Make {day_item.inventory_item.name}"
+                    )
+                    db.add(task)
                 task = Task(
                     day_id=day_id,
                     inventory_item_id=day_item.inventory_item.id,
@@ -597,14 +613,14 @@ async def regenerate_tasks(
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
-    # Remove ALL tasks (including started and completed) - complete regeneration
+    # Remove ALL tasks except daily janitorial tasks - complete regeneration
     existing_tasks = db.query(Task).filter(Task.day_id == day_id).all()
     for task in existing_tasks:
-        # Remove all tasks except manual janitorial tasks
-        if not task.janitorial_task_id or (task.janitorial_task and task.janitorial_task.task_type != "daily"):
+        # Remove all tasks except daily janitorial tasks (keep daily janitorial, remove everything else)
+        if not (task.janitorial_task_id and task.janitorial_task and task.janitorial_task.task_type == "daily"):
             db.delete(task)
     
-    # Recreate tasks for items below par (fresh start)
+    # Create fresh tasks for items below par
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
     for day_item in inventory_day_items:
         if day_item.quantity < day_item.inventory_item.par_level and day_item.inventory_item.batch:
@@ -612,8 +628,7 @@ async def regenerate_tasks(
                 day_id=day_id,
                 inventory_item_id=day_item.inventory_item.id,
                 batch_id=day_item.inventory_item.batch.id,
-                description=f"Make {day_item.inventory_item.name}",
-                assigned_to_id=None
+                description=f"Make {day_item.inventory_item.name}"
             )
             db.add(task)
     
