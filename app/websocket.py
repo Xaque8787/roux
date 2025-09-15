@@ -106,6 +106,10 @@ manager = ConnectionManager()
 async def get_websocket_user(websocket: WebSocket, token: str, db: Session):
     """Authenticate WebSocket connection"""
     try:
+        if not token:
+            await websocket.close(code=1008, reason="No token provided")
+            return None
+            
         payload = verify_jwt(token)
         username = payload.get("sub")
         user = db.query(User).filter(User.username == username).first()
@@ -113,6 +117,7 @@ async def get_websocket_user(websocket: WebSocket, token: str, db: Session):
             await websocket.close(code=1008, reason="Invalid user")
             return None
         return user
-    except Exception:
+    except Exception as e:
+        print(f"WebSocket authentication error: {e}")
         await websocket.close(code=1008, reason="Authentication failed")
         return None
