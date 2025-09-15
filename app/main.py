@@ -28,7 +28,8 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 from .dependencies import get_current_user
 
 # Import WebSocket manager
-from .websocket import manager, get_websocket_user
+from .websocket import manager
+from .auth import verify_jwt
 
 # Import template helper functions
 
@@ -75,9 +76,87 @@ app.include_router(api_tasks.router)
 
 # WebSocket endpoint for real-time updates
 @app.websocket("/ws/inventory/{day_id}")
-async def websocket_endpoint(websocket: WebSocket, day_id: int, token: str, db: Session = Depends(get_db)):
-    user = await get_websocket_user(websocket, token, db)
-    if not user:
+async def websocket_endpoint(websocket: WebSocket, day_id: int, token: str = None):
+    # Accept connection first
+    await websocket.accept()
+    
+    try:
+        # Authenticate user
+        if not token:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": "No authentication token provided"
+            }))
+            await websocket.close(code=1008)
+            return
+        
+        # Verify JWT token
+        try:
+            payload = verify_jwt(token)
+            username = payload.get("sub")
+        except Exception as e:
+            await websocket.send_text(json.dumps({
+                "type": "error", 
+                "message": f"Authentication failed: {str(e)}"
+            }))
+            await websocket.close(code=1008)
+            return
+        
+        # Get user from database
+        db = next(get_db())
+        try:
+            from .models import User
+            user = db.query(User).filter(User.username == username).first()
+            if not user or not user.is_active:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "User not found or inactive"
+                }))
+                await websocket.close(code=1008)
+                return
+        finally:
+            db.close()
+        
+        # Connection successful
+        user_info = {
+            "user_id": user.id,
+            "username": user.full_name or user.username
+        }
+        
+        await manager.connect(websocket, day_id, user_info)
+        
+        # Send connection success message
+        await websocket.send_text(json.dumps({
+            "type": "connection_success",
+            "message": "Connected successfully",
+            "user": user_info
+        }))
+        
+        # Keep connection alive
+        while True:
+            data = await websocket.receive_text()
+            # Echo back for heartbeat
+            await websocket.send_text(json.dumps({
+                "type": "heartbeat",
+                "message": "pong"
+            }))
+            
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": f"Connection error: {str(e)}"
+            }))
+        except:
+            pass
+        manager.disconnect(websocket)
+        try:
+            await websocket.close()
+        except:
+            pass
         return
     
     user_info = {
