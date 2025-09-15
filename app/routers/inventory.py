@@ -619,6 +619,19 @@ async def update_task_notes(
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.notes = notes
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
+
+@router.get("/day/{day_id}/tasks/{task_id}", response_class=HTMLResponse)
+async def task_detail(
+    day_id: int,
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
