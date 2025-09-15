@@ -497,7 +497,8 @@ async def pause_task(
     try:
         await broadcast_task_update(day_id, task_id, "task_paused", {
             "paused_at": datetime.utcnow().isoformat(),
-            "paused_by": current_user.full_name or current_user.username
+            "paused_by": current_user.full_name or current_user.username,
+            "total_pause_time": task.total_pause_time
         })
         print(f"✅ Broadcasted task pause for task {task_id}")
     except Exception as e:
@@ -506,6 +507,17 @@ async def pause_task(
     
     task.paused_at = datetime.utcnow()
     task.is_paused = True
+    db.commit()
+    
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/resume")
+async def resume_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -517,7 +529,8 @@ async def pause_task(
     try:
         await broadcast_task_update(day_id, task_id, "task_resumed", {
             "resumed_at": datetime.utcnow().isoformat(),
-            "resumed_by": current_user.full_name or current_user.username
+            "resumed_by": current_user.full_name or current_user.username,
+            "total_pause_time": task.total_pause_time
         })
         print(f"✅ Broadcasted task resume for task {task_id}")
     except Exception as e:

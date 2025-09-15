@@ -275,11 +275,14 @@
                                         <span class="text-warning">Unassigned</span>
                                     {% endif %}
                                 </td>
-                                <td class="status-cell" data-task-id="{{ task.id }}">
+                                <td class="status-cell task-status" data-task-id="{{ task.id }}">
                                     {% if task.status == "not_started" %}
                                         <span class="badge bg-secondary">Not Started</span>
                                     {% elif task.status == "in_progress" %}
                                         <span class="badge bg-primary">In Progress</span>
+                                        <div class="live-timer mt-1" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time or 0 }}">
+                                            <small class="text-info">⏱️ <span class="timer-display">0:00</span></small>
+                                        </div>
                                     {% elif task.status == "paused" %}
                                         <span class="badge bg-warning">Paused</span>
                                         {% if task.started_at %}
@@ -677,6 +680,54 @@ function handleSSEEvent(data) {
         default:
             console.log('Unknown SSE event type:', data.type);
     }
+    
+    // Handle SSE events for task status updates
+    if (data.type === 'task_paused') {
+        const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+        if (taskRow) {
+            const statusCell = taskRow.querySelector('.task-status');
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-warning">Paused</span>';
+                
+                // Remove timer when paused
+                const timer = statusCell.querySelector('.live-timer');
+                if (timer) {
+                    timer.remove();
+                }
+            }
+        }
+    } else if (data.type === 'task_resumed') {
+        const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+        if (taskRow) {
+            const statusCell = taskRow.querySelector('.task-status');
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span>';
+                
+                // Add timer back when resumed
+                const timerDiv = document.createElement('div');
+                timerDiv.className = 'live-timer mt-1';
+                timerDiv.dataset.taskId = data.task_id;
+                timerDiv.dataset.startedAt = data.resumed_at;
+                timerDiv.dataset.pauseTime = data.total_pause_time || 0;
+                timerDiv.innerHTML = '<small class="text-info">⏱️ <span class="timer-display">0m</span></small>';
+                statusCell.appendChild(timerDiv);
+            }
+        }
+    } else if (data.type === 'task_completed') {
+        const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+        if (taskRow) {
+            const statusCell = taskRow.querySelector('.task-status');
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-success">Completed</span>';
+                
+                // Remove timer when completed
+                const timer = statusCell.querySelector('.live-timer');
+                if (timer) {
+                    timer.remove();
+                }
+            }
+        }
+    }
 }
 
 function updateTaskAssignment(taskId, assignedEmployees, teamSize) {
@@ -1033,21 +1084,30 @@ function startLiveTimers() {
 }
 
 function updateTimers() {
-    const timers = document.querySelectorAll('.timer[data-started]');
+    const timers = document.querySelectorAll('.live-timer');
+    const now = new Date();
     
     timers.forEach(timer => {
-        const startedAt = timer.dataset.started;
-        if (!startedAt) return;
-        
-        const startTime = new Date(startedAt);
-        const now = new Date();
-        const elapsedMs = now - startTime;
-        const elapsedMinutes = Math.floor(elapsedMs / 60000);
-        const elapsedSeconds = Math.floor((elapsedMs % 60000) / 1000);
-        
+        const startedAt = timer.dataset.startedAt;
+        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
         const display = timer.querySelector('.timer-display');
-        if (display) {
-            display.textContent = `${elapsedMinutes}:${elapsedSeconds.toString().padStart(2, '0')}`;
+        
+        if (startedAt && display) {
+            const startTime = new Date(startedAt);
+            const elapsedMs = now - startTime - (pauseTime * 1000); // Subtract pause time
+            const totalMinutes = Math.floor(elapsedMs / 60000);
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            
+            // Format as H:MM or MM (no seconds)
+            let timeString;
+            if (hours > 0) {
+                timeString = `${hours}:${minutes.toString().padStart(2, '0')}`;
+            } else {
+                timeString = `${minutes}`;
+            }
+            
+            display.textContent = timeString + (hours > 0 ? 'h' : 'm');
         }
     });
 }
