@@ -621,4 +621,264 @@ function showNotification(message, type = 'info') {
 }
 </script>
 
+<script>
+// WebSocket Real-time Updates
+let ws = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+let reconnectTimeout = null;
+
+function getCookieValue(name) {
+    console.log('Getting cookie value for:', name);
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        const cookieValue = parts.pop().split(';').shift();
+        console.log('Found cookie value:', cookieValue ? 'token exists' : 'no token');
+        return cookieValue;
+    }
+    console.log('Cookie not found');
+    return null;
+}
+
+function connectWebSocket() {
+    console.log('Starting WebSocket connection...');
+    
+    const token = getCookieValue('access_token');
+    if (!token) {
+        console.error('No access token found in cookies');
+        updateConnectionStatus('error', 'No authentication token found');
+        return;
+    }
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/inventory/{{ inventory_day.id }}?token=${encodeURIComponent(token)}`;
+    
+    console.log('Connecting to WebSocket:', wsUrl);
+    updateConnectionStatus('connecting', 'Connecting to real-time updates...');
+    
+    try {
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function(event) {
+            console.log('WebSocket connection opened');
+            reconnectAttempts = 0;
+            updateConnectionStatus('connected', 'Connected to real-time updates');
+            
+            // Send initial ping
+            ws.send(JSON.stringify({type: 'ping'}));
+        };
+        
+        ws.onmessage = function(event) {
+            console.log('WebSocket message received:', event.data);
+            
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+        
+        ws.onclose = function(event) {
+            console.log('WebSocket connection closed:', event.code, event.reason);
+            updateConnectionStatus('disconnected', 'Connection lost');
+            
+            // Attempt to reconnect if not intentionally closed
+            if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts})`);
+                
+                reconnectTimeout = setTimeout(() => {
+                    connectWebSocket();
+                }, delay);
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            updateConnectionStatus('error', 'Connection error');
+        };
+        
+    } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        updateConnectionStatus('error', 'Failed to create connection');
+    }
+}
+
+function handleWebSocketMessage(data) {
+    console.log('Handling message:', data);
+    
+    switch (data.type) {
+        case 'connection_success':
+            console.log('Connection successful:', data.user);
+            updateConnectionStatus('connected', 'Connected to real-time updates');
+            showNotification(`Connected as ${data.user.username}`, 'success');
+            break;
+            
+        case 'user_count_update':
+            console.log('User count update:', data.user_count, data.users);
+            updateUserCount(data.user_count, data.users);
+            break;
+            
+        case 'task_update':
+            console.log('Task update:', data.task);
+            handleTaskUpdate(data.task);
+            break;
+            
+        case 'inventory_update':
+            console.log('Inventory update:', data.inventory);
+            handleInventoryUpdate(data.inventory);
+            break;
+            
+        case 'heartbeat':
+            console.log('Heartbeat received');
+            break;
+            
+        case 'error':
+            console.error('WebSocket error message:', data.message);
+            updateConnectionStatus('error', data.message);
+            showNotification(data.message, 'error');
+            break;
+            
+        default:
+            console.log('Unknown message type:', data.type);
+    }
+}
+
+function updateConnectionStatus(status, message) {
+    console.log('Updating connection status:', status, message);
+    
+    const statusElement = document.getElementById('connectionStatus');
+    const iconElement = document.getElementById('connectionIcon');
+    
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
+    
+    if (iconElement) {
+        iconElement.className = status === 'connected' ? 'fas fa-wifi text-success' :
+                               status === 'connecting' ? 'fas fa-wifi text-warning' :
+                               status === 'disconnected' ? 'fas fa-wifi text-warning' :
+                               'fas fa-wifi text-danger';
+    }
+}
+
+function updateUserCount(count, users) {
+    console.log('Updating user count:', count, users);
+    
+    const userCountElement = document.getElementById('userCount');
+    if (userCountElement) {
+        userCountElement.textContent = count;
+    }
+    
+    // Show user names if available
+    if (users && users.length > 0) {
+        const userNames = users.map(u => u.username).join(', ');
+        console.log('Active users:', userNames);
+    }
+}
+
+function handleTaskUpdate(taskData) {
+    console.log('Handling task update:', taskData);
+    
+    let message = '';
+    switch (taskData.action) {
+        case 'started':
+            message = `Task started by ${taskData.started_by}`;
+            break;
+        case 'started_with_scale':
+            message = `Task started (${taskData.selected_scale}) by ${taskData.started_by}`;
+            break;
+        case 'paused':
+            message = `Task paused by ${taskData.paused_by}`;
+            break;
+        case 'resumed':
+            message = `Task resumed by ${taskData.resumed_by}`;
+            break;
+        case 'finished':
+            message = `Task completed by ${taskData.finished_by}`;
+            if (taskData.made_amount) {
+                message += ` (Made: ${taskData.made_amount} ${taskData.made_unit})`;
+            }
+            break;
+        case 'assigned':
+            message = `Task assigned by ${taskData.assigned_by}`;
+            break;
+        case 'created':
+            message = `New task created by ${taskData.created_by}`;
+            break;
+        default:
+            message = `Task updated: ${taskData.action}`;
+    }
+    
+    showNotification(message, 'info');
+    
+    // Refresh page after a short delay to show updated state
+    setTimeout(() => {
+        console.log('Refreshing page to show updated task state...');
+        window.location.reload();
+    }, 2000);
+}
+
+function handleInventoryUpdate(inventoryData) {
+    console.log('Handling inventory update:', inventoryData);
+    
+    showNotification(`Inventory updated by ${inventoryData.updated_by}`, 'info');
+    
+    // Refresh page after a short delay
+    setTimeout(() => {
+        console.log('Refreshing page to show updated inventory...');
+        window.location.reload();
+    }, 2000);
+}
+
+function showNotification(message, type = 'info') {
+    console.log('Showing notification:', message, type);
+    
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+
+// Connect when page loads (only for non-finalized days)
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, checking if should connect to WebSocket...');
+    
+    {% if not inventory_day.finalized %}
+    console.log('Day is not finalized, connecting to WebSocket...');
+    connectWebSocket();
+    {% else %}
+    console.log('Day is finalized, skipping WebSocket connection');
+    updateConnectionStatus('info', 'Day is finalized - real-time updates disabled');
+    {% endif %}
+});
+
+// Clean up WebSocket on page unload
+window.addEventListener('beforeunload', function() {
+    if (ws) {
+        console.log('Closing WebSocket connection...');
+        ws.close(1000, 'Page unload');
+    }
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+    }
+});
+</script>
+
 {% endblock %}
