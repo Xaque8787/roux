@@ -70,8 +70,10 @@
                         <tbody>
                             {% for day_item in inventory_day_items %}
                             {% set is_below_par = day_item.quantity < day_item.inventory_item.par_level %}
-                            {% set is_near_par = day_item.quantity <= day_item.inventory_item.par_level * 1.1 and not is_below_par %}
-                            <tr class="{% if is_below_par %}table-danger{% elif is_near_par %}table-warning{% endif %}">
+                            {% set is_on_par = day_item.quantity == day_item.inventory_item.par_level %}
+                            {% set is_near_par = day_item.quantity == day_item.inventory_item.par_level + 1 %}
+                            {% set is_good = day_item.quantity >= day_item.inventory_item.par_level + 2 %}
+                            <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}">
                                 <td>
                                     <strong>{{ day_item.inventory_item.name }}</strong>
                                     {% if day_item.inventory_item.batch %}
@@ -98,6 +100,8 @@
                                 <td>
                                     {% if is_below_par %}
                                         <span class="badge bg-danger">Below Par</span>
+                                    {% elif is_on_par %}
+                                        <span class="badge bg-info">On Par</span>
                                     {% elif is_near_par %}
                                         <span class="badge bg-warning">Near Par</span>
                                     {% else %}
