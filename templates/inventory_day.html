@@ -632,31 +632,33 @@ function getCookieValue(name) {
     console.log('Getting cookie value for:', name);
     console.log('All cookies:', document.cookie);
     console.log('All cookies:', document.cookie);
+    console.log('All cookies:', document.cookie);
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
     if (parts.length === 2) {
         const cookieValue = parts.pop().split(';').shift();
-        console.log('Found cookie value:', cookieValue ? 'token exists' : 'no token');
-        return cookieValue;
-    }
-    console.log('Cookie not found');
-    return null;
-}
+// WebSocket Real-time Updates
+let ws = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+let reconnectTimeout = null;
+
+// Use the token passed from the server template
+const WEBSOCKET_TOKEN = '{{ websocket_token }}';
 
 function connectWebSocket() {
     console.log('Starting WebSocket connection...');
     
-    const token = getCookieValue('access_token');
-    if (!token) {
-        console.error('No access token found in cookies');
-        updateConnectionStatus('error', 'No authentication token found');
+    if (!WEBSOCKET_TOKEN) {
+        console.error('No WebSocket token provided from server');
+        updateConnectionStatus('error', 'No authentication token provided');
         return;
     }
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/inventory/{{ inventory_day.id }}?token=${encodeURIComponent(token)}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/inventory/{{ inventory_day.id }}?token=${encodeURIComponent(WEBSOCKET_TOKEN)}`;
     
-    console.log('Connecting to WebSocket:', wsUrl);
+    console.log('Connecting to WebSocket with server token...');
     updateConnectionStatus('connecting', 'Connecting to real-time updates...');
     
     try {
