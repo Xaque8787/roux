@@ -184,11 +184,6 @@ async def create_inventory_day(
         pass
     
     return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
-        "date": inventory_date_obj.isoformat(),
-        "employees_working": inventory_day.employees_working
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
 
 @router.post("/day/{day_id}/update")
 async def update_inventory_day(
