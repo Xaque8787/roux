@@ -190,23 +190,20 @@ function selectIngredient(ingredient) {
     }
     
     // Check if ingredient has usage units
-    if (!ingredient.usage_units || ingredient.usage_units.length === 0) {
-        alert('This ingredient has no usage units defined. Please edit the ingredient first.');
+    if (!ingredient.available_units || ingredient.available_units.length === 0) {
+        alert('This ingredient has no available units defined.');
         return;
     }
     
-    // Store current ingredient and show usage unit selection
+    // Store current ingredient and show unit selection
     currentSelectedIngredient = ingredient;
-    showUsageUnitSelection(ingredient);
+    showUnitSelection(ingredient);
 }
 
-function showUsageUnitSelection(ingredient) {
-    console.log('Showing usage unit selection for:', ingredient);
+function showUnitSelection(ingredient) {
+    console.log('Showing unit selection for:', ingredient);
     
-    let usageUnitOptions = '';
-    ingredient.usage_units.forEach(unit => {
-        usageUnitOptions += `<option value="${unit.usage_unit_id}" data-price="${unit.price_per_usage_unit}">${unit.usage_unit_name} ($${unit.price_per_usage_unit.toFixed(4)}/unit)</option>`;
-    });
+    const availableUnits = ingredient.available_units;
     
     const modal = document.createElement('div');
     modal.className = 'modal fade';
@@ -220,9 +217,11 @@ function showUsageUnitSelection(ingredient) {
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Usage Unit</label>
+                        <label class="form-label">Unit</label>
                         <select class="form-select" id="usageUnitSelect">
-                            ${usageUnitOptions}
+                            ${availableUnits.map(unit => 
+                                `<option value="${unit}" data-ingredient-id="${ingredient.id}">${formatUnitDisplay(unit)}</option>`
+                            ).join('')}
                         </select>
                     </div>
                     <div class="mb-3">
@@ -252,14 +251,31 @@ function showUsageUnitSelection(ingredient) {
     
     function updateCost() {
         const quantity = parseFloat(quantityInput.value) || 0;
-        const selectedOption = usageUnitSelect.selectedOptions[0];
-        const price = parseFloat(selectedOption.dataset.price) || 0;
-        estimatedCost.textContent = (quantity * price).toFixed(2);
+        const selectedUnit = usageUnitSelect.value;
+        const ingredientId = usageUnitSelect.selectedOptions[0]?.dataset.ingredientId;
+        
+        if (quantity > 0 && selectedUnit && ingredientId) {
+            // Calculate cost using ingredient's cost per unit method
+            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${encodeURIComponent(selectedUnit)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const cost = quantity * data.cost_per_unit;
+                    estimatedCost.textContent = cost.toFixed(2);
+                })
+                .catch(error => {
+                    console.error('Error calculating cost:', error);
+                    estimatedCost.textContent = '0.00';
+                });
+        } else {
+            estimatedCost.textContent = '0.00';
+        }
     }
     
     quantityInput.addEventListener('input', updateCost);
     usageUnitSelect.addEventListener('change', updateCost);
-    updateCost(); // Initial calculation
+    
+    // Initial cost calculation with slight delay
+    setTimeout(updateCost, 100);
     
     // Clean up modal when closed
     modal.addEventListener('hidden.bs.modal', function() {
@@ -280,18 +296,15 @@ function addIngredientToRecipe() {
         return;
     }
     
-    const selectedOption = usageUnitSelect.selectedOptions[0];
-    const usageUnitId = parseInt(selectedOption.value);
-    const usageUnitName = selectedOption.text.split(' (')[0]; // Remove price part
-    const price = parseFloat(selectedOption.dataset.price);
+    const selectedUnit = usageUnitSelect.value;
+    const estimatedCost = parseFloat(document.querySelector('#estimatedCost').textContent);
     
     console.log('Adding ingredient:', {
         ingredient_id: currentSelectedIngredient.id,
         ingredient_name: currentSelectedIngredient.name,
-        usage_unit_id: usageUnitId,
-        usage_unit_name: usageUnitName,
+        unit: selectedUnit,
         quantity: quantity,
-        estimated_cost: quantity * price
+        estimated_cost: estimatedCost
     });
     
     // Add to selected ingredients
@@ -300,7 +313,7 @@ function addIngredientToRecipe() {
         ingredient_name: currentSelectedIngredient.name,
         unit: selectedUnit,
         quantity: quantity,
-        estimated_cost: quantity * price
+        estimated_cost: estimatedCost
     });
     
     // Update display
@@ -352,6 +365,20 @@ function updateSelectedIngredientsDisplay() {
 function removeIngredient(index) {
     selectedIngredients.splice(index, 1);
     updateSelectedIngredientsDisplay();
+}
+
+function formatUnitDisplay(unit) {
+    // Convert internal unit format to display format
+    const unitDisplayMap = {
+        '3_4_cup': '3/4 cup',
+        '2_3_cup': '2/3 cup', 
+        '1_2_cup': '1/2 cup',
+        '1_3_cup': '1/3 cup',
+        '1_4_cup': '1/4 cup',
+        '1_8_cup': '1/8 cup'
+    };
+    
+    return unitDisplayMap[unit] || unit;
 }
 </script>
 {% endblock %}
