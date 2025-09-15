@@ -180,7 +180,7 @@
                         </thead>
                         <tbody>
                             {% for item in inventory_day_items %}
-                            {% set is_below_par = item.quantity <= item.inventory_item.par_level %}
+                            {% set is_below_par = item.quantity < item.inventory_item.par_level %}
                             {% set is_near_par = item.quantity <= item.inventory_item.par_level * 1.1 and not is_below_par %}
                             <tr class="{% if is_below_par %}table-danger{% elif is_near_par %}table-warning{% endif %}">
                                 <td>{{ item.inventory_item.name }}</td>

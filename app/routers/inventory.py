@@ -581,7 +581,7 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
     
     for day_item in inventory_day_items:
         item = day_item.inventory_item
-        is_below_par = day_item.quantity <= item.par_level
+        is_below_par = day_item.quantity < item.par_level
         
         # Check if task already exists for this item (unless force regenerating)
         if not force_regenerate:
