@@ -132,6 +132,9 @@ async def inventory_day_page(
     # Get janitorial tasks for manual addition
     janitorial_tasks = db.query(JanitorialTask).filter(JanitorialTask.task_type == "manual").all()
     
+    # Get batches for manual task linking
+    batches = db.query(Batch).all()
+    
     # Generate WebSocket token for real-time updates
     websocket_token = create_jwt(data={"sub": current_user.username})
     
@@ -144,6 +147,7 @@ async def inventory_day_page(
         "employees": employees,
         "categories": categories,
         "janitorial_tasks": janitorial_tasks,
+        "batches": batches,
         "websocket_token": websocket_token
     })
 
@@ -416,13 +420,15 @@ async def update_inventory_day(
     
     # Generate tasks if requested
     if 'generate_tasks' in form_data:
-        # Remove existing unstarted batch tasks (keep started/completed tasks and all janitorial tasks)
+        # Remove only unstarted batch tasks (preserve started/completed and janitorial tasks)
         existing_tasks = db.query(Task).filter(Task.day_id == day_id).all()
         for task in existing_tasks:
-            # Only remove unstarted batch tasks (preserve started/completed and janitorial tasks)
-            if (task.inventory_item_id and task.batch_id and 
-                not task.started_at and not task.janitorial_task_id):
+            # Remove unstarted batch tasks only
+            if (task.batch_id and not task.started_at and not task.finished_at and 
+                not task.janitorial_task_id):
                 db.delete(task)
+        
+        db.flush()  # Apply deletions before creating new tasks
         
         # Create new tasks for items below par
         inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
@@ -443,13 +449,6 @@ async def update_inventory_day(
                         description=f"Make {day_item.inventory_item.name}"
                     )
                     db.add(task)
-                task = Task(
-                    day_id=day_id,
-                    inventory_item_id=day_item.inventory_item.id,
-                    batch_id=day_item.inventory_item.batch.id,
-                    description=f"Make {day_item.inventory_item.name}"
-                )
-                db.add(task)
     
     db.commit()
     
@@ -465,7 +464,7 @@ async def update_inventory_day(
 async def assign_task(
     day_id: int,
     task_id: int,
-    assigned_to_id: int = Form(...),
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
@@ -473,15 +472,29 @@ async def assign_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    task.assigned_to_id = assigned_to_id
+    # Get form data to handle multiple employee assignments
+    form_data = await request.form()
+    assigned_employees = form_data.getlist('assigned_employees')
+    
+    if not assigned_employees:
+        raise HTTPException(status_code=400, detail="No employees selected")
+    
+    # Store employee IDs as comma-separated string
+    task.assigned_employee_ids = ",".join(assigned_employees)
+    
+    # For backward compatibility, also set assigned_to_id to first employee
+    task.assigned_to_id = int(assigned_employees[0])
+    
     db.commit()
     
     # Broadcast update via WebSocket
-    assigned_user = db.query(User).filter(User.id == assigned_to_id).first()
+    assigned_users = db.query(User).filter(User.id.in_([int(emp_id) for emp_id in assigned_employees])).all()
+    assigned_names = [user.username for user in assigned_users]
+    
     await manager.broadcast_task_update(day_id, {
         "task_id": task.id,
         "action": "assigned",
-        "assigned_to": assigned_user.username if assigned_user else None
+        "assigned_to": ", ".join(assigned_names)
     })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
@@ -613,24 +626,27 @@ async def regenerate_tasks(
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
-    # Remove ALL tasks except daily janitorial tasks - complete regeneration
+    # Remove ALL tasks completely - true regeneration
     existing_tasks = db.query(Task).filter(Task.day_id == day_id).all()
     for task in existing_tasks:
-        # Remove all tasks except daily janitorial tasks (keep daily janitorial, remove everything else)
-        if not (task.janitorial_task_id and task.janitorial_task and task.janitorial_task.task_type == "daily"):
-            db.delete(task)
+        db.delete(task)
     
-    # Create fresh tasks for items below par
+    db.flush()  # Apply deletions
+    
+    # Recreate daily janitorial tasks
+    daily_janitorial_tasks = db.query(JanitorialTask).filter(JanitorialTask.task_type == "daily").all()
+    for janitorial_task in daily_janitorial_tasks:
+        task = Task(
+            day_id=day_id,
+            janitorial_task_id=janitorial_task.id,
+            description=janitorial_task.title
+        )
+        db.add(task)
+    
+    # Reset all inventory quantities to 0
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
     for day_item in inventory_day_items:
-        if day_item.quantity < day_item.inventory_item.par_level and day_item.inventory_item.batch:
-            task = Task(
-                day_id=day_id,
-                inventory_item_id=day_item.inventory_item.id,
-                batch_id=day_item.inventory_item.batch.id,
-                description=f"Make {day_item.inventory_item.name}"
-            )
-            db.add(task)
+        day_item.quantity = 0.0
     
     db.commit()
     
@@ -655,6 +671,12 @@ async def add_manual_task(
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
+    
+    # If janitorial_task_id is provided, use the janitorial task's title as description
+    if janitorial_task_id:
+        janitorial_task = db.query(JanitorialTask).filter(JanitorialTask.id == janitorial_task_id).first()
+        if janitorial_task:
+            description = janitorial_task.title
     
     task = Task(
         day_id=day_id,
