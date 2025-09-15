@@ -15,21 +15,16 @@
         {% else %}
         <span class="badge bg-warning ms-2">In Progress</span>
         {% endif %}
-    </div>
-</div>
-
-<!-- SSE Connection Status -->
-<div class="row mb-3">
-    <div class="col-12">
-        <div id="connectionStatus" class="alert alert-info">
-            <i class="fas fa-wifi"></i> Connecting to real-time updates...
+        
+        <!-- SSE Connection Status -->
+        <div id="connectionStatus" class="alert alert-info mt-2" style="display: none;">
+            <i class="fas fa-wifi"></i> <span id="connectionText">Connecting...</span>
         </div>
     </div>
 </div>
 
-<!-- Inventory Section -->
-<div class="row">
-    <div class="col-12">
+<div class="row mt-3">
+    <div class="col-md-8">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-boxes"></i> Daily Inventory</h5>
@@ -40,7 +35,7 @@
                     <div class="row mb-3">
                         <div class="col-md-8">
                             <label for="global_notes" class="form-label">Day Notes</label>
-                            <textarea class="form-control" id="global_notes" name="global_notes" rows="2">{{ inventory_day.global_notes or '' }}</textarea>
+                            <textarea class="form-control" id="global_notes" name="global_notes" rows="2" placeholder="General notes for the day...">{{ inventory_day.global_notes or '' }}</textarea>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
                             <div class="form-check me-3">
@@ -56,13 +51,13 @@
                     </div>
                     
                     <div class="table-responsive">
-                        <table class="table table-striped">
+                        <table class="table table-striped table-sortable">
                             <thead>
                                 <tr>
-                                    <th>Item</th>
-                                    <th>Current Quantity</th>
-                                    <th>Par Level</th>
-                                    <th>Status</th>
+                                    <th data-sortable data-sort-type="text">Item</th>
+                                    <th data-sortable data-sort-type="number">Quantity</th>
+                                    <th data-sortable data-sort-type="number">Par Level</th>
+                                    <th data-sortable data-sort-type="text">Status</th>
                                     <th>Override</th>
                                 </tr>
                             </thead>
@@ -71,8 +66,7 @@
                                 {% set is_below_par = day_item.quantity < day_item.inventory_item.par_level %}
                                 {% set is_on_par = day_item.quantity == day_item.inventory_item.par_level %}
                                 {% set is_near_par = day_item.quantity == day_item.inventory_item.par_level + 1 %}
-                                <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}" 
-                                    data-item-id="{{ day_item.inventory_item_id }}">
+                                <tr class="{% if is_below_par %}below-par{% elif is_near_par %}near-par{% endif %}">
                                     <td>
                                         {% if day_item.inventory_item.category %}
                                             {{ day_item.inventory_item.category.icon or '🔘' }}
@@ -80,21 +74,25 @@
                                             🔘
                                         {% endif %}
                                         <strong>{{ day_item.inventory_item.name }}</strong>
+                                        {% if day_item.inventory_item.batch %}
+                                        <br><small class="text-muted">Linked: {{ day_item.inventory_item.batch.recipe.name }}</small>
+                                        {% endif %}
                                     </td>
                                     <td>
-                                        <input type="number" class="form-control form-control-sm inventory-quantity-input" 
-                                               name="item_{{ day_item.inventory_item_id }}" 
-                                               value="{{ day_item.quantity }}" 
-                                               step="0.1" min="0"
-                                               data-item-id="{{ day_item.inventory_item_id }}">
+                                        <input type="number" class="form-control form-control-sm" 
+                                               name="item_{{ day_item.inventory_item.id }}" 
+                                               value="{{ day_item.quantity }}" step="0.1" min="0">
+                                        {% if day_item.inventory_item.par_unit_name %}
+                                        <small class="text-muted">{{ day_item.inventory_item.par_unit_name.name }}</small>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         {{ day_item.inventory_item.par_level }}
                                         {% if day_item.inventory_item.par_unit_name %}
-                                            {{ day_item.inventory_item.par_unit_name.name }}
+                                        <br><small class="text-muted">{{ day_item.inventory_item.par_unit_name.name }}</small>
                                         {% endif %}
                                     </td>
-                                    <td class="inventory-status-cell" data-item-id="{{ day_item.inventory_item_id }}">
+                                    <td>
                                         {% if is_below_par %}
                                             <span class="badge bg-danger">Below Par</span>
                                         {% elif is_on_par %}
@@ -109,21 +107,19 @@
                                         {% if is_below_par %}
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" 
-                                                   name="override_no_task_{{ day_item.inventory_item_id }}" 
-                                                   id="override_no_task_{{ day_item.inventory_item_id }}"
+                                                   name="override_no_task_{{ day_item.inventory_item.id }}" 
                                                    {% if day_item.override_no_task %}checked{% endif %}>
-                                            <label class="form-check-label" for="override_no_task_{{ day_item.inventory_item_id }}">
-                                                Don't create task
+                                            <label class="form-check-label">
+                                                <small>Skip Task</small>
                                             </label>
                                         </div>
                                         {% else %}
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" 
-                                                   name="override_create_{{ day_item.inventory_item_id }}" 
-                                                   id="override_create_{{ day_item.inventory_item_id }}"
+                                                   name="override_create_{{ day_item.inventory_item.id }}" 
                                                    {% if day_item.override_create_task %}checked{% endif %}>
-                                            <label class="form-check-label" for="override_create_{{ day_item.inventory_item_id }}">
-                                                Force create task
+                                            <label class="form-check-label">
+                                                <small>Create Task</small>
                                             </label>
                                         </div>
                                         {% endif %}
@@ -133,65 +129,16 @@
                             </tbody>
                         </table>
                     </div>
-                    
-                    {% if janitorial_day_items %}
-                    <h6 class="mt-4">Janitorial Tasks</h6>
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Task</th>
-                                    <th>Type</th>
-                                    <th>Include in Day</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for janitorial_day_item in janitorial_day_items %}
-                                <tr>
-                                    <td>
-                                        🧹 <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
-                                        {% if janitorial_day_item.janitorial_task.instructions %}
-                                        <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:50] }}{% if janitorial_day_item.janitorial_task.instructions|length > 50 %}...{% endif %}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
-                                            <span class="badge bg-primary">Daily</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">Manual</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
-                                            <span class="text-success">Always included</span>
-                                        {% else %}
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" 
-                                                   name="janitorial_{{ janitorial_day_item.janitorial_task_id }}" 
-                                                   id="janitorial_{{ janitorial_day_item.janitorial_task_id }}"
-                                                   {% if janitorial_day_item.include_task %}checked{% endif %}>
-                                            <label class="form-check-label" for="janitorial_{{ janitorial_day_item.janitorial_task_id }}">
-                                                Include
-                                            </label>
-                                        </div>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endif %}
                 </form>
                 {% else %}
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    <table class="table table-striped table-sortable">
                         <thead>
                             <tr>
-                                <th>Item</th>
-                                <th>Quantity</th>
-                                <th>Par Level</th>
-                                <th>Status</th>
+                                <th data-sortable data-sort-type="text">Item</th>
+                                <th data-sortable data-sort-type="number">Quantity</th>
+                                <th data-sortable data-sort-type="number">Par Level</th>
+                                <th data-sortable data-sort-type="text">Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -199,7 +146,7 @@
                             {% set is_below_par = day_item.quantity < day_item.inventory_item.par_level %}
                             {% set is_on_par = day_item.quantity == day_item.inventory_item.par_level %}
                             {% set is_near_par = day_item.quantity == day_item.inventory_item.par_level + 1 %}
-                            <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}">
+                            <tr class="{% if is_below_par %}below-par{% elif is_near_par %}near-par{% endif %}">
                                 <td>
                                     {% if day_item.inventory_item.category %}
                                         {{ day_item.inventory_item.category.icon or '🔘' }}
@@ -207,9 +154,22 @@
                                         🔘
                                     {% endif %}
                                     <strong>{{ day_item.inventory_item.name }}</strong>
+                                    {% if day_item.inventory_item.batch %}
+                                    <br><small class="text-muted">Linked: {{ day_item.inventory_item.batch.recipe.name }}</small>
+                                    {% endif %}
                                 </td>
-                                <td>{{ day_item.quantity }}</td>
-                                <td>{{ day_item.inventory_item.par_level }}</td>
+                                <td>
+                                    {{ day_item.quantity }}
+                                    {% if day_item.inventory_item.par_unit_name %}
+                                    <br><small class="text-muted">{{ day_item.inventory_item.par_unit_name.name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ day_item.inventory_item.par_level }}
+                                    {% if day_item.inventory_item.par_unit_name %}
+                                    <br><small class="text-muted">{{ day_item.inventory_item.par_unit_name.name }}</small>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if is_below_par %}
                                         <span class="badge bg-danger">Below Par</span>
@@ -229,10 +189,148 @@
                 {% endif %}
             </div>
         </div>
+        
+        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-broom"></i> Janitorial Tasks</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update">
+                    <div class="row">
+                        {% for janitorial_day_item in janitorial_day_items %}
+                        <div class="col-md-6 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" 
+                                       id="janitorial_{{ janitorial_day_item.janitorial_task.id }}"
+                                       {% if janitorial_day_item.include_task %}checked{% endif %}
+                                       {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}disabled{% endif %}>
+                                <label class="form-check-label" for="janitorial_{{ janitorial_day_item.janitorial_task.id }}">
+                                    🧹 {{ janitorial_day_item.janitorial_task.title }}
+                                    {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
+                                    <span class="badge bg-primary ms-1">Daily</span>
+                                    {% endif %}
+                                </label>
+                                {% if janitorial_day_item.janitorial_task.instructions %}
+                                <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:50] }}{% if janitorial_day_item.janitorial_task.instructions|length > 50 %}...{% endif %}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-secondary mt-2">
+                        <i class="fas fa-sync"></i> Update Janitorial Tasks
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="col-md-4">
+        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-plus"></i> Add Manual Task</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Task Description</label>
+                        <input type="text" class="form-control" id="description" name="description" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="inventory_item_id" class="form-label">Linked Inventory Item (Optional)</label>
+                        <select class="form-select" id="inventory_item_id" name="inventory_item_id">
+                            <option value="">No inventory item</option>
+                            {% for day_item in inventory_day_items %}
+                            <option value="{{ day_item.inventory_item.id }}">{{ day_item.inventory_item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
+                        <select class="form-select" id="batch_id" name="batch_id">
+                            <option value="">No batch</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category (Optional)</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">No category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Assign To (Multiple Selection)</label>
+                        {% for emp in employees %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp_{{ emp.id }}">
+                            <label class="form-check-label" for="emp_{{ emp.id }}">
+                                {{ emp.full_name or emp.username }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add Task
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Day Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Date:</strong> {{ inventory_day.date }}</p>
+                <p><strong>Status:</strong> 
+                    {% if inventory_day.finalized %}
+                        <span class="badge bg-success">Finalized</span>
+                    {% else %}
+                        <span class="badge bg-warning">In Progress</span>
+                    {% endif %}
+                </p>
+                {% if inventory_day.employees_working %}
+                <p><strong>Employees Working:</strong></p>
+                <ul class="list-unstyled">
+                    {% set employee_ids = inventory_day.employees_working.split(',') %}
+                    {% for emp_id in employee_ids %}
+                        {% for emp in employees %}
+                            {% if emp.id|string == emp_id %}
+                            <li><i class="fas fa-user"></i> {{ emp.full_name or emp.username }}</li>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                
+                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                <hr>
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
+                    <button type="submit" class="btn btn-success w-100" onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
+                        <i class="fas fa-lock"></i> Finalize Day
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- Tasks Section -->
 <div class="row mt-3">
     <div class="col-12">
         <div class="card">
@@ -240,23 +338,22 @@
                 <h5><i class="fas fa-tasks"></i> Tasks</h5>
             </div>
             <div class="card-body">
-                {% if tasks %}
                 <div class="table-responsive">
-                    <table class="table table-striped" id="tasksTable">
+                    <table class="table table-striped table-sortable">
                         <thead>
                             <tr>
-                                <th>Task</th>
-                                <th>Assigned To</th>
-                                <th>Status</th>
-                                <th>Time</th>
-                                <th>Category</th>
+                                <th data-sortable data-sort-type="text">Task</th>
+                                <th data-sortable data-sort-type="text">Assigned To</th>
+                                <th data-sortable data-sort-type="text">Status</th>
+                                <th data-sortable data-sort-type="text">Time</th>
+                                <th data-sortable data-sort-type="text">Category</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for task in tasks %}
                             <tr data-task-id="{{ task.id }}">
-                                <td class="task-description-cell">
+                                <td>
                                     {% if task.janitorial_task_id %}
                                         🧹
                                     {% elif task.inventory_item and task.inventory_item.category %}
@@ -271,14 +368,17 @@
                                         🔘
                                     {% endif %}
                                     <strong>{{ task.description }}</strong>
-                                    {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield and not task.started_at %}
-                                    <br><small class="text-info">Scalable batch</small>
+                                    {% if task.batch and task.selected_scale and task.selected_scale != 'full' %}
+                                    <br><small class="text-info">Scale: {{ task.selected_scale.replace('_', ' ').title() }}</small>
                                     {% endif %}
-                                    {% if task.requires_made_amount %}
-                                    <br><small class="text-warning">Requires amount input</small>
+                                    {% if task.made_amount and task.made_unit %}
+                                    <br><small class="text-success">Made: {{ task.made_amount }} {{ task.made_unit }}</small>
+                                    {% endif %}
+                                    {% if task.notes %}
+                                    <br><small class="text-muted">{{ task.notes[:50] }}{% if task.notes|length > 50 %}...{% endif %}</small>
                                     {% endif %}
                                 </td>
-                                <td class="assigned-employee-cell" data-task-id="{{ task.id }}">
+                                <td class="task-assigned-to" data-task-id="{{ task.id }}">
                                     {% if task.assigned_employee_ids %}
                                         {% set employee_ids = task.assigned_employee_ids.split(',') %}
                                         {% if employee_ids|length > 1 %}
@@ -303,17 +403,23 @@
                                     {% elif task.assigned_to %}
                                         {{ task.assigned_to.full_name or task.assigned_to.username }}
                                     {% else %}
+                                        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#assignModal{{ task.id }}">
+                                            <i class="fas fa-user-plus"></i> Assign
+                                        </button>
+                                        {% else %}
                                         <span class="text-warning">Unassigned</span>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
-                                <td class="task-status-cell" data-task-id="{{ task.id }}">
+                                <td class="task-status" data-task-id="{{ task.id }}">
                                     {% if task.status == "not_started" %}
                                         <span class="badge bg-secondary">Not Started</span>
                                     {% elif task.status == "in_progress" %}
                                         <span class="badge bg-primary">In Progress</span>
                                         {% if task.started_at %}
                                         <br><small class="text-muted timer" data-start-time="{{ task.started_at.isoformat() }}" data-pause-time="{{ task.total_pause_time }}">
-                                            <span class="timer-display">0 min</span>
+                                            {{ task.total_time_minutes }} min
                                         </small>
                                         {% endif %}
                                     {% elif task.status == "paused" %}
@@ -328,14 +434,11 @@
                                         {% endif %}
                                     {% endif %}
                                 </td>
-                                <td class="task-time-cell" data-task-id="{{ task.id }}">
+                                <td>
                                     {% if task.started_at %}
-                                        {% if task.status == "in_progress" %}
-                                            <span class="timer" data-start-time="{{ task.started_at.isoformat() }}" data-pause-time="{{ task.total_pause_time }}">
-                                                <span class="timer-display">{{ task.total_time_minutes }} min</span>
-                                            </span>
-                                        {% else %}
-                                            {{ task.total_time_minutes }} min
+                                        {{ task.total_time_minutes }} min
+                                        {% if task.total_pause_time > 0 %}
+                                        <br><small class="text-warning">Paused: {{ (task.total_pause_time / 60)|round(1) }} min</small>
                                         {% endif %}
                                     {% else %}
                                         -
@@ -356,72 +459,75 @@
                                         🔘 Uncategorized
                                     {% endif %}
                                 </td>
-                                <td class="task-actions-cell" data-task-id="{{ task.id }}">
-                                    {% if not inventory_day.finalized %}
-                                        {% if not task.assigned_to and not task.assigned_employee_ids %}
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" 
-                                                    onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
-                                                <i class="fas fa-user-plus"></i> Assign
-                                            </button>
-                                        {% elif task.status == "not_started" %}
-                                            {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
-                                                <button type="button" class="btn btn-sm btn-primary" 
-                                                        onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
+                                <td class="task-actions" data-task-id="{{ task.id }}">
+                                    {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                        {% if task.status == "not_started" %}
+                                            {% if task.assigned_to or task.assigned_employee_ids %}
+                                                {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
+                                                <button type="button" class="btn btn-sm btn-primary" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
                                                     <i class="fas fa-play"></i> Start
                                                 </button>
+                                                {% else %}
+                                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
+                                                    <button type="submit" class="btn btn-sm btn-primary">
+                                                        <i class="fas fa-play"></i> Start
+                                                    </button>
+                                                </form>
+                                                {% endif %}
                                             {% else %}
-                                                <button type="button" class="btn btn-sm btn-primary" 
-                                                        onclick="startTask({{ task.id }})">
-                                                    <i class="fas fa-play"></i> Start
-                                                </button>
+                                                <span class="text-muted">Assign first</span>
                                             {% endif %}
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" 
-                                                    onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
-                                                <i class="fas fa-user-edit"></i> Reassign
-                                            </button>
                                         {% elif task.status == "in_progress" %}
-                                            <button type="button" class="btn btn-sm btn-warning" 
-                                                    onclick="pauseTask({{ task.id }})">
-                                                <i class="fas fa-pause"></i> Pause
-                                            </button>
-                                            {% if task.requires_made_amount %}
-                                                <button type="button" class="btn btn-sm btn-success" 
-                                                        onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                                    <i class="fas fa-check"></i> Finish & Enter Amount
+                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-warning">
+                                                    <i class="fas fa-pause"></i> Pause
                                                 </button>
+                                            </form>
+                                            {% if task.requires_made_amount %}
+                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                                <i class="fas fa-check"></i> Finish & Enter Amount
+                                            </button>
                                             {% else %}
-                                                <button type="button" class="btn btn-sm btn-success" 
-                                                        onclick="finishTask({{ task.id }})">
+                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-success">
                                                     <i class="fas fa-check"></i> Finish
                                                 </button>
+                                            </form>
                                             {% endif %}
                                         {% elif task.status == "paused" %}
-                                            <button type="button" class="btn btn-sm btn-info" 
-                                                    onclick="resumeTask({{ task.id }})">
-                                                <i class="fas fa-play"></i> Resume
-                                            </button>
-                                            {% if task.requires_made_amount %}
-                                                <button type="button" class="btn btn-sm btn-success" 
-                                                        onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                                    <i class="fas fa-check"></i> Finish & Enter Amount
+                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-play"></i> Resume
                                                 </button>
+                                            </form>
+                                            {% if task.requires_made_amount %}
+                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                                <i class="fas fa-check"></i> Finish & Enter Amount
+                                            </button>
                                             {% else %}
-                                                <button type="button" class="btn btn-sm btn-success" 
-                                                        onclick="finishTask({{ task.id }})">
+                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-success">
                                                     <i class="fas fa-check"></i> Finish
                                                 </button>
+                                            </form>
                                             {% endif %}
                                         {% elif task.status == "completed" %}
-                                            <span class="text-success">
-                                                <i class="fas fa-check-circle"></i> Completed
-                                            </span>
+                                            <span class="badge bg-success">Done</span>
+                                            {% if task.finished_at and task.assigned_to %}
+                                            <br><small class="text-muted">Cost: ${{ "%.2f"|format(task.labor_cost) }}</small>
+                                            {% endif %}
                                         {% endif %}
                                         
                                         <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm btn-outline-info">
                                             <i class="fas fa-eye"></i>
                                         </a>
                                     {% else %}
-                                        <span class="text-muted">Day finalized</span>
+                                        {% if task.status == "completed" %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% else %}
+                                            <span class="text-muted">{{ task.status.replace('_', ' ').title() }}</span>
+                                        {% endif %}
+                                        
                                         <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm btn-outline-info">
                                             <i class="fas fa-eye"></i>
                                         </a>
@@ -432,147 +538,61 @@
                         </tbody>
                     </table>
                 </div>
-                {% else %}
-                <p class="text-muted">No tasks generated yet. Update inventory quantities to generate tasks.</p>
-                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
-<!-- Manual Task Creation -->
-{% if current_user.role in ["admin", "manager"] and not inventory_day.finalized %}
-<div class="row mt-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-plus"></i> Add Manual Task</h5>
-            </div>
-            <div class="card-body">
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="mb-3">
-                                <label for="inventory_item_id" class="form-label">Inventory Item (Optional)</label>
-                                <select class="form-select" id="inventory_item_id" name="inventory_item_id">
-                                    <option value="">No inventory item</option>
-                                    {% for item in inventory_day_items %}
-                                    <option value="{{ item.inventory_item_id }}">{{ item.inventory_item.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="mb-3">
-                                <label for="batch_id" class="form-label">Batch (Optional)</label>
-                                <select class="form-select" id="batch_id" name="batch_id">
-                                    <option value="">No batch</option>
-                                    {% for batch in batches %}
-                                    <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="mb-3">
-                                <label for="category_id" class="form-label">Category (Optional)</label>
-                                <select class="form-select" id="category_id" name="category_id">
-                                    <option value="">No category</option>
-                                    {% for cat in categories %}
-                                    <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="mb-3">
-                                <label for="description" class="form-label">Task Description</label>
-                                <input type="text" class="form-control" id="description" name="description" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Assign To:</label>
-                        <div class="row">
-                            {% for emp in employees %}
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp{{ emp.id }}">
-                                    <label class="form-check-label" for="emp{{ emp.id }}">
-                                        {{ emp.full_name or emp.username }}
-                                    </label>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-plus"></i> Add Task
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Day Actions -->
-{% if current_user.role in ["admin", "manager"] and not inventory_day.finalized %}
-<div class="row mt-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-check-circle"></i> Finalize Day</h5>
-            </div>
-            <div class="card-body">
-                <p class="text-muted">Once finalized, no further changes can be made to this day.</p>
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
-                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
-                        <i class="fas fa-lock"></i> Finalize Day
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Assignment Modal -->
-<div class="modal fade" id="assignModal" tabindex="-1">
+<!-- Assignment Modals -->
+{% for task in tasks %}
+{% if not task.assigned_to and not task.assigned_employee_ids and not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+<div class="modal fade" id="assignModal{{ task.id }}" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Assign Task</h5>
+                <h5 class="modal-title">Assign Task: {{ task.description }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <div id="assignModalContent">
-                    <!-- Content will be populated by JavaScript -->
+            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/assign_multiple">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Employee(s):</label>
+                        {% for emp in employees %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="assign_emp_{{ task.id }}_{{ emp.id }}">
+                            <label class="form-check-label" for="assign_emp_{{ task.id }}_{{ emp.id }}">
+                                {{ emp.full_name or emp.username }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="assignTask()">Assign</button>
-            </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Task</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+{% endif %}
+{% endfor %}
 
 <script>
+// SSE Connection and Event Handling
 let eventSource = null;
-let currentTaskId = null;
-let timers = {};
+let dayId = {{ inventory_day.id }};
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Page loaded, connecting to SSE...');
     connectToSSE();
-    initializeTimers();
+    
+    // Start live timers for in-progress tasks
+    updateLiveTimers();
+    setInterval(updateLiveTimers, 60000); // Update every minute
 });
 
 function connectToSSE() {
-    const dayId = {{ inventory_day.id }};
     console.log('Connecting to SSE for day:', dayId);
     
     if (eventSource) {
@@ -588,18 +608,73 @@ function connectToSSE() {
     
     eventSource.onmessage = function(event) {
         console.log('SSE message received:', event.data);
+        
         try {
             const data = JSON.parse(event.data);
             console.log('Parsed SSE data:', data);
-            handleSSEEvent(data);
+            
+            // Handle different event types
+            switch(data.type) {
+                case 'connected':
+                    console.log('SSE connection confirmed for day:', data.day_id);
+                    break;
+                    
+                case 'task_assigned':
+                    console.log('Task assigned event received:', data);
+                    updateTaskAssignment(data.task_id, data.assigned_employees, data.team_size);
+                    break;
+                    
+                case 'task_started':
+                    console.log('Task started event received:', data);
+                    updateTaskStatus(data.task_id, 'in_progress', data.started_at);
+                    break;
+                    
+                case 'task_paused':
+                    console.log('Task paused event received:', data);
+                    updateTaskStatus(data.task_id, 'paused');
+                    break;
+                    
+                case 'task_resumed':
+                    console.log('Task resumed event received:', data);
+                    updateTaskStatus(data.task_id, 'in_progress', data.resumed_at);
+                    break;
+                    
+                case 'task_completed':
+                    console.log('Task completed event received:', data);
+                    updateTaskStatus(data.task_id, 'completed', null, data.total_time, data.labor_cost);
+                    break;
+                    
+                case 'inventory_batch_updated':
+                    console.log('Inventory batch updated event received:', data);
+                    // This triggers a page reload for full inventory updates
+                    if (data.force_regenerate) {
+                        console.log('Force regenerate detected, reloading page...');
+                        window.location.reload();
+                    }
+                    break;
+                    
+                case 'tasks_generated':
+                    console.log('Tasks generated event received:', data);
+                    // This triggers a page reload for new tasks
+                    console.log('New tasks generated, reloading page...');
+                    window.location.reload();
+                    break;
+                    
+                case 'heartbeat':
+                    // Silent heartbeat
+                    break;
+                    
+                default:
+                    console.log('Unknown SSE event type:', data.type);
+            }
         } catch (error) {
-            console.error('Error parsing SSE data:', error);
+            console.error('Error parsing SSE data:', error, event.data);
         }
     };
     
     eventSource.onerror = function(event) {
         console.error('SSE connection error:', event);
-        updateConnectionStatus('Connection Error', 'danger');
+        updateConnectionStatus('Disconnected', 'danger');
         
         // Attempt to reconnect after 5 seconds
         setTimeout(() => {
@@ -609,502 +684,190 @@ function connectToSSE() {
     };
 }
 
-function handleSSEEvent(data) {
-    console.log('Handling SSE event:', data.type, data);
+function updateConnectionStatus(status, type) {
+    const statusDiv = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('connectionText');
     
-    switch (data.type) {
-        case 'connected':
-            console.log('SSE connected for day:', data.day_id);
-            break;
-            
-        case 'task_assigned':
-            console.log('Task assigned event received:', data);
-            updateTaskAssignment(data.task_id, data.assigned_employees, data.primary_assignee);
-            showNotification(`Task assigned to ${data.primary_assignee}`, 'info');
-            break;
-            
-        case 'task_started':
-            console.log('Task started event received:', data);
-            updateTaskStatus(data.task_id, 'in_progress', data.started_at);
-            showNotification(`Task started by ${data.started_by}`, 'success');
-            break;
-            
-        case 'task_paused':
-            console.log('Task paused event received:', data);
-            updateTaskStatus(data.task_id, 'paused');
-            showNotification(`Task paused by ${data.paused_by}`, 'warning');
-            break;
-            
-        case 'task_resumed':
-            console.log('Task resumed event received:', data);
-            updateTaskStatus(data.task_id, 'in_progress', data.resumed_at);
-            showNotification(`Task resumed by ${data.resumed_by}`, 'info');
-            break;
-            
-        case 'task_completed':
-            console.log('Task completed event received:', data);
-            updateTaskStatus(data.task_id, 'completed', null, data.total_time);
-            showNotification(`Task completed by ${data.completed_by}`, 'success');
-            break;
-            
-        case 'inventory_batch_updated':
-            console.log('Inventory batch updated event received:', data);
-            updateInventoryQuantities(data.items);
-            showNotification('Inventory updated', 'info');
-            break;
-            
-        case 'tasks_generated':
-            console.log('Tasks generated event received:', data);
-            if (data.force_regenerate) {
-                // Full reload for force regenerate
-                location.reload();
-            } else {
-                addNewTasksToTable(data.tasks);
-                showNotification(`${data.tasks.length} tasks generated`, 'success');
-            }
-            break;
-            
-        case 'heartbeat':
-            // Silent heartbeat
-            break;
-            
-        default:
-            console.log('Unknown SSE event type:', data.type);
+    if (statusDiv && statusText) {
+        statusText.textContent = status;
+        statusDiv.className = `alert alert-${type} mt-2`;
+        statusDiv.style.display = 'block';
+        
+        // Hide success status after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
     }
 }
 
-function updateTaskAssignment(taskId, assignedEmployees, primaryAssignee) {
+function updateTaskAssignment(taskId, assignedEmployees, teamSize) {
     console.log('Updating task assignment for task', taskId);
-    const assignedCell = document.querySelector(`tr[data-task-id="${taskId}"] .assigned-employee-cell`);
-    const actionsCell = document.querySelector(`tr[data-task-id="${taskId}"] .task-actions-cell`);
     
+    const assignedCell = document.querySelector(`.task-assigned-to[data-task-id="${taskId}"]`);
     if (assignedCell) {
-        if (assignedEmployees.length > 1) {
+        console.log('Found assigned cell, updating...');
+        
+        if (teamSize > 1) {
             assignedCell.innerHTML = `
-                <span class="text-info">Team of ${assignedEmployees.length}</span><br>
+                <span class="text-info">Team of ${teamSize}</span><br>
                 ${assignedEmployees.map(emp => `<span class="badge bg-secondary me-1">${emp}</span>`).join('')}
             `;
-        } else if (assignedEmployees.length === 1) {
+        } else if (assignedEmployees.length > 0) {
             assignedCell.innerHTML = assignedEmployees[0];
         }
+        
+        // Update action buttons - enable start button
+        const actionsCell = document.querySelector(`.task-actions[data-task-id="${taskId}"]`);
+        if (actionsCell) {
+            const assignButton = actionsCell.querySelector('button[data-bs-target*="assignModal"]');
+            if (assignButton) {
+                assignButton.style.display = 'none';
+            }
+            
+            // Add start button if not exists
+            if (!actionsCell.querySelector('form[action*="/start"]')) {
+                const startButton = document.createElement('form');
+                startButton.method = 'post';
+                startButton.action = `/inventory/day/${dayId}/tasks/${taskId}/start`;
+                startButton.style.display = 'inline';
+                startButton.innerHTML = `
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                `;
+                actionsCell.insertBefore(startButton, actionsCell.firstChild);
+            }
+        }
+        
         console.log('Task assignment updated successfully');
     } else {
-        console.error('Could not find assigned employee cell for task', taskId);
-    }
-    
-    // Update action buttons to show Start button instead of Assign
-    if (actionsCell) {
-        const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
-        const hasScalableBatch = taskRow.querySelector('.task-description-cell small.text-info');
-        
-        if (hasScalableBatch) {
-            actionsCell.innerHTML = `
-                <button type="button" class="btn btn-sm btn-primary" 
-                        onclick="showScaleSelection(${taskId}, 'Recipe Name')">
-                    <i class="fas fa-play"></i> Start
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" 
-                        onclick="showAssignModal(${taskId}, 'Task Description')">
-                    <i class="fas fa-user-edit"></i> Reassign
-                </button>
-            `;
-        } else {
-            actionsCell.innerHTML = `
-                <button type="button" class="btn btn-sm btn-primary" 
-                        onclick="startTask(${taskId})">
-                    <i class="fas fa-play"></i> Start
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" 
-                        onclick="showAssignModal(${taskId}, 'Task Description')">
-                    <i class="fas fa-user-edit"></i> Reassign
-                </button>
-            `;
-        }
+        console.error('Could not find assigned cell for task', taskId);
     }
 }
 
-function updateTaskStatus(taskId, status, startTime = null, totalTime = null) {
+function updateTaskStatus(taskId, status, startTime = null, totalTime = null, laborCost = null) {
     console.log('Updating task status for task', taskId, 'to', status);
-    const statusCell = document.querySelector(`tr[data-task-id="${taskId}"] .task-status-cell`);
-    const timeCell = document.querySelector(`tr[data-task-id="${taskId}"] .task-time-cell`);
-    const actionsCell = document.querySelector(`tr[data-task-id="${taskId}"] .task-actions-cell`);
+    
+    const statusCell = document.querySelector(`.task-status[data-task-id="${taskId}"]`);
+    const actionsCell = document.querySelector(`.task-actions[data-task-id="${taskId}"]`);
     
     if (statusCell) {
+        console.log('Found status cell, updating...');
+        
         let statusHTML = '';
-        switch (status) {
-            case 'not_started':
-                statusHTML = '<span class="badge bg-secondary">Not Started</span>';
-                break;
+        switch(status) {
             case 'in_progress':
-                statusHTML = '<span class="badge bg-primary">In Progress</span>';
-                if (startTime) {
-                    statusHTML += `<br><small class="text-muted timer" data-start-time="${startTime}" data-pause-time="0">
-                        <span class="timer-display">0 min</span>
-                    </small>`;
-                }
+                statusHTML = `
+                    <span class="badge bg-primary">In Progress</span>
+                    ${startTime ? `<br><small class="text-muted timer" data-start-time="${startTime}" data-pause-time="0">0 min</small>` : ''}
+                `;
                 break;
             case 'paused':
-                statusHTML = '<span class="badge bg-warning">Paused</span>';
-                if (totalTime) {
-                    statusHTML += `<br><small class="text-muted">${totalTime} min</small>`;
-                }
+                statusHTML = `
+                    <span class="badge bg-warning">Paused</span>
+                    ${totalTime ? `<br><small class="text-muted">${totalTime} min</small>` : ''}
+                `;
                 break;
             case 'completed':
-                statusHTML = '<span class="badge bg-success">Completed</span>';
-                if (totalTime) {
-                    statusHTML += `<br><small class="text-muted">${totalTime} min</small>`;
-                }
+                statusHTML = `
+                    <span class="badge bg-success">Completed</span>
+                    ${totalTime ? `<br><small class="text-muted">${totalTime} min</small>` : ''}
+                `;
                 break;
         }
+        
         statusCell.innerHTML = statusHTML;
-        console.log('Task status updated successfully');
-    }
-    
-    // Update time cell
-    if (timeCell) {
-        if (status === 'in_progress' && startTime) {
-            timeCell.innerHTML = `<span class="timer" data-start-time="${startTime}" data-pause-time="0">
-                <span class="timer-display">0 min</span>
-            </span>`;
-            startTimer(taskId, startTime, 0);
-        } else if (totalTime) {
-            timeCell.innerHTML = `${totalTime} min`;
-            stopTimer(taskId);
+        
+        // Update action buttons
+        if (actionsCell) {
+            updateActionButtons(actionsCell, taskId, status);
         }
-    }
-    
-    // Update action buttons
-    if (actionsCell) {
-        updateActionButtons(taskId, status);
-    }
-    
-    // Restart timers if needed
-    if (status === 'in_progress' && startTime) {
-        initializeTimers();
+        
+        // Start live timer if task is in progress
+        if (status === 'in_progress' && startTime) {
+            updateLiveTimers();
+        }
+        
+        console.log('Task status updated successfully');
+    } else {
+        console.error('Could not find status cell for task', taskId);
     }
 }
 
-function updateActionButtons(taskId, status) {
-    const actionsCell = document.querySelector(`tr[data-task-id="${taskId}"] .task-actions-cell`);
-    if (!actionsCell) return;
+function updateActionButtons(actionsCell, taskId, status) {
+    console.log('Updating action buttons for task', taskId, 'status', status);
     
-    let buttonsHTML = '';
+    // Clear existing action buttons (except view button)
+    const viewButton = actionsCell.querySelector('a[href*="/tasks/"]');
+    actionsCell.innerHTML = '';
     
-    switch (status) {
-        case 'not_started':
-            buttonsHTML = `
-                <button type="button" class="btn btn-sm btn-primary" onclick="startTask(${taskId})">
-                    <i class="fas fa-play"></i> Start
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal(${taskId}, 'Task')">
-                    <i class="fas fa-user-edit"></i> Reassign
-                </button>
-            `;
-            break;
+    // Add appropriate buttons based on status
+    switch(status) {
         case 'in_progress':
-            buttonsHTML = `
-                <button type="button" class="btn btn-sm btn-warning" onclick="pauseTask(${taskId})">
-                    <i class="fas fa-pause"></i> Pause
-                </button>
-                <button type="button" class="btn btn-sm btn-success" onclick="finishTask(${taskId})">
-                    <i class="fas fa-check"></i> Finish
-                </button>
+            actionsCell.innerHTML = `
+                <form method="post" action="/inventory/day/${dayId}/tasks/${taskId}/pause" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-warning">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                </form>
+                <form method="post" action="/inventory/day/${dayId}/tasks/${taskId}/finish" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fas fa-check"></i> Finish
+                    </button>
+                </form>
             `;
             break;
         case 'paused':
-            buttonsHTML = `
-                <button type="button" class="btn btn-sm btn-info" onclick="resumeTask(${taskId})">
-                    <i class="fas fa-play"></i> Resume
-                </button>
-                <button type="button" class="btn btn-sm btn-success" onclick="finishTask(${taskId})">
-                    <i class="fas fa-check"></i> Finish
-                </button>
+            actionsCell.innerHTML = `
+                <form method="post" action="/inventory/day/${dayId}/tasks/${taskId}/resume" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-info">
+                        <i class="fas fa-play"></i> Resume
+                    </button>
+                </form>
+                <form method="post" action="/inventory/day/${dayId}/tasks/${taskId}/finish" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fas fa-check"></i> Finish
+                    </button>
+                </form>
             `;
             break;
         case 'completed':
-            buttonsHTML = `
-                <span class="text-success">
-                    <i class="fas fa-check-circle"></i> Completed
-                </span>
+            actionsCell.innerHTML = `
+                <span class="badge bg-success">Done</span>
             `;
             break;
     }
     
-    // Always add view button
-    buttonsHTML += `
-        <a href="/inventory/day/{{ inventory_day.id }}/tasks/${taskId}" class="btn btn-sm btn-outline-info">
-            <i class="fas fa-eye"></i>
-        </a>
-    `;
-    
-    actionsCell.innerHTML = buttonsHTML;
-}
-
-function updateInventoryQuantities(items) {
-    console.log('Updating inventory quantities:', items);
-    items.forEach(item => {
-        const input = document.querySelector(`input[name="item_${item.item_id}"]`);
-        const row = document.querySelector(`tr[data-item-id="${item.item_id}"]`);
-        const statusCell = document.querySelector(`.inventory-status-cell[data-item-id="${item.item_id}"]`);
-        
-        if (input) {
-            input.value = item.quantity;
-        }
-        
-        if (row) {
-            // Update row class based on status
-            row.className = row.className.replace(/table-(danger|warning|info|success)/g, '');
-            if (item.status === 'below_par') {
-                row.classList.add('table-danger');
-            } else if (item.status === 'on_par') {
-                row.classList.add('table-info');
-            } else if (item.status === 'near_par') {
-                row.classList.add('table-warning');
-            }
-        }
-        
-        if (statusCell) {
-            let statusHTML = '';
-            switch (item.status) {
-                case 'below_par':
-                    statusHTML = '<span class="badge bg-danger">Below Par</span>';
-                    break;
-                case 'on_par':
-                    statusHTML = '<span class="badge bg-info">On Par</span>';
-                    break;
-                case 'near_par':
-                    statusHTML = '<span class="badge bg-warning">Near Par</span>';
-                    break;
-                default:
-                    statusHTML = '<span class="badge bg-success">Good</span>';
-            }
-            statusCell.innerHTML = statusHTML;
-        }
-    });
-}
-
-function addNewTasksToTable(tasks) {
-    console.log('Adding new tasks to table:', tasks);
-    const tbody = document.querySelector('#tasksTable tbody');
-    if (!tbody) return;
-    
-    // Clear existing tasks and add new ones
-    tbody.innerHTML = '';
-    
-    tasks.forEach(task => {
-        const row = document.createElement('tr');
-        row.setAttribute('data-task-id', task.id);
-        
-        row.innerHTML = `
-            <td class="task-description-cell">
-                🔘 <strong>${task.description}</strong>
-            </td>
-            <td class="assigned-employee-cell" data-task-id="${task.id}">
-                <span class="text-warning">Unassigned</span>
-            </td>
-            <td class="task-status-cell" data-task-id="${task.id}">
-                <span class="badge bg-secondary">Not Started</span>
-            </td>
-            <td class="task-time-cell" data-task-id="${task.id}">-</td>
-            <td>🔘 Uncategorized</td>
-            <td class="task-actions-cell" data-task-id="${task.id}">
-                <button type="button" class="btn btn-sm btn-outline-secondary" 
-                        onclick="showAssignModal(${task.id}, '${task.description}')">
-                    <i class="fas fa-user-plus"></i> Assign
-                </button>
-                <a href="/inventory/day/{{ inventory_day.id }}/tasks/${task.id}" class="btn btn-sm btn-outline-info">
-                    <i class="fas fa-eye"></i>
-                </a>
-            </td>
-        `;
-        
-        tbody.appendChild(row);
-    });
-}
-
-function updateConnectionStatus(message, type) {
-    const statusDiv = document.getElementById('connectionStatus');
-    if (statusDiv) {
-        statusDiv.className = `alert alert-${type}`;
-        statusDiv.innerHTML = `<i class="fas fa-wifi"></i> ${message}`;
+    // Always add back the view button
+    if (viewButton) {
+        actionsCell.appendChild(viewButton);
+    } else {
+        const newViewButton = document.createElement('a');
+        newViewButton.href = `/inventory/day/${dayId}/tasks/${taskId}`;
+        newViewButton.className = 'btn btn-sm btn-outline-info';
+        newViewButton.innerHTML = '<i class="fas fa-eye"></i>';
+        actionsCell.appendChild(newViewButton);
     }
 }
 
-function showNotification(message, type) {
-    console.log('Notification:', message, type);
-    // You can implement a toast notification system here
-    // For now, just log to console
-}
-
-// Timer functions
-function initializeTimers() {
-    document.querySelectorAll('.timer').forEach(timer => {
-        const startTime = timer.dataset.startTime;
+function updateLiveTimers() {
+    const timers = document.querySelectorAll('.timer[data-start-time]');
+    
+    timers.forEach(timer => {
+        const startTime = new Date(timer.dataset.startTime);
         const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
-        const taskId = timer.closest('tr').dataset.taskId;
+        const now = new Date();
         
-        if (startTime && taskId) {
-            startTimer(taskId, startTime, pauseTime);
-        }
+        const elapsedMs = now - startTime;
+        const elapsedMinutes = Math.floor(elapsedMs / 60000) - Math.floor(pauseTime / 60);
+        
+        timer.textContent = `${elapsedMinutes} min`;
     });
 }
 
-function startTimer(taskId, startTime, pauseTime) {
-    if (timers[taskId]) {
-        clearInterval(timers[taskId]);
-    }
-    
-    timers[taskId] = setInterval(() => {
-        const start = new Date(startTime);
-        const now = new Date();
-        const elapsed = Math.floor((now - start) / 1000 / 60) - Math.floor(pauseTime / 60);
-        
-        const timerDisplays = document.querySelectorAll(`tr[data-task-id="${taskId}"] .timer-display`);
-        timerDisplays.forEach(display => {
-            display.textContent = `${elapsed} min`;
-        });
-    }, 1000);
-}
-
-function stopTimer(taskId) {
-    if (timers[taskId]) {
-        clearInterval(timers[taskId]);
-        delete timers[taskId];
-    }
-}
-
-// Task action functions
-async function startTask(taskId) {
-    try {
-        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-        });
-        
-        if (response.ok) {
-            console.log('Task started successfully');
-        } else {
-            console.error('Error starting task:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Error starting task:', error);
-    }
-}
-
-async function pauseTask(taskId) {
-    try {
-        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/pause`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-        });
-        
-        if (response.ok) {
-            console.log('Task paused successfully');
-        } else {
-            console.error('Error pausing task:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Error pausing task:', error);
-    }
-}
-
-async function resumeTask(taskId) {
-    try {
-        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/resume`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-        });
-        
-        if (response.ok) {
-            console.log('Task resumed successfully');
-        } else {
-            console.error('Error resuming task:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Error resuming task:', error);
-    }
-}
-
-async function finishTask(taskId) {
-    try {
-        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-        });
-        
-        if (response.ok) {
-            console.log('Task finished successfully');
-        } else {
-            console.error('Error finishing task:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Error finishing task:', error);
-    }
-}
-
-function showAssignModal(taskId, taskDescription) {
-    currentTaskId = taskId;
-    
-    const modalContent = document.getElementById('assignModalContent');
-    modalContent.innerHTML = `
-        <p><strong>Task:</strong> ${taskDescription}</p>
-        <div class="mb-3">
-            <label class="form-label">Assign to:</label>
-            {% for emp in employees %}
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="assign_employees" value="{{ emp.id }}" id="assign_emp{{ emp.id }}">
-                <label class="form-check-label" for="assign_emp{{ emp.id }}">
-                    {{ emp.full_name or emp.username }}
-                </label>
-            </div>
-            {% endfor %}
-        </div>
-    `;
-    
-    const modal = new bootstrap.Modal(document.getElementById('assignModal'));
-    modal.show();
-}
-
-async function assignTask() {
-    const selectedEmployees = Array.from(document.querySelectorAll('input[name="assign_employees"]:checked'))
-        .map(cb => cb.value);
-    
-    if (selectedEmployees.length === 0) {
-        alert('Please select at least one employee');
-        return;
-    }
-    
-    try {
-        const formData = new FormData();
-        selectedEmployees.forEach(empId => {
-            formData.append('assigned_to_ids', empId);
-        });
-        
-        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${currentTaskId}/assign_multiple`, {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (response.ok) {
-            console.log('Task assigned successfully');
-            bootstrap.Modal.getInstance(document.getElementById('assignModal')).hide();
-        } else {
-            console.error('Error assigning task:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Error assigning task:', error);
-    }
-}
-
-// Scale selection and made amount functions (same as before)
+// Scale Selection Modal
 function showScaleSelection(taskId, recipeName) {
     fetch(`/api/tasks/${taskId}/scale_options`)
         .then(response => response.json())
@@ -1162,7 +925,7 @@ function startTaskWithScale(taskId) {
     
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
+    form.action = `/inventory/day/${dayId}/tasks/${taskId}/start_with_scale`;
     form.style.display = 'none';
     
     const scaleInput = document.createElement('input');
@@ -1174,6 +937,7 @@ function startTaskWithScale(taskId) {
     form.submit();
 }
 
+// Made Amount Input Modal
 function showMadeAmountInput(taskId, recipeName) {
     fetch(`/api/tasks/${taskId}/finish_requirements`)
         .then(response => response.json())
@@ -1243,7 +1007,7 @@ function finishTaskWithAmount(taskId) {
     const madeUnitInput = document.getElementById('madeUnit');
     const hiddenMadeUnit = document.getElementById('hiddenMadeUnit');
     
-    const madeUnit = madeUnitInput ? madeUnitInput.value : hiddenMadeUnit.value;
+    const madeUnit = madeUnitInput ? madeUnitInput.value : (hiddenMadeUnit ? hiddenMadeUnit.value : '');
     
     if (!madeAmount || !madeUnit) {
         alert('Please enter amount made and select unit');
@@ -1252,7 +1016,7 @@ function finishTaskWithAmount(taskId) {
     
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
+    form.action = `/inventory/day/${dayId}/tasks/${taskId}/finish_with_amount`;
     form.style.display = 'none';
     
     const amountInput = document.createElement('input');
@@ -1274,7 +1038,6 @@ window.addEventListener('beforeunload', function() {
     if (eventSource) {
         eventSource.close();
     }
-    Object.values(timers).forEach(timer => clearInterval(timer));
 });
 </script>
 {% endblock %}
