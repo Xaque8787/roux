@@ -1,909 +1,887 @@
-from fastapi import APIRouter, Request, Form, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
-from datetime import date, timedelta
-from ..database import get_db
-from ..dependencies import require_manager_or_admin, get_current_user, require_admin
-from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay,
-                     InventoryDayItem, Task, User, JanitorialTask, JanitorialTaskDay)
-from ..utils.helpers import get_today_date
-from datetime import datetime
-from ..websocket import manager
+{% extends "base.html" %}
 
-router = APIRouter(prefix="/inventory", tags=["inventory"])
-templates = Jinja2Templates(directory="templates")
+{% block title %}Inventory Day {{ inventory_day.date }} - Food Cost Management{% endblock %}
 
-@router.get("/", response_class=HTMLResponse)
-async def inventory_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    inventory_items = db.query(InventoryItem).all()
-    categories = db.query(Category).filter(Category.type == "inventory").all()
-    batches = db.query(Batch).all()
-    par_unit_names = db.query(ParUnitName).all()
-    employees = db.query(User).filter(User.is_active == True).all()
-    janitorial_tasks = db.query(JanitorialTask).all()
-    
-    # Get current day (today's inventory day if exists)
-    today = date.today()
-    current_day = db.query(InventoryDay).filter(InventoryDay.date == today).first()
-    
-    # Get recent finalized days (last 30 days)
-    thirty_days_ago = today - timedelta(days=30)
-    finalized_days = db.query(InventoryDay).filter(
-        InventoryDay.finalized == True,
-        InventoryDay.date >= thirty_days_ago
-    ).order_by(InventoryDay.date.desc()).limit(10).all()
-    
-    return templates.TemplateResponse("inventory.html", {
-        "request": request,
-        "current_user": current_user,
-        "inventory_items": inventory_items,
-        "categories": categories,
-        "batches": batches,
-        "par_unit_names": par_unit_names,
-        "employees": employees,
-        "current_day": current_day,
-        "janitorial_tasks": janitorial_tasks,
-        "finalized_days": finalized_days,
-        "today_date": get_today_date()
-    })
-
-@router.post("/new_item")
-async def create_inventory_item(
-    request: Request,
-    name: str = Form(...),
-    par_unit_name_id: int = Form(None),
-    par_level: float = Form(...),
-    batch_id: int = Form(None),
-    par_unit_equals_type: str = Form(...),
-    par_unit_equals_amount: float = Form(None),
-    par_unit_equals_unit: str = Form(None),
-    category_id: int = Form(None),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    inventory_item = InventoryItem(
-        name=name,
-        par_unit_name_id=par_unit_name_id if par_unit_name_id else None,
-        par_level=par_level,
-        batch_id=batch_id if batch_id else None,
-        par_unit_equals_type=par_unit_equals_type,
-        par_unit_equals_amount=par_unit_equals_amount if par_unit_equals_type == 'custom' else None,
-        par_unit_equals_unit=par_unit_equals_unit if par_unit_equals_type == 'custom' else None,
-        category_id=category_id if category_id else None
-    )
-    
-    db.add(inventory_item)
-    db.commit()
-    
-    return RedirectResponse(url="/inventory", status_code=302)
-
-@router.post("/new_janitorial_task")
-async def create_janitorial_task(
-    request: Request,
-    title: str = Form(...),
-    instructions: str = Form(""),
-    task_type: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    janitorial_task = JanitorialTask(
-        title=title,
-        instructions=instructions if instructions else None,
-        task_type=task_type
-    )
-    
-    db.add(janitorial_task)
-    db.commit()
-    
-    return RedirectResponse(url="/inventory", status_code=302)
-
-@router.get("/janitorial_tasks/{task_id}/delete")
-async def delete_janitorial_task(
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_admin)
-):
-    janitorial_task = db.query(JanitorialTask).filter(JanitorialTask.id == task_id).first()
-    if not janitorial_task:
-        raise HTTPException(status_code=404, detail="Janitorial task not found")
-    
-    # Delete associated day tasks first
-    db.query(JanitorialTaskDay).filter(JanitorialTaskDay.janitorial_task_id == task_id).delete()
-    
-    # Delete any tasks linked to this janitorial task
-    db.query(Task).filter(Task.janitorial_task_id == task_id).delete()
-    
-    db.delete(janitorial_task)
-    db.commit()
-    
-    return RedirectResponse(url="/inventory", status_code=302)
-
-@router.post("/new_day")
-async def create_inventory_day(
-    request: Request,
-    date: str = Form(...),
-    employees_working: list = Form([]),
-    global_notes: str = Form(""),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    # Convert string date to date object
-    from datetime import date as date_class
-    inventory_date_obj = date_class.fromisoformat(date)
-    
-    # Check if day already exists
-    existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date_obj).first()
-    if existing_day:
-        return RedirectResponse(url=f"/inventory/day/{existing_day.id}", status_code=302)
-    
-    # Create new inventory day
-    inventory_day = InventoryDay(
-        date=inventory_date_obj,
-        employees_working=','.join(map(str, employees_working)) if employees_working else '',
-        global_notes=global_notes if global_notes else None
-    )
-    
-    db.add(inventory_day)
-    db.flush()  # Get the day ID
-    
-    # Create inventory day items for all inventory items
-    inventory_items = db.query(InventoryItem).all()
-    for item in inventory_items:
-        day_item = InventoryDayItem(
-            day_id=inventory_day.id,
-            inventory_item_id=item.id,
-            quantity=0.0
-        )
-        db.add(day_item)
-    
-    # Create janitorial task day items for all janitorial tasks
-    janitorial_tasks = db.query(JanitorialTask).all()
-    for janitorial_task in janitorial_tasks:
-        janitorial_day_item = JanitorialTaskDay(
-            day_id=inventory_day.id,
-            janitorial_task_id=janitorial_task.id,
-            include_task=(janitorial_task.task_type == 'daily')  # Auto-include daily tasks
-        )
-        db.add(janitorial_day_item)
-    
-    db.commit()
-    
-    return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
-
-@router.post("/day/{day_id}/update")
-async def update_inventory_day(
-    day_id: int,
-    request: Request,
-    global_notes: str = Form(""),
-    force_regenerate: bool = Form(False),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
-    if inventory_day.finalized:
-        raise HTTPException(status_code=400, detail="Cannot update finalized day")
-    
-    # Update day notes
-    inventory_day.global_notes = global_notes if global_notes else None
-    
-    # Get all form data to process inventory items
-    form_data = await request.form()
-    
-    # Process inventory item quantities
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
-    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
-    
-    for day_item in inventory_day_items:
-        item_key = f"item_{day_item.inventory_item_id}"
-        override_create_key = f"override_create_{day_item.inventory_item_id}"
-        override_no_task_key = f"override_no_task_{day_item.inventory_item_id}"
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-calendar-day"></i> Inventory Day: {{ inventory_day.date }}</h1>
+        <a href="/inventory" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Inventory
+        </a>
         
-        if item_key in form_data:
-            day_item.quantity = float(form_data[item_key]) if form_data[item_key] else 0.0
+        {% if inventory_day.finalized %}
+        <span class="badge bg-success ms-2">Finalized</span>
+        {% else %}
+        <span class="badge bg-warning ms-2">In Progress</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Real-time Updates Status -->
+<div class="row mb-2">
+    <div class="col-12">
+        <div class="alert alert-info d-flex justify-content-between align-items-center" id="realtimeStatus">
+            <div>
+                <i class="fas fa-wifi" id="connectionIcon"></i>
+                <span id="connectionStatus">Connecting to real-time updates...</span>
+            </div>
+            <div>
+                <small id="activeUsers">Users online: <span id="userCount">0</span></small>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+<div class="row mb-3">
+    <div class="col-12">
+        <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" class="d-inline">
+            <input type="hidden" name="global_notes" value="{{ inventory_day.global_notes or '' }}">
+            <button type="submit" name="force_regenerate" value="true" class="btn btn-warning me-2" 
+                    onclick="return confirm('This will regenerate all auto-generated tasks. Continue?')">
+                <i class="fas fa-sync"></i> Regenerate Tasks
+            </button>
+        </form>
         
-        day_item.override_create_task = override_create_key in form_data
-        day_item.override_no_task = override_no_task_key in form_data
-    
-    # Process janitorial task inclusion
-    for janitorial_day_item in janitorial_day_items:
-        if janitorial_day_item.janitorial_task.task_type == 'manual':
-            janitorial_key = f"janitorial_{janitorial_day_item.janitorial_task_id}"
-            janitorial_day_item.include_task = janitorial_key in form_data
-    
-    # Generate tasks based on inventory levels
-    generate_tasks_for_day(db, inventory_day, inventory_day_items, janitorial_day_items, force_regenerate)
-    
-    db.commit()
-    
-    # Broadcast inventory update to all connected users
-    await manager.broadcast_inventory_update(day_id, {
-        "day_id": day_id,
-        "updated_by": current_user.full_name or current_user.username,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+        <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize" class="d-inline">
+            <button type="submit" class="btn btn-success" 
+                    onclick="return confirm('Finalize this day? This cannot be undone.')">
+                <i class="fas fa-lock"></i> Finalize Day
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
 
-@router.post("/day/{day_id}/tasks/new")
-async def create_manual_task(
-    day_id: int,
-    request: Request,
-    assigned_to_ids: list[int] = Form([]),
-    inventory_item_id: int = Form(None),
-    batch_id: int = Form(None),
-    category_id: int = Form(None),
-    description: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day or inventory_day.finalized:
-        raise HTTPException(status_code=400, detail="Cannot add tasks to finalized day")
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-boxes"></i> Daily Inventory</h5>
+            </div>
+            <div class="card-body">
+                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update">
+                    <div class="mb-3">
+                        <label for="global_notes" class="form-label">Day Notes</label>
+                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2">{{ inventory_day.global_notes or '' }}</textarea>
+                    </div>
+                {% endif %}
+                
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm table-sortable">
+                        <thead>
+                            <tr>
+                                <th data-sortable data-sort-type="text">Item</th>
+                                <th data-sortable data-sort-type="number">Quantity</th>
+                                <th data-sortable data-sort-type="number">Par Level</th>
+                                <th data-sortable data-sort-type="text">Status</th>
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                <th>Override</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for day_item in inventory_day_items %}
+                            {% set is_below_par = day_item.quantity < day_item.inventory_item.par_level %}
+                            {% set is_on_par = day_item.quantity == day_item.inventory_item.par_level %}
+                            {% set is_near_par = day_item.quantity == day_item.inventory_item.par_level + 1 %}
+                            {% set is_good = day_item.quantity >= day_item.inventory_item.par_level + 2 %}
+                            <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}">
+                                <td>
+                                    <strong>{{ day_item.inventory_item.name }}</strong>
+                                    {% if day_item.inventory_item.batch %}
+                                    <br><small class="text-info">
+                                        <i class="fas fa-link"></i> {{ day_item.inventory_item.batch.recipe.name }}
+                                    </small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                    <input type="number" class="form-control form-control-sm" 
+                                           name="item_{{ day_item.inventory_item_id }}" 
+                                           value="{{ day_item.quantity }}" step="0.1" style="width: 80px;">
+                                    {% else %}
+                                    {{ day_item.quantity }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ day_item.inventory_item.par_level }}
+                                    {% if day_item.inventory_item.par_unit_name %}
+                                    <br><small class="text-muted">{{ day_item.inventory_item.par_unit_name.name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_below_par %}
+                                        <span class="badge bg-danger">Below Par</span>
+                                    {% elif is_on_par %}
+                                        <span class="badge bg-info">On Par</span>
+                                    {% elif is_near_par %}
+                                        <span class="badge bg-warning">Near Par</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Good</span>
+                                    {% endif %}
+                                </td>
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                <td>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" 
+                                               name="override_create_{{ day_item.inventory_item_id }}" 
+                                               {% if day_item.override_create_task %}checked{% endif %}>
+                                        <label class="form-check-label">
+                                            <small>Force Task</small>
+                                        </label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" 
+                                               name="override_no_task_{{ day_item.inventory_item_id }}" 
+                                               {% if day_item.override_no_task %}checked{% endif %}>
+                                        <label class="form-check-label">
+                                            <small>No Task</small>
+                                        </label>
+                                    </div>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if janitorial_day_items %}
+                <h6 class="mt-4">Janitorial Tasks</h6>
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm table-sortable">
+                        <thead>
+                            <tr>
+                                <th data-sortable data-sort-type="text">Task</th>
+                                <th data-sortable data-sort-type="text">Type</th>
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                <th>Include</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for janitorial_day_item in janitorial_day_items %}
+                            <tr>
+                                <td>
+                                    <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
+                                    {% if janitorial_day_item.janitorial_task.instructions %}
+                                    <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:30] }}{% if janitorial_day_item.janitorial_task.instructions|length > 30 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
+                                        <span class="badge bg-primary">Daily</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Manual</span>
+                                    {% endif %}
+                                </td>
+                                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                <td>
+                                    {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
+                                        <span class="text-muted">Auto-included</span>
+                                    {% else %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   name="janitorial_{{ janitorial_day_item.janitorial_task_id }}" 
+                                                   {% if janitorial_day_item.include_task %}checked{% endif %}>
+                                            <label class="form-check-label">Include</label>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+                
+                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                    <button type="submit" class="btn btn-primary mt-3">
+                        <i class="fas fa-save"></i> Update Inventory & Generate Tasks
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
     
-    # Create a single task with multiple employees assigned
-    task = Task(
-        day_id=day_id,
-        assigned_to_id=assigned_to_ids[0] if assigned_to_ids else None,  # Primary assignee
-        inventory_item_id=inventory_item_id if inventory_item_id else None,
-        batch_id=batch_id if batch_id else None,  # Direct batch assignment or from inventory item
-        category_id=category_id if category_id else None,
-        description=description,
-        auto_generated=False,
-        assigned_employee_ids=','.join(map(str, assigned_to_ids)) if assigned_to_ids else None
-    )
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tasks"></i> Tasks</h5>
+            </div>
+            <div class="card-body">
+                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                <div class="mb-3">
+                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                        <i class="fas fa-plus"></i> Add Manual Task
+                    </button>
+                </div>
+                {% endif %}
+                
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm table-sortable">
+                        <thead>
+                            <tr>
+                                <th data-sortable data-sort-type="text">Task</th>
+                                <th data-sortable data-sort-type="text">Assigned To</th>
+                                <th data-sortable data-sort-type="text">Status</th>
+                                <th data-sortable data-sort-type="number">Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            <tr>
+                                <td>
+                                    <small>{{ task.description }}</small>
+                                   {% if task.inventory_item and task.inventory_item.category %}
+                                       {{ task.inventory_item.category.icon or '🔘' }}
+                                   {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
+                                       {{ task.inventory_item.batch.category.icon or '🔘' }}
+                                   {% elif task.janitorial_task_id %}
+                                       🧹
+                                   {% elif task.batch and task.batch.category %}
+                                       {{ task.batch.category.icon or '🔘' }}
+                                   {% elif task.category %}
+                                       {{ task.category.icon or '🔘' }}
+                                   {% else %}
+                                       🔘
+                                   {% endif %}
+                                    {% if task.batch %}
+                                        <br><small class="text-info">{{ task.batch.recipe.name }}
+                                            {% if task.selected_scale and task.selected_scale != 'full' %}
+                                            ({{ task.selected_scale }})
+                                            {% endif %}
+                                        </small>
+                                    {% endif %}
+                                    {% if task.made_amount %}
+                                    <br><small class="text-success">
+                                        <i class="fas fa-check"></i> Made: {{ task.made_amount }} {{ task.made_unit }}
+                                    </small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.assigned_employee_ids %}
+                                        {% set employee_ids = task.assigned_employee_ids.split(',') %}
+                                        {% if employee_ids|length > 1 %}
+                                            <small class="text-info">Team of {{ employee_ids|length }}</small>
+                                            <br>
+                                            {% for emp_id in employee_ids %}
+                                                {% for emp in employees %}
+                                                    {% if emp.id|string == emp_id %}
+                                                        <small class="badge bg-secondary me-1">{{ emp.full_name or emp.username }}</small>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endfor %}
+                                        {% else %}
+                                            {% for emp_id in employee_ids %}
+                                                {% for emp in employees %}
+                                                    {% if emp.id|string == emp_id %}
+                                                        <small>{{ emp.full_name or emp.username }}</small>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% elif task.assigned_to %}
+                                        <small>{{ task.assigned_to.full_name or task.assigned_to.username }}</small>
+                                    {% else %}
+                                        <small class="text-warning">Unassigned</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.status == "not_started" %}
+                                        {% if task.requires_scale_selection %}
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <i class="fas fa-play"></i> Select Scale & Start
+                                        </button>
+                                        {% elif not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                        <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display: inline;">
+                                            <button type="submit" class="btn btn-primary btn-sm">
+                                                <i class="fas fa-play"></i> Start
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Not Started</span>
+                                        {% endif %}
+                                    {% elif task.status == "in_progress" %}
+                                        {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                        <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display: inline;">
+                                            <button type="submit" class="btn btn-warning btn-sm">
+                                                <i class="fas fa-pause"></i> Pause
+                                            </button>
+                                        </form>
+                                        {% if task.requires_made_amount %}
+                                        <button type="button" class="btn btn-success btn-sm" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <i class="fas fa-check"></i> Finish & Enter Amount
+                                        </button>
+                                        {% else %}
+                                        <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display: inline;">
+                                            <button type="submit" class="btn btn-success btn-sm">
+                                                <i class="fas fa-check"></i> Finish
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="badge bg-primary">In Progress</span>
+                                        {% endif %}
+                                    {% elif task.status == "paused" %}
+                                        {% if task.requires_made_amount %}
+                                        <button type="button" class="btn btn-success btn-sm" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <i class="fas fa-check"></i> Finish & Enter Amount
+                                        </button>
+                                        {% elif not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
+                                        <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display: inline;">
+                                            <button type="submit" class="btn btn-info btn-sm">
+                                                <i class="fas fa-play"></i> Resume
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <span class="badge bg-warning">Paused</span>
+                                        {% endif %}
+                                    {% elif task.status == "completed" %}
+                                        <span class="badge bg-success">Completed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.started_at %}
+                                        <small>{{ task.total_time_minutes }} min</small>
+                                        {% if task.finished_at and task.assigned_employees|length > 0 %}
+                                        <br><small class="text-success">${{ "%.2f"|format(task.labor_cost) }}</small>
+                                        {% endif %}
+                                    {% else %}
+                                        <small class="text-muted">-</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal({{ task.id }})">
+                                        <i class="fas fa-users"></i> Assign
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     
-    # Set batch_id from inventory item if linked and no direct batch selected
-    if inventory_item_id and not batch_id:
-        inventory_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
-        if inventory_item and inventory_item.batch_id:
-            task.batch_id = inventory_item.batch_id
-    
-    db.add(task)
-    db.commit()
-    
-    # Broadcast task creation to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "created",
-        "description": task.description,
-        "created_by": current_user.full_name or current_user.username,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Day Summary</h5>
+            </div>
+            <div class="card-body">
+                {% if inventory_day.employees_working %}
+                <p><strong>Employees Working:</strong></p>
+                {% set employee_ids = inventory_day.employees_working.split(',') %}
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    {% for emp_id in employee_ids %}
+                        {% for emp in employees %}
+                            {% if emp.id|string == emp_id %}
+                            <span class="badge bg-secondary">{{ emp.full_name or emp.username }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% set total_tasks = tasks|length %}
+                {% set completed_tasks = 0 %}
+                {% set in_progress_tasks = 0 %}
+                {% set below_par_count = 0 %}
+                
+                {% for task in tasks %}
+                    {% if task.status == 'completed' %}
+                        {% set completed_tasks = completed_tasks + 1 %}
+                    {% elif task.status == 'in_progress' %}
+                        {% set in_progress_tasks = in_progress_tasks + 1 %}
+                    {% endif %}
+                {% endfor %}
+                
+                {% for day_item in inventory_day_items %}
+                    {% if day_item.quantity < day_item.inventory_item.par_level %}
+                        {% set below_par_count = below_par_count + 1 %}
+                    {% endif %}
+                {% endfor %}
+                
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body p-2">
+                                <h5>{{ total_tasks }}</h5>
+                                <small>Total Tasks</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card bg-success text-white">
+                            <div class="card-body p-2">
+                                <h5>{{ completed_tasks }}</h5>
+                                <small>Completed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row text-center mt-2">
+                    <div class="col-6">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body p-2">
+                                <h5>{{ in_progress_tasks }}</h5>
+                                <small>In Progress</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card bg-danger text-white">
+                            <div class="card-body p-2">
+                                <h5>{{ below_par_count }}</h5>
+                                <small>Below Par</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% set total_time = 0 %}
+                {% set total_cost = 0 %}
+                {% for task in tasks %}
+                    {% if task.finished_at %}
+                        {% set total_time = total_time + task.total_time_minutes %}
+                        {% set total_cost = total_cost + task.labor_cost %}
+                    {% endif %}
+                {% endfor %}
+                
+                {% if completed_tasks > 0 %}
+                <div class="mt-3">
+                    <p><strong>Total Time:</strong> {{ total_time }} minutes ({{ "%.1f"|format(total_time / 60) }} hours)</p>
+                    <p><strong>Total Labor Cost:</strong> ${{ "%.2f"|format(total_cost) }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if task_summaries %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-clipboard-check"></i> Completed Task Summaries</h5>
+            </div>
+            <div class="card-body">
+                {% for task_id, summary in task_summaries.items() %}
+                {% set task = tasks|selectattr('id', 'equalto', task_id)|first %}
+                {% if task %}
+                <div class="card mb-2">
+                    <div class="card-body p-2">
+                        <h6 class="mb-1">{{ task.description }}</h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <small><strong>Par Level:</strong> {{ "%.1f"|format(summary.par_level) }} {{ summary.par_unit_name }}</small>
+                                <br><small><strong>Initial:</strong> {{ "%.1f"|format(summary.initial_inventory) }} {{ summary.par_unit_name }}</small>
+                                {% if summary.made_amount %}
+                                <br><small><strong>Made:</strong> {{ summary.made_amount }} {{ summary.made_unit }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="col-6">
+                                <small><strong>Final:</strong> {{ "%.1f"|format(summary.final_inventory) }} {{ summary.par_unit_name }}</small>
+                                {% if summary.par_unit_equals %}
+                                <br><small><strong>Equals:</strong> {{ "%.2f"|format(summary.par_unit_equals) }} {{ summary.par_unit_equals_unit or '' }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
 
-@router.post("/day/{day_id}/tasks/{task_id}/assign")
-async def assign_task(
-    day_id: int,
-    task_id: int,
-    assigned_to_id: int = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task.assigned_to_id = assigned_to_id
-    db.commit()
-    
-    # Broadcast task assignment to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "assigned",
-        "assigned_to_id": assigned_to_id,
-        "assigned_by": current_user.full_name or current_user.username,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+<!-- Add Manual Task Modal -->
+<div class="modal fade" id="addTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Manual Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="taskDescription" class="form-label">Task Description</label>
+                        <input type="text" class="form-control" id="taskDescription" name="description" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskAssignedTo" class="form-label">Assign To (Multiple Selection)</label>
+                        <select class="form-select" id="taskAssignedTo" name="assigned_to_ids" multiple>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl/Cmd to select multiple employees</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskInventoryItem" class="form-label">Link to Inventory Item (Optional)</label>
+                        <select class="form-select" id="taskInventoryItem" name="inventory_item_id">
+                            <option value="">No inventory item</option>
+                            {% for day_item in inventory_day_items %}
+                            <option value="{{ day_item.inventory_item.id }}">{{ day_item.inventory_item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskBatch" class="form-label">Link to Batch (Optional)</label>
+                        <select class="form-select" id="taskBatch" name="batch_id">
+                            <option value="">No batch</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskCategory" class="form-label">Category (Optional)</label>
+                        <select class="form-select" id="taskCategory" name="category_id">
+                            <option value="">No category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
-@router.post("/day/{day_id}/tasks/{task_id}/assign_multiple")
-async def assign_multiple_employees_to_task(
-    day_id: int,
-    task_id: int,
-    assigned_to_ids: list[int] = Form([]),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if not assigned_to_ids:
-        raise HTTPException(status_code=400, detail="At least one employee must be selected")
-    
-    # Set primary assignee to first selected employee
-    task.assigned_to_id = assigned_to_ids[0]
-    
-    # Store all assigned employee IDs
-    task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
-    
-    db.commit()
-    
-    # Broadcast task assignment to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "assigned_multiple",
-        "assigned_to_ids": assigned_to_ids,
-        "assigned_by": current_user.full_name or current_user.username,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+<!-- Assign Task Modal -->
+<div class="modal fade" id="assignTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="assignTaskForm" method="post">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="assignTaskTo" class="form-label">Assign To (Multiple Selection)</label>
+                        <select class="form-select" id="assignTaskTo" name="assigned_to_ids" multiple required>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.full_name or emp.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl/Cmd to select multiple employees</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
-@router.post("/day/{day_id}/tasks/{task_id}/start")
-async def start_task(
-    day_id: int,
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+<script>
+function showNotification(message, type = 'info') {
+    console.log('Showing notification:', message, type);
     
-    if task.status != "not_started":
-        raise HTTPException(status_code=400, detail="Task already started")
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
     
-    task.started_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
+    document.body.appendChild(toast);
     
-    # Broadcast task start to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "started",
-        "started_by": current_user.full_name or current_user.username,
-        "started_at": task.started_at.isoformat(),
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+</script>
 
-@router.post("/day/{day_id}/tasks/{task_id}/start_with_scale")
-async def start_task_with_scale(
-    day_id: int,
-    task_id: int,
-    selected_scale: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if task.status != "not_started":
-        raise HTTPException(status_code=400, detail="Task already started")
-    
-    # Set scale information
-    task.selected_scale = selected_scale
-    
-    # Calculate scale factor
-    scale_factors = {
-        'full': 1.0,
-        'double': 2.0,
-        'half': 0.5,
-        'quarter': 0.25,
-        'eighth': 0.125,
-        'sixteenth': 0.0625
+<script>
+// WebSocket Real-time Updates
+let ws = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+let reconnectTimeout = null;
+
+function getCookieValue(name) {
+    console.log('Getting cookie value for:', name);
+    console.log('All cookies:', document.cookie);
+    console.log('All cookies:', document.cookie);
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        const cookieValue = parts.pop().split(';').shift();
+        console.log('Found cookie value:', cookieValue ? 'token exists' : 'no token');
+        return cookieValue;
     }
-    task.scale_factor = scale_factors.get(selected_scale, 1.0)
-    
-    # Start the task
-    task.started_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
-    
-    # Broadcast task start with scale to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "started_with_scale",
-        "selected_scale": selected_scale,
-        "scale_factor": task.scale_factor,
-        "started_by": current_user.full_name or current_user.username,
-        "started_at": task.started_at.isoformat(),
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+    console.log('Cookie not found');
+        "access_token": request.cookies.get("access_token")
+    return null;
+}
 
-@router.post("/day/{day_id}/tasks/{task_id}/pause")
-async def pause_task(
-    day_id: int,
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+function connectWebSocket() {
+    console.log('Starting WebSocket connection...');
     
-    if task.status != "in_progress":
-        raise HTTPException(status_code=400, detail="Task is not in progress")
-    
-    task.paused_at = datetime.utcnow()
-    task.is_paused = True
-    db.commit()
-    
-    # Broadcast task pause to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "paused",
-        "paused_by": current_user.full_name or current_user.username,
-        "paused_at": task.paused_at.isoformat(),
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.post("/day/{day_id}/tasks/{task_id}/resume")
-async def resume_task(
-    day_id: int,
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if task.status != "paused":
-        raise HTTPException(status_code=400, detail="Task is not paused")
-    
-    # Add pause time to total
-    if task.paused_at:
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
-        task.total_pause_time += int(pause_duration)
-    
-    task.paused_at = None
-    task.is_paused = False
-    db.commit()
-    
-    # Broadcast task resume to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "resumed",
-        "resumed_by": current_user.full_name or current_user.username,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.post("/day/{day_id}/tasks/{task_id}/finish")
-async def finish_task(
-    day_id: int,
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if task.status not in ["in_progress", "paused"]:
-        raise HTTPException(status_code=400, detail="Task cannot be finished")
-    
-    # Handle paused task
-    if task.is_paused and task.paused_at:
-        # Don't add more pause time, just finish from paused state
-        pass
-    
-    task.finished_at = datetime.utcnow()
-    task.is_paused = False
-    task.paused_at = None
-    
-    # For non-variable yield batches, set made amount automatically
-    if task.batch and not task.batch.variable_yield and task.scale_factor:
-        task.made_amount = task.batch.yield_amount * task.scale_factor
-        task.made_unit = task.batch.yield_unit
-    
-    db.commit()
-    
-    # Broadcast task completion to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "finished",
-        "finished_by": current_user.full_name or current_user.username,
-        "finished_at": task.finished_at.isoformat(),
-        "made_amount": task.made_amount,
-        "made_unit": task.made_unit,
-        "labor_cost": task.labor_cost,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.post("/day/{day_id}/tasks/{task_id}/finish_with_amount")
-async def finish_task_with_amount(
-    day_id: int,
-    task_id: int,
-    made_amount: float = Form(...),
-    made_unit: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if task.status not in ["in_progress", "paused"]:
-        raise HTTPException(status_code=400, detail="Task cannot be finished")
-    
-    # Set made amount
-    task.made_amount = made_amount
-    task.made_unit = made_unit
-    
-    # Finish the task
-    task.finished_at = datetime.utcnow()
-    task.is_paused = False
-    task.paused_at = None
-    
-    db.commit()
-    
-    # Broadcast task completion with amount to all connected users
-    await manager.broadcast_task_update(day_id, {
-        "task_id": task.id,
-        "action": "finished_with_amount",
-        "finished_by": current_user.full_name or current_user.username,
-        "finished_at": task.finished_at.isoformat(),
-        "made_amount": made_amount,
-        "made_unit": made_unit,
-        "labor_cost": task.labor_cost,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.post("/day/{day_id}/tasks/{task_id}/notes")
-async def update_task_notes(
-    day_id: int,
-    task_id: int,
-    notes: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task.notes = notes if notes.strip() else None
-    db.commit()
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
-
-@router.get("/day/{day_id}/tasks/{task_id}")
-async def task_detail(
-    day_id: int,
-    task_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
-    task = db.query(Task).options(
-        joinedload(Task.batch).joinedload(Batch.recipe)
-    ).filter(Task.id == task_id, Task.day_id == day_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    employees = db.query(User).filter(User.is_active == True).all()
-    
-    # Calculate task summary if completed and linked to inventory item
-    task_summary = None
-    if task.status == "completed" and task.inventory_item:
-        task_summary = calculate_task_summary(task, db)
-    
-    return templates.TemplateResponse("task_detail.html", {
-        "request": request,
-        "current_user": current_user,
-        "inventory_day": inventory_day,
-        "task": task,
-        "employees": employees,
-        "task_summary": task_summary
-    })
-
-@router.post("/day/{day_id}/finalize")
-async def finalize_inventory_day(
-    day_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_manager_or_admin)
-):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
-    if inventory_day.finalized:
-        raise HTTPException(status_code=400, detail="Day is already finalized")
-    
-    inventory_day.finalized = True
-    db.commit()
-    
-    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
-
-@router.get("/reports/{day_id}")
-async def inventory_report(
-    day_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
-    if not inventory_day.finalized:
-        raise HTTPException(status_code=400, detail="Day must be finalized to view report")
-    
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
-    tasks = db.query(Task).filter(Task.day_id == day_id).all()
-    employees = db.query(User).filter(User.is_active == True).all()
-    
-    # Calculate statistics
-    total_tasks = len(tasks)
-    completed_tasks = len([t for t in tasks if t.status == "completed"])
-    below_par_items = len([item for item in inventory_day_items if item.quantity <= item.inventory_item.par_level])
-    
-    return templates.TemplateResponse("inventory_report.html", {
-        "request": request,
-        "current_user": current_user,
-        "inventory_day": inventory_day,
-        "inventory_day_items": inventory_day_items,
-        "tasks": tasks,
-        "employees": employees,
-        "total_tasks": total_tasks,
-        "completed_tasks": completed_tasks,
-        "below_par_items": below_par_items
-    })
-def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items, janitorial_day_items, force_regenerate: bool = False):
-    """Generate tasks for items that are below par level"""
-    
-    if force_regenerate:
-        # Force regenerate: delete ALL tasks for this day
-        db.query(Task).filter(Task.day_id == inventory_day.id).delete()
-    else:
-        # Normal operation: only delete auto-generated tasks that haven't been started
-        db.query(Task).filter(
-            Task.day_id == inventory_day.id,
-            Task.auto_generated == True,
-            Task.started_at.is_(None)  # Only delete tasks that haven't been started
-        ).delete()
-    
-    for day_item in inventory_day_items:
-        item = day_item.inventory_item
-        is_below_par = day_item.quantity < item.par_level
-        
-        # Check if task already exists for this item (unless force regenerating)
-        if not force_regenerate:
-            existing_task = db.query(Task).filter(
-                Task.day_id == inventory_day.id,
-                Task.inventory_item_id == item.id
-            ).first()
-            
-            # Skip if task already exists and has been started
-            if existing_task and existing_task.started_at:
-                continue
-        
-        # Create task if:
-        # 1. Item is below par and not overridden to skip
-        # 2. Item is above par but overridden to create task
-        should_create_task = (
-            (is_below_par and not day_item.override_no_task) or
-            (not is_below_par and day_item.override_create_task)
-        )
-        
-        if should_create_task:
-            # Create task description
-            if item.batch:
-                description = f"Make {item.name} - {item.batch.recipe.name}"
-            else:
-                description = f"Restock {item.name}"
-            
-            task = Task(
-                day_id=inventory_day.id,
-                inventory_item_id=item.id,
-                batch_id=item.batch_id if item.batch else None,
-                description=description,
-                auto_generated=True
-            )
-            db.add(task)
-    
-    # Generate janitorial tasks
-    for janitorial_day_item in janitorial_day_items:
-        janitorial_task = janitorial_day_item.janitorial_task
-        
-        # Check if task already exists for this janitorial task (unless force regenerating)
-        if not force_regenerate:
-            existing_task = db.query(Task).filter(
-                Task.day_id == inventory_day.id,
-                Task.janitorial_task_id == janitorial_task.id
-            ).first()
-            
-            # Skip if task already exists and has been started
-            if existing_task and existing_task.started_at:
-                continue
-        
-        # Create task if:
-        # 1. Daily task (always included)
-        # 2. Manual task that is checked to be included
-        should_create_task = (
-            janitorial_task.task_type == 'daily' or
-            (janitorial_task.task_type == 'manual' and janitorial_day_item.include_task)
-        )
-        
-        if should_create_task:
-            task = Task(
-                day_id=inventory_day.id,
-                janitorial_task_id=janitorial_task.id,
-                description=janitorial_task.title,
-                auto_generated=(janitorial_task.task_type == 'daily')
-            )
-            db.add(task)
-
-@router.get("/day/{day_id}", response_class=HTMLResponse)
-async def inventory_day_detail(day_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
-    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
-    tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
-    employees = db.query(User).filter(User.is_active == True).all()
-    batches = db.query(Batch).all()  # Add batches for manual task creation
-    categories = db.query(Category).filter(Category.type.in_(["batch", "inventory"])).all()
-    
-    # Calculate task summaries for completed tasks
-    task_summaries = {}
-    for task in tasks:
-        if task.status == "completed" and task.inventory_item:
-            summary = calculate_task_summary(task, db)
-            if summary:
-                task_summaries[task.id] = summary
-    
-    return templates.TemplateResponse("inventory_day.html", {
-        "request": request,
-        "current_user": current_user,
-        "inventory_day": inventory_day,
-        "inventory_day_items": inventory_day_items,
-        "janitorial_day_items": janitorial_day_items,
-        "tasks": tasks,
-        "employees": employees,
-        "batches": batches,
-        "categories": categories,
-        "task_summaries": task_summaries
-    })
-
-def calculate_task_summary(task, db):
-    """Calculate task summary information"""
-    if not task.inventory_item:
-        return None
-    
-    # Get the inventory day item for initial inventory
-    day_item = db.query(InventoryDayItem).filter(
-        InventoryDayItem.day_id == task.day_id,
-        InventoryDayItem.inventory_item_id == task.inventory_item.id
-    ).first()
-    
-    if not day_item:
-        return None
-    
-    item = task.inventory_item
-    
-    # Basic information
-    summary = {
-        'par_level': item.par_level,
-        'par_unit_name': item.par_unit_name.name if item.par_unit_name else 'units',
-        'par_unit_equals_type': item.par_unit_equals_type,
-        'par_unit_equals': item.par_unit_equals_calculated,
-        'par_unit_equals_unit': item.par_unit_equals_unit,
-        'initial_inventory': day_item.quantity,
-        'made_amount': task.made_amount,
-        'made_unit': task.made_unit,
-        'made_par_units': 0,
-        'made_amount_par_units': 0,
-        'final_inventory': day_item.quantity,
-        'initial_converted': None,
-        'made_converted': None,
-        'final_converted': None,
-        'made_quantity_equivalent': None,
-        'made_quantity_unit': None
+    const token = getCookieValue('access_token');
+    if (!token) {
+        console.error('No access token found in cookies');
+        updateConnectionStatus('error', 'No authentication token found');
+        return;
     }
     
-    # Calculate made amount in par units and quantity equivalents
-    if task.made_amount and task.made_unit:
-        # For par unit tasks, the made_amount is already in par units
-        if item.par_unit_name and task.made_unit == item.par_unit_name.name:
-            summary['made_par_units'] = task.made_amount
-            summary['made_amount_par_units'] = task.made_amount
-            
-            # Calculate quantity equivalent if custom par unit equals
-            if item.par_unit_equals_type == 'custom' and item.par_unit_equals_amount and item.par_unit_equals_unit:
-                quantity_equivalent = task.made_amount * item.par_unit_equals_amount
-                summary['made_quantity_equivalent'] = quantity_equivalent
-                summary['made_quantity_unit'] = item.par_unit_equals_unit
-        else:
-            # Regular unit conversion
-            made_par_units = item.convert_to_par_units(task.made_amount, task.made_unit)
-            summary['made_par_units'] = made_par_units
-            summary['made_amount_par_units'] = made_par_units
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/inventory/{{ inventory_day.id }}?token=${encodeURIComponent(token)}`;
+    
+    console.log('Connecting to WebSocket:', wsUrl);
+    updateConnectionStatus('connecting', 'Connecting to real-time updates...');
+    
+    try {
+        ws = new WebSocket(wsUrl);
         
-        summary['final_inventory'] = day_item.quantity + summary['made_amount_par_units']
-    
-    # Calculate conversions if custom par unit equals
-    if item.par_unit_equals_type == 'custom' and item.par_unit_equals_calculated:
-        summary['initial_converted'] = day_item.quantity * item.par_unit_equals_calculated
-        if summary['made_amount_par_units']:
-            summary['made_converted'] = summary['made_amount_par_units'] * item.par_unit_equals_calculated
-        summary['final_converted'] = summary['final_inventory'] * item.par_unit_equals_calculated
-    
-    return summary
+        ws.onopen = function(event) {
+            console.log('WebSocket connection opened');
+            reconnectAttempts = 0;
+            updateConnectionStatus('connected', 'Connected to real-time updates');
+            
+            // Send initial ping
+            ws.send(JSON.stringify({type: 'ping'}));
+        };
+        
+        ws.onmessage = function(event) {
+            console.log('WebSocket message received:', event.data);
+            
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+        
+        ws.onclose = function(event) {
+            console.log('WebSocket connection closed:', event.code, event.reason);
+            updateConnectionStatus('disconnected', 'Connection lost');
+            
+            // Attempt to reconnect if not intentionally closed
+            if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts})`);
+                
+                reconnectTimeout = setTimeout(() => {
+                    connectWebSocket();
+                }, delay);
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            updateConnectionStatus('error', 'Connection error');
+        };
+        
+    } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        updateConnectionStatus('error', 'Failed to create connection');
+    }
+}
 
-@router.get("/items/{item_id}/edit", response_class=HTMLResponse)
-async def inventory_item_edit_page(item_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
+function handleWebSocketMessage(data) {
+    console.log('Handling message:', data);
     
-    categories = db.query(Category).filter(Category.type == "inventory").all()
-    batches = db.query(Batch).all()
-    par_unit_names = db.query(ParUnitName).all()
-    
-    return templates.TemplateResponse("inventory_item_edit.html", {
-        "request": request,
-        "current_user": current_user,
-        "item": item,
-        "categories": categories,
-        "batches": batches,
-        "par_unit_names": par_unit_names
-    })
+    switch (data.type) {
+        case 'connection_success':
+            console.log('Connection successful:', data.user);
+            updateConnectionStatus('connected', 'Connected to real-time updates');
+            showNotification(`Connected as ${data.user.username}`, 'success');
+            break;
+            
+        case 'user_count_update':
+            console.log('User count update:', data.user_count, data.users);
+            updateUserCount(data.user_count, data.users);
+            break;
+            
+        case 'task_update':
+            console.log('Task update:', data.task);
+            handleTaskUpdate(data.task);
+            break;
+            
+        case 'inventory_update':
+            console.log('Inventory update:', data.inventory);
+            handleInventoryUpdate(data.inventory);
+            break;
+            
+        case 'heartbeat':
+            console.log('Heartbeat received');
+            break;
+            
+        case 'error':
+            console.error('WebSocket error message:', data.message);
+            updateConnectionStatus('error', data.message);
+            showNotification(data.message, 'error');
+            break;
+            
+        default:
+            console.log('Unknown message type:', data.type);
+    }
+}
 
-@router.post("/items/{item_id}/edit")
-async def update_inventory_item(
-    item_id: int,
-    request: Request,
-    name: str = Form(...),
-    par_unit_name_id: int = Form(None),
-    par_level: float = Form(...),
-    batch_id: int = Form(None),
-    par_unit_equals_type: str = Form(...),
-    par_unit_equals_amount: float = Form(None),
-    par_unit_equals_unit: str = Form(None),
-    category_id: int = Form(None),
-    db: Session = Depends(get_db),
-    current_user = Depends(require_admin)
-):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
+function updateConnectionStatus(status, message) {
+    console.log('Updating connection status:', status, message);
     
-    item.name = name
-    item.par_unit_name_id = par_unit_name_id if par_unit_name_id else None
-    item.par_level = par_level
-    item.batch_id = batch_id if batch_id else None
-    item.par_unit_equals_type = par_unit_equals_type
-    item.par_unit_equals_amount = par_unit_equals_amount if par_unit_equals_type == 'custom' else None
-    item.par_unit_equals_unit = par_unit_equals_unit if par_unit_equals_type == 'custom' else None
-    item.category_id = category_id if category_id else None
+    const statusElement = document.getElementById('connectionStatus');
+    const iconElement = document.getElementById('connectionIcon');
     
-    db.commit()
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
     
-    return RedirectResponse(url="/inventory", status_code=302)
+    if (iconElement) {
+        iconElement.className = status === 'connected' ? 'fas fa-wifi text-success' :
+                               status === 'connecting' ? 'fas fa-wifi text-warning' :
+                               status === 'disconnected' ? 'fas fa-wifi text-warning' :
+                               'fas fa-wifi text-danger';
+    }
+}
 
-@router.get("/items/{item_id}/delete")
-async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
+function updateUserCount(count, users) {
+    console.log('Updating user count:', count, users);
     
-    db.delete(item)
-    db.commit()
+    const userCountElement = document.getElementById('userCount');
+    if (userCountElement) {
+        userCountElement.textContent = count;
+    }
     
-    return RedirectResponse(url="/inventory", status_code=302)
+    // Show user names if available
+    if (users && users.length > 0) {
+        const userNames = users.map(u => u.username).join(', ');
+        console.log('Active users:', userNames);
+    }
+}
+
+function handleTaskUpdate(taskData) {
+    console.log('Handling task update:', taskData);
+    
+    let message = '';
+    switch (taskData.action) {
+        case 'started':
+            message = `Task started by ${taskData.started_by}`;
+            break;
+        case 'started_with_scale':
+            message = `Task started (${taskData.selected_scale}) by ${taskData.started_by}`;
+            break;
+        case 'paused':
+            message = `Task paused by ${taskData.paused_by}`;
+            break;
+        case 'resumed':
+            message = `Task resumed by ${taskData.resumed_by}`;
+            break;
+        case 'finished':
+            message = `Task completed by ${taskData.finished_by}`;
+            if (taskData.made_amount) {
+                message += ` (Made: ${taskData.made_amount} ${taskData.made_unit})`;
+            }
+            break;
+        case 'assigned':
+            message = `Task assigned by ${taskData.assigned_by}`;
+            break;
+        case 'created':
+            message = `New task created by ${taskData.created_by}`;
+            break;
+        default:
+            message = `Task updated: ${taskData.action}`;
+    }
+    
+    showNotification(message, 'info');
+    
+    // Refresh page after a short delay to show updated state
+    setTimeout(() => {
+        console.log('Refreshing page to show updated task state...');
+        window.location.reload();
+    }, 2000);
+}
+
+function handleInventoryUpdate(inventoryData) {
+    console.log('Handling inventory update:', inventoryData);
+    
+    showNotification(`Inventory updated by ${inventoryData.updated_by}`, 'info');
+    
+    // Refresh page after a short delay
+    setTimeout(() => {
+        console.log('Refreshing page to show updated inventory...');
+        window.location.reload();
+    }, 2000);
+}
+
+function showNotification(message, type = 'info') {
+    console.log('Showing notification:', message, type);
+    
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+
+// Connect when page loads (only for non-finalized days)
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, checking if should connect to WebSocket...');
+    
+    {% if not inventory_day.finalized %}
+    console.log('Day is not finalized, connecting to WebSocket...');
+    connectWebSocket();
+    {% else %}
+    console.log('Day is finalized, skipping WebSocket connection');
+    updateConnectionStatus('info', 'Day is finalized - real-time updates disabled');
+    {% endif %}
+});
+
+// Clean up WebSocket on page unload
+window.addEventListener('beforeunload', function() {
+    if (ws) {
+        console.log('Closing WebSocket connection...');
+        ws.close(1000, 'Page unload');
+    }
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+    }
+});
+</script>
+
+{% endblock %}
