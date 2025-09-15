@@ -527,6 +527,140 @@ class DishBatchPortion(Base):
     recipe_portion_percent = Column(Float)  # Percentage of recipe (0.0 to 1.0)
     
     batch = relationship("Batch")
+    
+    def get_recipe_cost(self, db):
+        """Get just the recipe/food cost portion"""
+        if not self.batch:
+            return 0
+        
+        # Handle recipe portion for variable yield batches
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            recipe_ingredients = db.query(RecipeIngredient).filter(
+                RecipeIngredient.recipe_id == self.batch.recipe_id
+            ).all()
+            
+            total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+            return round(total_recipe_cost * self.recipe_portion_percent, 2)
+        
+        # For regular portion mode, check if we have portion size
+        if not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
+            return 0  # Can't calculate for variable yield without recipe portion
+        
+        recipe_ingredients = db.query(RecipeIngredient).filter(
+            RecipeIngredient.recipe_id == self.batch.recipe_id
+        ).all()
+        
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        recipe_cost_per_yield_unit = total_recipe_cost / self.batch.yield_amount
+        
+        # Handle unit conversion for portion
+        if self.portion_unit == self.batch.yield_unit:
+            return self.portion_size * recipe_cost_per_yield_unit
+        else:
+            # Convert between units (simplified for now)
+            try:
+                if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                    converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                else:
+                    converted_portion = self.portion_size
+                
+                return converted_portion * recipe_cost_per_yield_unit
+            except ValueError:
+                return self.portion_size * recipe_cost_per_yield_unit
+    
+    def get_labor_cost(self, db, labor_type='actual'):
+        """Get just the labor cost portion"""
+        if not self.batch:
+            return 0
+        
+        # Handle recipe portion for variable yield batches
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            # Get labor cost based on type
+            if labor_type == 'estimated':
+                labor_cost = self.batch.estimated_labor_cost
+            elif labor_type == 'actual':
+                labor_cost = self.batch.get_actual_labor_cost(db)
+            elif labor_type == 'week_avg':
+                labor_cost = self.batch.get_average_labor_cost_week(db)
+            elif labor_type == 'month_avg':
+                labor_cost = self.batch.get_average_labor_cost_month(db)
+            elif labor_type == 'all_time_avg':
+                labor_cost = self.batch.get_average_labor_cost_all_time(db)
+            else:
+                labor_cost = self.batch.estimated_labor_cost
+            
+            return round(labor_cost * self.recipe_portion_percent, 2)
+        
+        # For non-recipe portion mode, check if we have portion size
+        if not self.portion_size:
+            return 0
+        
+        if self.batch.variable_yield:
+            return 0  # Can't calculate for variable yield without recipe portion
+        
+        # Get labor cost based on type
+        if labor_type == 'estimated':
+            labor_cost = self.batch.estimated_labor_cost
+        elif labor_type == 'actual':
+            labor_cost = self.batch.get_actual_labor_cost(db)
+        elif labor_type == 'week_avg':
+            labor_cost = self.batch.get_average_labor_cost_week(db)
+        elif labor_type == 'month_avg':
+            labor_cost = self.batch.get_average_labor_cost_month(db)
+        elif labor_type == 'all_time_avg':
+            labor_cost = self.batch.get_average_labor_cost_all_time(db)
+        else:
+            labor_cost = self.batch.estimated_labor_cost
+        
+        labor_cost_per_yield_unit = labor_cost / self.batch.yield_amount
+        
+        # Handle unit conversion for portion
+        if self.portion_unit == self.batch.yield_unit:
+            return self.portion_size * labor_cost_per_yield_unit
+        else:
+            # Convert between units (simplified for now)
+            try:
+                if self.batch.yield_unit in WEIGHT_CONVERSIONS and self.portion_unit in WEIGHT_CONVERSIONS:
+                    converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                elif self.batch.yield_unit in VOLUME_CONVERSIONS and self.portion_unit in VOLUME_CONVERSIONS:
+                    converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                else:
+                    converted_portion = self.portion_size
+                
+                return converted_portion * labor_cost_per_yield_unit
+            except ValueError:
+                return self.portion_size * labor_cost_per_yield_unit
+    
+    def get_expected_cost(self, db):
+        """Calculate expected cost using estimated labor"""
+        return self._calculate_cost_with_labor_type(db, 'estimated')
+    
+    def get_actual_cost(self, db):
+        """Calculate actual cost using most recent actual labor"""
+        return self._calculate_cost_with_labor_type(db, 'actual')
+    
+    def get_actual_cost_week_avg(self, db):
+        """Calculate actual cost using week average labor"""
+        return self._calculate_cost_with_labor_type(db, 'week_avg')
+    
+    def get_actual_cost_month_avg(self, db):
+        """Calculate actual cost using month average labor"""
+        return self._calculate_cost_with_labor_type(db, 'month_avg')
+    
+    def get_actual_cost_all_time_avg(self, db):
+        """Calculate actual cost using all-time average labor"""
+        return self._calculate_cost_with_labor_type(db, 'all_time_avg')
+    
+    def _calculate_cost_with_labor_type(self, db, labor_type):
+        """Calculate the cost of this dish batch portion"""
+        recipe_cost = self.get_recipe_cost(db)
+        labor_cost = self.get_labor_cost(db, labor_type)
+        return round(recipe_cost + labor_cost, 2)
 
 class DishIngredientPortion(Base):
     __tablename__ = "dish_ingredient_portions"
