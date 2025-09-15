@@ -568,6 +568,269 @@
 <div id="assignModalContainer"></div>
 
 <script>
+// SSE Connection and Real-time Updates
+let eventSource = null;
+let isConnected = false;
+
+function connectSSE() {
+    const dayId = {{ inventory_day.id }};
+    console.log('Connecting to SSE for day:', dayId);
+    
+    eventSource = new EventSource(`/events/inventory/${dayId}`);
+    
+    eventSource.onopen = function(event) {
+        console.log('SSE connection opened');
+        isConnected = true;
+        showNotification('Connected to real-time updates', 'success');
+    };
+    
+    eventSource.onmessage = function(event) {
+        console.log('SSE message received:', event.data);
+        try {
+            const data = JSON.parse(event.data);
+            handleSSEEvent(data);
+        } catch (error) {
+            console.error('Error parsing SSE message:', error);
+        }
+    };
+    
+    eventSource.onerror = function(event) {
+        console.error('SSE connection error:', event);
+        isConnected = false;
+        showNotification('Connection lost - attempting to reconnect...', 'warning');
+        
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => {
+            if (eventSource.readyState === EventSource.CLOSED) {
+                console.log('Attempting to reconnect SSE...');
+                connectSSE();
+            }
+        }, 5000);
+    };
+    
+    // Handle specific event types
+    eventSource.addEventListener('connected', function(event) {
+        console.log('SSE connected event received');
+        const data = JSON.parse(event.data);
+        console.log('Connected to day:', data.day_id);
+    });
+    
+    eventSource.addEventListener('heartbeat', function(event) {
+        console.log('SSE heartbeat received');
+    });
+    
+    eventSource.addEventListener('tasks_generated', function(event) {
+        console.log('Tasks generated event received');
+        const data = JSON.parse(event.data);
+        handleTasksGenerated(data);
+    });
+    
+    eventSource.addEventListener('task_assigned', function(event) {
+        console.log('Task assigned event received');
+        const data = JSON.parse(event.data);
+        handleTaskAssigned(data);
+    });
+    
+    eventSource.addEventListener('task_started', function(event) {
+        console.log('Task started event received');
+        const data = JSON.parse(event.data);
+        handleTaskStarted(data);
+    });
+    
+    eventSource.addEventListener('task_paused', function(event) {
+        console.log('Task paused event received');
+        const data = JSON.parse(event.data);
+        handleTaskPaused(data);
+    });
+    
+    eventSource.addEventListener('task_completed', function(event) {
+        console.log('Task completed event received');
+        const data = JSON.parse(event.data);
+        handleTaskCompleted(data);
+    });
+    
+    eventSource.addEventListener('inventory_updated', function(event) {
+        console.log('Inventory updated event received');
+        const data = JSON.parse(event.data);
+        handleInventoryUpdated(data);
+    });
+}
+
+function handleSSEEvent(data) {
+    console.log('Handling SSE event:', data.type, data);
+    
+    switch(data.type) {
+        case 'connected':
+            console.log('SSE connection confirmed for day:', data.day_id);
+            break;
+        case 'heartbeat':
+            console.log('SSE heartbeat received');
+            break;
+        case 'tasks_generated':
+            handleTasksGenerated(data);
+            break;
+        case 'task_assigned':
+            handleTaskAssigned(data);
+            break;
+        case 'task_started':
+            handleTaskStarted(data);
+            break;
+        case 'task_paused':
+            handleTaskPaused(data);
+            break;
+        case 'task_completed':
+            handleTaskCompleted(data);
+            break;
+        case 'inventory_updated':
+            handleInventoryUpdated(data);
+            break;
+        default:
+            console.log('Unknown SSE event type:', data.type);
+    }
+}
+
+function handleTasksGenerated(data) {
+    console.log('Handling tasks generated:', data);
+    showNotification(`${data.tasks.length} new tasks generated`, 'info');
+    
+    // Reload the page to show new tasks
+    setTimeout(() => {
+        window.location.reload();
+    }, 1000);
+}
+
+function handleTaskAssigned(data) {
+    console.log('Handling task assigned:', data);
+    const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+    if (taskRow) {
+        const assignedCell = taskRow.querySelector('.assigned-to-cell');
+        if (assignedCell && data.assigned_employees) {
+            if (data.assigned_employees.length > 1) {
+                assignedCell.innerHTML = `
+                    <small class="text-info">Team of ${data.assigned_employees.length}</small><br>
+                    ${data.assigned_employees.map(emp => `<small class="badge bg-secondary me-1">${emp}</small>`).join('')}
+                `;
+            } else {
+                assignedCell.innerHTML = `<small>${data.assigned_employees[0]}</small>`;
+            }
+        }
+    }
+    showNotification(`Task assigned to ${data.assigned_employees.join(', ')}`, 'info');
+}
+
+function handleTaskStarted(data) {
+    console.log('Handling task started:', data);
+    const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+    if (taskRow) {
+        const statusCell = taskRow.querySelector('.status-cell');
+        if (statusCell) {
+            statusCell.innerHTML = `
+                <span class="badge bg-primary">In Progress</span>
+                <br><small class="text-muted">Started: ${new Date(data.started_at).toLocaleTimeString()}</small>
+            `;
+        }
+    }
+    showNotification(`Task started: ${data.description}`, 'success');
+}
+
+function handleTaskPaused(data) {
+    console.log('Handling task paused:', data);
+    const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+    if (taskRow) {
+        const statusCell = taskRow.querySelector('.status-cell');
+        if (statusCell) {
+            statusCell.innerHTML = `
+                <span class="badge bg-warning">Paused</span>
+                <br><small class="text-muted">Time: ${data.total_time} min</small>
+            `;
+        }
+    }
+    showNotification(`Task paused: ${data.description}`, 'warning');
+}
+
+function handleTaskCompleted(data) {
+    console.log('Handling task completed:', data);
+    const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+    if (taskRow) {
+        const statusCell = taskRow.querySelector('.status-cell');
+        const timeCell = taskRow.querySelector('.time-cell');
+        
+        if (statusCell) {
+            statusCell.innerHTML = `<span class="badge bg-success">Completed</span>`;
+        }
+        
+        if (timeCell) {
+            timeCell.innerHTML = `
+                <small>${data.total_time} min</small>
+                <br><small class="text-success">$${data.labor_cost.toFixed(2)}</small>
+            `;
+        }
+    }
+    showNotification(`Task completed: ${data.description}`, 'success');
+}
+
+function handleInventoryUpdated(data) {
+    console.log('Handling inventory updated:', data);
+    showNotification('Inventory quantities updated', 'info');
+    
+    // Update inventory quantities in the table
+    data.items.forEach(item => {
+        const input = document.querySelector(`input[name="item_${item.item_id}"]`);
+        if (input) {
+            input.value = item.quantity;
+            
+            // Update row styling based on par status
+            const row = input.closest('tr');
+            if (row) {
+                row.className = '';
+                if (item.status === 'below_par') {
+                    row.classList.add('table-danger');
+                } else if (item.status === 'on_par') {
+                    row.classList.add('table-info');
+                } else if (item.status === 'near_par') {
+                    row.classList.add('table-warning');
+                }
+            }
+        }
+    });
+}
+
+function showNotification(message, type = 'info') {
+    console.log('Notification:', message, type);
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Connect to SSE when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, connecting to SSE...');
+    connectSSE();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (eventSource) {
+        console.log('Closing SSE connection...');
+        eventSource.close();
+    }
+});
+
 // Show assignment modal for existing tasks
 function showAssignModal(taskId) {
     const modalContainer = document.getElementById('assignModalContainer');

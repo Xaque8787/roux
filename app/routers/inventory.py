@@ -172,7 +172,18 @@ async def create_inventory_day(
     db.commit()
     
     # Broadcast day creation
-    await broadcast_day_update(inventory_day.id, "day_created", {
+    try:
+        await broadcast_day_update(inventory_day.id, "day_created", {
+            "date": inventory_date_obj.isoformat(),
+            "employees_working": inventory_day.employees_working
+        })
+        print(f"✅ Broadcasted day creation for day {inventory_day.id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting day creation: {e}")
+        # Don't fail the request if broadcasting fails
+        pass
+    
+    return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
         "date": inventory_date_obj.isoformat(),
         "employees_working": inventory_day.employees_working
     })
@@ -228,41 +239,49 @@ async def update_inventory_day(
     db.commit()
     
     # Broadcast inventory updates and task generation
-    updated_items = []
-    for day_item in inventory_day_items:
-        updated_items.append({
-            "item_id": day_item.inventory_item_id,
-            "item_name": day_item.inventory_item.name,
-            "quantity": day_item.quantity,
-            "par_level": day_item.inventory_item.par_level,
-            "status": "below_par" if day_item.quantity < day_item.inventory_item.par_level else "good"
+    try:
+        updated_items = []
+        for day_item in inventory_day_items:
+            updated_items.append({
+                "item_id": day_item.inventory_item_id,
+                "item_name": day_item.inventory_item.name,
+                "quantity": day_item.quantity,
+                "par_level": day_item.inventory_item.par_level,
+                "status": "below_par" if day_item.quantity < day_item.inventory_item.par_level else "good"
+            })
+        
+        await broadcast_inventory_update(inventory_day.id, 0, "inventory_batch_updated", {
+            "items": updated_items,
+            "force_regenerate": force_regenerate
         })
-    
-    await broadcast_inventory_update(inventory_day.id, 0, "inventory_batch_updated", {
-        "items": updated_items,
-        "force_regenerate": force_regenerate
-    })
-    
-    # Get newly created tasks to broadcast
-    new_tasks = db.query(Task).filter(Task.day_id == day_id).all()
-    tasks_data = []
-    for task in new_tasks:
-        task_info = {
-            "id": task.id,
-            "description": task.description,
-            "status": task.status,
-            "auto_generated": task.auto_generated,
-            "assigned_to": task.assigned_to.full_name if task.assigned_to else None,
-            "batch_name": task.batch.recipe.name if task.batch else None,
-            "inventory_item": task.inventory_item.name if task.inventory_item else None,
-            "janitorial_task": task.janitorial_task.title if task.janitorial_task else None
-        }
-        tasks_data.append(task_info)
-    
-    await broadcast_task_update(inventory_day.id, 0, "tasks_generated", {
-        "tasks": tasks_data,
-        "force_regenerate": force_regenerate
-    })
+        print(f"✅ Broadcasted inventory update for day {inventory_day.id}")
+        
+        # Get newly created tasks to broadcast
+        new_tasks = db.query(Task).filter(Task.day_id == day_id).all()
+        tasks_data = []
+        for task in new_tasks:
+            task_info = {
+                "id": task.id,
+                "description": task.description,
+                "status": task.status,
+                "auto_generated": task.auto_generated,
+                "assigned_to": task.assigned_to.full_name if task.assigned_to else None,
+                "batch_name": task.batch.recipe.name if task.batch else None,
+                "inventory_item": task.inventory_item.name if task.inventory_item else None,
+                "janitorial_task": task.janitorial_task.title if task.janitorial_task else None
+            }
+            tasks_data.append(task_info)
+        
+        await broadcast_task_update(inventory_day.id, 0, "tasks_generated", {
+            "tasks": tasks_data,
+            "force_regenerate": force_regenerate
+        })
+        print(f"✅ Broadcasted task generation for day {inventory_day.id}")
+        
+    except Exception as e:
+        print(f"❌ Error broadcasting updates: {e}")
+        # Don't fail the request if broadcasting fails
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -315,14 +334,19 @@ async def create_manual_task(
     db.commit()
     
     # Broadcast new manual task creation
-    await broadcast_task_update(day_id, task.id, "task_created", {
-        "description": task.description,
-        "assigned_employees": [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else [],
-        "inventory_item": task.inventory_item.name if task.inventory_item else None,
-        "batch_name": task.batch.recipe.name if task.batch else None,
-        "category": task.category.name if task.category else None,
-        "auto_generated": False
-    })
+    try:
+        await broadcast_task_update(day_id, task.id, "task_created", {
+            "description": task.description,
+            "assigned_employees": [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else [],
+            "inventory_item": task.inventory_item.name if task.inventory_item else None,
+            "batch_name": task.batch.recipe.name if task.batch else None,
+            "category": task.category.name if task.category else None,
+            "auto_generated": False
+        })
+        print(f"✅ Broadcasted manual task creation for task {task.id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task creation: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -367,12 +391,17 @@ async def assign_multiple_employees_to_task(
     db.commit()
     
     # Broadcast task assignment
-    assigned_employees = [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()]
-    await broadcast_task_update(day_id, task_id, "task_assigned", {
-        "assigned_employees": assigned_employees,
-        "primary_assignee": assigned_employees[0] if assigned_employees else None,
-        "team_size": len(assigned_employees)
-    })
+    try:
+        assigned_employees = [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()]
+        await broadcast_task_update(day_id, task_id, "task_assigned", {
+            "assigned_employees": assigned_employees,
+            "primary_assignee": assigned_employees[0] if assigned_employees else None,
+            "team_size": len(assigned_employees)
+        })
+        print(f"✅ Broadcasted task assignment for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task assignment: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
