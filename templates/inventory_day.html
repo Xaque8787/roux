@@ -9,11 +9,6 @@
         <a href="/inventory" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Inventory
         </a>
-        {% if inventory_day.finalized %}
-        <div class="alert alert-success">
-            <i class="fas fa-check-circle"></i> This day has been finalized.
-        </div>
-        {% endif %}
     </div>
 </div>
 
@@ -269,9 +264,6 @@
                                         <span class="badge bg-secondary">Not Started</span>
                                     {% elif task.status == "in_progress" %}
                                         <span class="badge bg-primary">In Progress</span>
-                                        {% if task.started_at %}
-                                        <br><small class="text-muted timer" data-start-time="{{ task.started_at.isoformat() }}" data-pause-time="{{ task.total_pause_time }}" data-task-id="{{ task.id }}"></small>
-                                        {% endif %}
                                     {% elif task.status == "paused" %}
                                         <span class="badge bg-warning">Paused</span>
                                         {% if task.started_at %}
@@ -360,21 +352,23 @@
             </div>
         </div>
         
-        {% if current_user.role in ["admin", "manager"] and not inventory_day.finalized %}
+        {% if not inventory_day.finalized %}
         <div class="card mt-3">
             <div class="card-header">
-                <h5><i class="fas fa-plus"></i> Add Manual Task</h5>
+                <h5><i class="fas fa-cogs"></i> Day Actions</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Task Description</label>
-                        <input type="text" class="form-control" id="description" name="description" required>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
+                <div class="d-grid gap-2">
+                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
+                        <button type="submit" class="btn btn-success w-100" 
+                                onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
+                            <i class="fas fa-check-circle"></i> Finalize Day
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -497,9 +491,6 @@ let eventSource = null;
 let connectionRetryCount = 0;
 const maxRetries = 5;
 
-// Task timers
-let taskTimers = {};
-
 function initializeSSE() {
     console.log('Initializing SSE connection for day {{ inventory_day.id }}');
     
@@ -558,7 +549,7 @@ function handleSSEEvent(data) {
             break;
             
         case 'task_paused':
-            updateTaskStatus(data.task_id, 'paused', null, data.paused_at);
+            updateTaskStatus(data.task_id, 'paused');
             break;
             
         case 'task_resumed':
@@ -566,7 +557,7 @@ function handleSSEEvent(data) {
             break;
             
         case 'task_completed':
-            updateTaskStatus(data.task_id, 'completed', null, null, data.total_time, data.labor_cost);
+            updateTaskStatus(data.task_id, 'completed', null, data.total_time, data.labor_cost);
             break;
             
         case 'inventory_batch_updated':
@@ -623,7 +614,7 @@ function updateTaskAssignment(taskId, assignedEmployees, teamSize) {
     console.log('Task assignment updated successfully');
 }
 
-function updateTaskStatus(taskId, status, startedAt = null, pausedAt = null, totalTime = null, laborCost = null) {
+function updateTaskStatus(taskId, status, startedAt = null, totalTime = null, laborCost = null) {
     console.log('Updating task status for task', taskId, 'to', status);
     
     const statusCell = document.querySelector(`.status-cell[data-task-id="${taskId}"]`);
@@ -641,11 +632,6 @@ function updateTaskStatus(taskId, status, startedAt = null, pausedAt = null, tot
             
         case 'in_progress':
             statusHtml = '<span class="badge bg-primary">In Progress</span>';
-            if (startedAt) {
-                const startTime = new Date(startedAt);
-                statusHtml += `<br><small class="text-muted timer" data-start-time="${startedAt}" data-pause-time="0">0 min</small>`;
-                startTaskTimer(taskId, startTime, 0);
-            }
             break;
             
         case 'paused':
@@ -653,7 +639,6 @@ function updateTaskStatus(taskId, status, startedAt = null, pausedAt = null, tot
             if (totalTime) {
                 statusHtml += `<br><small class="text-muted">${totalTime} min</small>`;
             }
-            stopTaskTimer(taskId);
             break;
             
         case 'completed':
@@ -661,7 +646,6 @@ function updateTaskStatus(taskId, status, startedAt = null, pausedAt = null, tot
             if (totalTime) {
                 statusHtml += `<br><small class="text-muted">${totalTime} min</small>`;
             }
-            stopTaskTimer(taskId);
             break;
     }
     
@@ -744,29 +728,6 @@ function updateTaskActions(taskId, status, hasAssignment = false) {
     `;
     
     actionsCell.innerHTML = actionsHtml;
-}
-
-// Timer functions
-function startTaskTimer(taskId, startTime, pauseTime = 0) {
-    if (taskTimers[taskId]) {
-        clearInterval(taskTimers[taskId]);
-    }
-    
-    taskTimers[taskId] = setInterval(() => {
-        const now = new Date();
-        const elapsed = Math.floor((now - startTime) / 1000 / 60) - Math.floor(pauseTime / 60);
-        const timerElement = document.querySelector(`.timer[data-task-id="${taskId}"]`);
-        if (timerElement) {
-            timerElement.textContent = `${elapsed} min`;
-        }
-    }, 1000);
-}
-
-function stopTaskTimer(taskId) {
-    if (taskTimers[taskId]) {
-        clearInterval(taskTimers[taskId]);
-        delete taskTimers[taskId];
-    }
 }
 
 // Connection status functions
@@ -964,24 +925,10 @@ function finishTaskWithAmount(taskId) {
     form.submit();
 }
 
-// Initialize timers for tasks already in progress
-function initializeExistingTimers() {
-    document.querySelectorAll('.timer[data-start-time]').forEach(timer => {
-        const startTime = new Date(timer.dataset.startTime);
-        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
-        const taskRow = timer.closest('[data-task-id]');
-        if (taskRow) {
-            const taskId = taskRow.dataset.taskId;
-            startTaskTimer(taskId, startTime, pauseTime);
-        }
-    });
-}
-
-// Initialize everything when page loads
+// Initialize SSE when page loads
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Inventory day page loaded');
     initializeSSE();
-    initializeExistingTimers();
 });
 
 // Clean up when page unloads
@@ -989,9 +936,6 @@ window.addEventListener('beforeunload', function() {
     if (eventSource) {
         eventSource.close();
     }
-    
-    // Clear all timers
-    Object.values(taskTimers).forEach(timer => clearInterval(timer));
 });
 </script>
 {% endblock %}
