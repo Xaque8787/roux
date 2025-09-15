@@ -717,6 +717,236 @@ function handleSSEEvent(data) {
     }
 }
 
+// Function to update task assignment in the table
+function updateTaskAssignment(taskId, assignedEmployees, teamSize) {
+    console.log(`Updating task ${taskId} assignment:`, assignedEmployees);
+    
+    const assignedCell = document.querySelector(`.assigned-employee-cell[data-task-id="${taskId}"]`);
+    if (!assignedCell) {
+        console.log(`Could not find assigned employee cell for task ${taskId}`);
+        return;
+    }
+    
+    if (assignedEmployees && assignedEmployees.length > 0) {
+        if (teamSize > 1) {
+            let html = `<span class="text-info">Team of ${teamSize}</span><br>`;
+            assignedEmployees.forEach(emp => {
+                html += `<span class="badge bg-secondary me-1">${emp}</span>`;
+            });
+            assignedCell.innerHTML = html;
+        } else {
+            assignedCell.innerHTML = assignedEmployees[0];
+        }
+        
+        // Enable start button if task is not started
+        const actionsCell = document.querySelector(`.task-actions-cell[data-task-id="${taskId}"]`);
+        if (actionsCell) {
+            const assignButton = actionsCell.querySelector('button[disabled]');
+            if (assignButton && assignButton.textContent.includes('Assign First')) {
+                assignButton.outerHTML = `
+                    <button type="button" class="btn btn-sm btn-primary" onclick="startTask(${taskId})">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                `;
+            }
+        }
+    } else {
+        assignedCell.innerHTML = '<span class="text-warning">Unassigned</span>';
+    }
+    
+    console.log(`✅ Updated assignment for task ${taskId}`);
+}
+
+// Function to update task status in the table
+function updateTaskStatus(taskId, status, startedAt = null, pausedAt = null, finishedAt = null, totalTime = null) {
+    console.log(`Updating task ${taskId} status to:`, status);
+    
+    const statusCell = document.querySelector(`.task-status-cell[data-task-id="${taskId}"]`);
+    const actionsCell = document.querySelector(`.task-actions-cell[data-task-id="${taskId}"]`);
+    
+    if (!statusCell || !actionsCell) {
+        console.log(`Could not find status or actions cell for task ${taskId}`);
+        return;
+    }
+    
+    // Update status badge
+    let statusHtml = '';
+    switch(status) {
+        case 'not_started':
+            statusHtml = '<span class="badge bg-secondary">Not Started</span>';
+            break;
+        case 'in_progress':
+            statusHtml = '<span class="badge bg-primary">In Progress</span>';
+            if (startedAt) {
+                statusHtml += `<br><small class="text-muted timer" data-start-time="${startedAt}">0 min</small>`;
+            }
+            break;
+        case 'paused':
+            statusHtml = '<span class="badge bg-warning">Paused</span>';
+            if (totalTime) {
+                statusHtml += `<br><small class="text-muted">${totalTime} min</small>`;
+            }
+            break;
+        case 'completed':
+            statusHtml = '<span class="badge bg-success">Completed</span>';
+            if (totalTime) {
+                statusHtml += `<br><small class="text-muted">${totalTime} min</small>`;
+            }
+            break;
+    }
+    statusCell.innerHTML = statusHtml;
+    
+    // Update action buttons
+    let actionsHtml = '';
+    switch(status) {
+        case 'not_started':
+            actionsHtml = `
+                <button type="button" class="btn btn-sm btn-primary" onclick="startTask(${taskId})">
+                    <i class="fas fa-play"></i> Start
+                </button>
+            `;
+            break;
+        case 'in_progress':
+            actionsHtml = `
+                <button type="button" class="btn btn-sm btn-warning" onclick="pauseTask(${taskId})">
+                    <i class="fas fa-pause"></i> Pause
+                </button>
+                <button type="button" class="btn btn-sm btn-success" onclick="finishTask(${taskId})">
+                    <i class="fas fa-check"></i> Finish
+                </button>
+            `;
+            break;
+        case 'paused':
+            actionsHtml = `
+                <button type="button" class="btn btn-sm btn-info" onclick="resumeTask(${taskId})">
+                    <i class="fas fa-play"></i> Resume
+                </button>
+                <button type="button" class="btn btn-sm btn-success" onclick="finishTask(${taskId})">
+                    <i class="fas fa-check"></i> Finish
+                </button>
+            `;
+            break;
+        case 'completed':
+            actionsHtml = '<span class="text-success"><i class="fas fa-check-circle"></i> Done</span>';
+            break;
+    }
+    actionsCell.innerHTML = actionsHtml;
+    
+    // Start timer if task is in progress
+    if (status === 'in_progress' && startedAt) {
+        startTaskTimer(taskId, startedAt);
+    }
+    
+    console.log(`✅ Updated status for task ${taskId} to ${status}`);
+}
+
+// JavaScript functions for task actions
+async function startTask(taskId) {
+    try {
+        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        });
+        
+        if (response.ok) {
+            console.log(`Task ${taskId} started successfully`);
+            // Don't redirect - let SSE handle the update
+        } else {
+            console.error(`Failed to start task ${taskId}`);
+            location.reload(); // Fallback to reload on error
+        }
+    } catch (error) {
+        console.error('Error starting task:', error);
+        location.reload(); // Fallback to reload on error
+    }
+}
+
+async function pauseTask(taskId) {
+    try {
+        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/pause`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        });
+        
+        if (response.ok) {
+            console.log(`Task ${taskId} paused successfully`);
+        } else {
+            console.error(`Failed to pause task ${taskId}`);
+            location.reload();
+        }
+    } catch (error) {
+        console.error('Error pausing task:', error);
+        location.reload();
+    }
+}
+
+async function resumeTask(taskId) {
+    try {
+        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/resume`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        });
+        
+        if (response.ok) {
+            console.log(`Task ${taskId} resumed successfully`);
+        } else {
+            console.error(`Failed to resume task ${taskId}`);
+            location.reload();
+        }
+    } catch (error) {
+        console.error('Error resuming task:', error);
+        location.reload();
+    }
+}
+
+async function finishTask(taskId) {
+    try {
+        const response = await fetch(`/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        });
+        
+        if (response.ok) {
+            console.log(`Task ${taskId} finished successfully`);
+        } else {
+            console.error(`Failed to finish task ${taskId}`);
+            location.reload();
+        }
+    } catch (error) {
+        console.error('Error finishing task:', error);
+        location.reload();
+    }
+}
+
+// Timer functionality for tasks in progress
+function startTaskTimer(taskId, startTime) {
+    const timerElement = document.querySelector(`.timer[data-start-time="${startTime}"]`);
+    if (!timerElement) return;
+    
+    const startDate = new Date(startTime);
+    
+    const updateTimer = () => {
+        const now = new Date();
+        const elapsed = Math.floor((now - startDate) / 1000 / 60); // minutes
+        timerElement.textContent = `${elapsed} min`;
+    };
+    
+    // Update immediately and then every minute
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000);
+    
+    // Store interval ID to clear it later
+    timerElement.dataset.intervalId = interval;
+}
+
 function handleTasksGenerated(data) {
     console.log('Handling tasks generated:', data);
     showNotification(`${data.tasks.length} new tasks generated`, 'info');
