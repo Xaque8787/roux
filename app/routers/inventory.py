@@ -267,7 +267,7 @@ async def update_inventory_day(
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/new")
-def create_manual_task(
+async def create_manual_task(
     day_id: int,
     request: Request,
     inventory_item_id: int = Form(None),
