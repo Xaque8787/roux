@@ -10,6 +10,9 @@ from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay,
 from ..utils.helpers import get_today_date
 from datetime import datetime
 
+# Import SSE broadcasting functions
+from ..sse import broadcast_task_update, broadcast_inventory_update, broadcast_day_update
+
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 templates = Jinja2Templates(directory="templates")
 
@@ -168,6 +171,12 @@ async def create_inventory_day(
     
     db.commit()
     
+    # Broadcast day creation
+    await broadcast_day_update(inventory_day.id, "day_created", {
+        "date": inventory_date_obj.isoformat(),
+        "employees_working": inventory_day.employees_working
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
 
 @router.post("/day/{day_id}/update")
@@ -218,6 +227,43 @@ async def update_inventory_day(
     
     db.commit()
     
+    # Broadcast inventory updates and task generation
+    updated_items = []
+    for day_item in inventory_day_items:
+        updated_items.append({
+            "item_id": day_item.inventory_item_id,
+            "item_name": day_item.inventory_item.name,
+            "quantity": day_item.quantity,
+            "par_level": day_item.inventory_item.par_level,
+            "status": "below_par" if day_item.quantity < day_item.inventory_item.par_level else "good"
+        })
+    
+    await broadcast_inventory_update(inventory_day.id, 0, "inventory_batch_updated", {
+        "items": updated_items,
+        "force_regenerate": force_regenerate
+    })
+    
+    # Get newly created tasks to broadcast
+    new_tasks = db.query(Task).filter(Task.day_id == day_id).all()
+    tasks_data = []
+    for task in new_tasks:
+        task_info = {
+            "id": task.id,
+            "description": task.description,
+            "status": task.status,
+            "auto_generated": task.auto_generated,
+            "assigned_to": task.assigned_to.full_name if task.assigned_to else None,
+            "batch_name": task.batch.recipe.name if task.batch else None,
+            "inventory_item": task.inventory_item.name if task.inventory_item else None,
+            "janitorial_task": task.janitorial_task.title if task.janitorial_task else None
+        }
+        tasks_data.append(task_info)
+    
+    await broadcast_task_update(inventory_day.id, 0, "tasks_generated", {
+        "tasks": tasks_data,
+        "force_regenerate": force_regenerate
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/new")
@@ -256,6 +302,17 @@ async def create_manual_task(
     
     db.add(task)
     db.commit()
+    
+    # Broadcast new manual task creation
+    await broadcast_task_update(day_id, task.id, "task_created", {
+        "description": task.description,
+        "assigned_employees": [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else [],
+        "inventory_item": task.inventory_item.name if task.inventory_item else None,
+        "batch_name": task.batch.recipe.name if task.batch else None,
+        "category": task.category.name if task.category else None,
+        "auto_generated": False
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/assign")
@@ -297,6 +354,14 @@ async def assign_multiple_employees_to_task(
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
     
     db.commit()
+    
+    # Broadcast task assignment
+    assigned_employees = [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()]
+    await broadcast_task_update(day_id, task_id, "task_assigned", {
+        "assigned_employees": assigned_employees,
+        "primary_assignee": assigned_employees[0] if assigned_employees else None,
+        "team_size": len(assigned_employees)
+    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 

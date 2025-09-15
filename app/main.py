@@ -23,6 +23,9 @@ from .routers import (
 # Import API routers
 from .api import ingredients as api_ingredients, batches as api_batches, recipes as api_recipes, tasks as api_tasks
 
+# Import SSE router
+from .sse import router as sse_router
+
 # Import dependencies
 from .dependencies import get_current_user
 
@@ -68,6 +71,9 @@ app.include_router(api_ingredients.router)
 app.include_router(api_batches.router)
 app.include_router(api_recipes.router)
 app.include_router(api_tasks.router)
+
+# Include SSE router
+app.include_router(sse_router)
 
 # Additional API endpoint for batch labor stats
 @app.get("/api/batches/{batch_id}/labor_stats")
