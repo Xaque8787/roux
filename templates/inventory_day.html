@@ -219,9 +219,8 @@
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tasksTableBody">
                             {% for task in tasks %}
-                            <tr>
                             <tr data-task-id="{{ task.id }}">
                                 <td>
                                     <small>{{ task.description }}</small>
@@ -246,12 +245,12 @@
                                         </small>
                                     {% endif %}
                                     {% if task.made_amount %}
-                                <td class="assigned-to-cell">
+                                        <br><small class="text-success">
                                         <i class="fas fa-check"></i> Made: {{ task.made_amount }} {{ task.made_unit }}
                                     </small>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="assigned-employee-cell">
                                     {% if task.assigned_employee_ids %}
                                         {% set employee_ids = task.assigned_employee_ids.split(',') %}
                                         {% if employee_ids|length > 1 %}
@@ -279,7 +278,7 @@
                                         <small class="text-warning">Unassigned</small>
                                     {% endif %}
                                 </td>
-                                <td class="status-cell">
+                                <td class="task-status-cell">
                                     {% if task.status == "not_started" %}
                                         {% if task.requires_scale_selection %}
                                         <button type="button" class="btn btn-primary btn-sm" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
@@ -343,7 +342,7 @@
                                         <small class="text-muted">-</small>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="task-actions-cell">
                                     <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm btn-outline-info">
                                         <i class="fas fa-eye"></i>
                                     </a>
@@ -611,48 +610,77 @@ function connectSSE() {
     // Handle specific event types
     eventSource.addEventListener('connected', function(event) {
         console.log('SSE connected event received');
+        showNotification('Connected to real-time updates', 'success');
+    });
+    
+    // Add debugging for all SSE events
+    eventSource.addEventListener('message', function(event) {
+        console.log('Raw SSE message received:', event.data);
+    });
+    
+    eventSource.addEventListener('task_assigned', function(event) {
+        console.log('Task assigned event received:', event.data);
         const data = JSON.parse(event.data);
-        console.log('Connected to day:', data.day_id);
+        updateTaskAssignment(data.task_id, data.assigned_employees, data.primary_assignee);
+        showNotification(`Task assigned to ${data.assigned_employees.join(', ')}`, 'info');
+    });
+    
+    eventSource.addEventListener('task_started', function(event) {
+        console.log('Task started event received:', event.data);
+        const data = JSON.parse(event.data);
+        updateTaskStatus(data.task_id, 'in_progress', data.started_at);
+        showNotification(`Task started by ${data.started_by}`, 'info');
+    });
+    
+    eventSource.addEventListener('task_paused', function(event) {
+        console.log('Task paused event received:', event.data);
+        const data = JSON.parse(event.data);
+        updateTaskStatus(data.task_id, 'paused', null, data.paused_at);
+        showNotification(`Task paused by ${data.paused_by}`, 'warning');
+    });
+    
+    eventSource.addEventListener('task_resumed', function(event) {
+        console.log('Task resumed event received:', event.data);
+        const data = JSON.parse(event.data);
+        updateTaskStatus(data.task_id, 'in_progress', data.resumed_at);
+        showNotification(`Task resumed by ${data.resumed_by}`, 'info');
+    });
+    
+    eventSource.addEventListener('task_completed', function(event) {
+        console.log('Task completed event received:', event.data);
+        const data = JSON.parse(event.data);
+        updateTaskStatus(data.task_id, 'completed', null, null, data.finished_at);
+        showNotification(`Task completed by ${data.completed_by}`, 'success');
+    });
+
+    eventSource.addEventListener('tasks_generated', function(event) {
+        console.log('Tasks generated event received:', event.data);
+        const data = JSON.parse(event.data);
+        if (data.force_regenerate) {
+            // Reload page for force regenerate
+            showNotification('Tasks regenerated - reloading page...', 'info');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            // Add new tasks to table
+            addNewTasksToTable(data.tasks);
+            showNotification(`${data.tasks.length} new tasks generated`, 'success');
+        }
+    });
+
+    eventSource.addEventListener('inventory_batch_updated', function(event) {
+        console.log('Inventory batch updated event received:', event.data);
+        const data = JSON.parse(event.data);
+        updateInventoryQuantities(data.items);
+        showNotification('Inventory updated by another user', 'info');
     });
     
     eventSource.addEventListener('heartbeat', function(event) {
         console.log('SSE heartbeat received');
     });
-    
-    eventSource.addEventListener('tasks_generated', function(event) {
-        console.log('Tasks generated event received');
-        const data = JSON.parse(event.data);
-        handleTasksGenerated(data);
-    });
-    
-    eventSource.addEventListener('task_assigned', function(event) {
-        console.log('Task assigned event received');
-        const data = JSON.parse(event.data);
-        handleTaskAssigned(data);
-    });
-    
-    eventSource.addEventListener('task_started', function(event) {
-        console.log('Task started event received');
-        const data = JSON.parse(event.data);
-        handleTaskStarted(data);
-    });
-    
-    eventSource.addEventListener('task_paused', function(event) {
-        console.log('Task paused event received');
-        const data = JSON.parse(event.data);
-        handleTaskPaused(data);
-    });
-    
-    eventSource.addEventListener('task_completed', function(event) {
-        console.log('Task completed event received');
-        const data = JSON.parse(event.data);
-        handleTaskCompleted(data);
-    });
-    
-    eventSource.addEventListener('inventory_updated', function(event) {
-        console.log('Inventory updated event received');
-        const data = JSON.parse(event.data);
-        handleInventoryUpdated(data);
+
+    eventSource.addEventListener('error', function(event) {
+        console.error('SSE connection error:', event);
+        showNotification('Connection error - some updates may be delayed', 'danger');
     });
 }
 
@@ -795,8 +823,243 @@ function handleInventoryUpdated(data) {
     });
 }
 
+// Function to update task assignment in the DOM
+function updateTaskAssignment(taskId, assignedEmployees, primaryAssignee) {
+    console.log(`Updating task ${taskId} assignment to:`, assignedEmployees);
+    
+    const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+    if (!taskRow) {
+        console.warn(`Task row not found for task ID: ${taskId}`);
+        return;
+    }
+    
+    const assignedCell = taskRow.querySelector('.assigned-employee-cell');
+    if (!assignedCell) {
+        console.warn(`Assigned employee cell not found for task ID: ${taskId}`);
+        return;
+    }
+    
+    // Update the assigned employee display
+    if (assignedEmployees && assignedEmployees.length > 0) {
+        if (assignedEmployees.length === 1) {
+            assignedCell.innerHTML = `<small>${assignedEmployees[0]}</small>`;
+        } else {
+            assignedCell.innerHTML = `
+                <small class="text-info">Team of ${assignedEmployees.length}</small><br>
+                ${assignedEmployees.map(emp => `<span class="badge bg-secondary me-1">${emp}</span>`).join('')}
+            `;
+        }
+    } else {
+        assignedCell.innerHTML = '<small class="text-warning">Unassigned</small>';
+    }
+    
+    // Update action buttons - enable start button if task is assigned
+    const actionCell = taskRow.querySelector('.task-actions-cell');
+    if (actionCell && assignedEmployees && assignedEmployees.length > 0) {
+        const startButton = actionCell.querySelector('button[onclick*="start"]');
+        if (startButton) {
+            startButton.disabled = false;
+            startButton.classList.remove('btn-outline-success');
+            startButton.classList.add('btn-success');
+        }
+    }
+    
+    console.log(`✅ Updated task ${taskId} assignment display`);
+}
+
+// Function to update task status in the DOM
+function updateTaskStatus(taskId, status, startedAt = null, pausedAt = null, finishedAt = null) {
+    console.log(`Updating task ${taskId} status to: ${status}`);
+    
+    const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+    if (!taskRow) {
+        console.warn(`Task row not found for task ID: ${taskId}`);
+        return;
+    }
+    
+    const statusCell = taskRow.querySelector('.task-status-cell');
+    const actionCell = taskRow.querySelector('.task-actions-cell');
+    
+    if (!statusCell || !actionCell) {
+        console.warn(`Status or action cell not found for task ID: ${taskId}`);
+        return;
+    }
+    
+    // Update status badge
+    let statusBadge = '';
+    switch (status) {
+        case 'not_started':
+            statusBadge = '<span class="badge bg-secondary">Not Started</span>';
+            break;
+        case 'in_progress':
+            statusBadge = '<span class="badge bg-primary">In Progress</span>';
+            if (startedAt) {
+                statusBadge += `<br><small class="text-muted">Started: ${new Date(startedAt).toLocaleTimeString()}</small>`;
+            }
+            break;
+        case 'paused':
+            statusBadge = '<span class="badge bg-warning">Paused</span>';
+            if (pausedAt) {
+                statusBadge += `<br><small class="text-muted">Paused: ${new Date(pausedAt).toLocaleTimeString()}</small>`;
+            }
+            break;
+        case 'completed':
+            statusBadge = '<span class="badge bg-success">Completed</span>';
+            if (finishedAt) {
+                statusBadge += `<br><small class="text-muted">Finished: ${new Date(finishedAt).toLocaleTimeString()}</small>`;
+            }
+            break;
+    }
+    
+    statusCell.innerHTML = statusBadge;
+    
+    // Update action buttons based on status
+    let actionButtons = '';
+    switch (status) {
+        case 'not_started':
+            actionButtons = `
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="startTask(${taskId})" disabled>
+                    <i class="fas fa-play"></i> Start
+                </button>
+            `;
+            break;
+        case 'in_progress':
+            actionButtons = `
+                <button type="button" class="btn btn-sm btn-warning" onclick="pauseTask(${taskId})">
+                    <i class="fas fa-pause"></i> Pause
+                </button>
+                <button type="button" class="btn btn-sm btn-success" onclick="finishTask(${taskId})">
+                    <i class="fas fa-check"></i> Finish
+                </button>
+            `;
+            break;
+        case 'paused':
+            actionButtons = `
+                <button type="button" class="btn btn-sm btn-info" onclick="resumeTask(${taskId})">
+                    <i class="fas fa-play"></i> Resume
+                </button>
+                <button type="button" class="btn btn-sm btn-success" onclick="finishTask(${taskId})">
+                    <i class="fas fa-check"></i> Finish
+                </button>
+            `;
+            break;
+        case 'completed':
+            actionButtons = '<span class="text-success"><i class="fas fa-check-circle"></i> Done</span>';
+            break;
+    }
+    
+    actionCell.innerHTML = actionButtons;
+    
+    console.log(`✅ Updated task ${taskId} status display to: ${status}`);
+}
+
+// Function to add new tasks to the table
+function addNewTasksToTable(tasks) {
+    console.log('Adding new tasks to table:', tasks);
+    const tasksTableBody = document.querySelector('#tasksTableBody');
+    if (!tasksTableBody) {
+        console.warn('Tasks table body not found');
+        return;
+    }
+    
+    tasks.forEach(task => {
+        const row = document.createElement('tr');
+        row.setAttribute('data-task-id', task.id);
+        
+        // Build task row HTML
+        row.innerHTML = `
+            <td>
+                <small>${task.description}</small>
+                ${task.icon ? task.icon : '🔘'}
+                ${task.batch_info ? `<br><small class="text-info">${task.batch_info}</small>` : ''}
+            </td>
+            <td class="assigned-employee-cell">
+                <small class="text-warning">Unassigned</small>
+            </td>
+            <td class="task-status-cell">
+                <span class="badge bg-secondary">Not Started</span>
+            </td>
+            <td class="time-cell">
+                <small class="text-muted">-</small>
+            </td>
+            <td class="task-actions-cell">
+                <a href="/inventory/day/{{ inventory_day.id }}/tasks/${task.id}" class="btn btn-sm btn-outline-info">
+                    <i class="fas fa-eye"></i>
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal(${task.id})">
+                    <i class="fas fa-users"></i> Assign
+                </button>
+            </td>
+        `;
+        
+        tasksTableBody.appendChild(row);
+    });
+}
+
+// Function to update inventory quantities
+function updateInventoryQuantities(items) {
+    console.log('Updating inventory quantities:', items);
+    items.forEach(item => {
+        const input = document.querySelector(`input[name="item_${item.item_id}"]`);
+        if (input) {
+            input.value = item.quantity;
+            
+            // Update row styling based on par status
+            const row = input.closest('tr');
+            if (row) {
+                row.className = '';
+                if (item.status === 'below_par') {
+                    row.classList.add('table-danger');
+                } else if (item.status === 'on_par') {
+                    row.classList.add('table-info');
+                } else if (item.status === 'near_par') {
+                    row.classList.add('table-warning');
+                }
+            }
+        }
+    });
+}
+
+// Helper functions for task actions
+function startTask(taskId) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start`;
+    form.style.display = 'none';
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function pauseTask(taskId) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/pause`;
+    form.style.display = 'none';
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function resumeTask(taskId) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/resume`;
+    form.style.display = 'none';
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function finishTask(taskId) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish`;
+    form.style.display = 'none';
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Show notification function
 function showNotification(message, type = 'info') {
-    console.log('Notification:', message, type);
+    console.log(`Showing notification: ${message} (${type})`);
     
     // Create notification element
     const notification = document.createElement('div');

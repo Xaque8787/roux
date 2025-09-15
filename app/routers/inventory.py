@@ -560,6 +560,21 @@ async def finish_task_with_amount(
     
     db.commit()
     
+    # Broadcast task completion with amount
+    try:
+        await broadcast_task_update(day_id, task_id, "task_completed", {
+            "finished_at": task.finished_at.isoformat(),
+            "total_time": task.total_time_minutes,
+            "made_amount": task.made_amount,
+            "made_unit": task.made_unit,
+            "labor_cost": task.labor_cost,
+            "completed_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted task completion with amount for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task completion: {e}")
+        pass
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/notes")
