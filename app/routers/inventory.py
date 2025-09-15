@@ -464,6 +464,13 @@ async def resume_task(
     task.is_paused = False
     db.commit()
     
+    # Broadcast task resume
+    await broadcast_task_update(day_id, task_id, "task_resumed", {
+        "resumed_at": datetime.utcnow().isoformat(),
+        "total_pause_time": task.total_pause_time,
+        "assigned_to": task.assigned_to.full_name if task.assigned_to else None
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/finish")
