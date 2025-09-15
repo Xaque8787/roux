@@ -222,6 +222,7 @@
                         <tbody>
                             {% for task in tasks %}
                             <tr>
+                            <tr data-task-id="{{ task.id }}">
                                 <td>
                                     <small>{{ task.description }}</small>
                                    {% if task.inventory_item and task.inventory_item.category %}
@@ -245,7 +246,7 @@
                                         </small>
                                     {% endif %}
                                     {% if task.made_amount %}
-                                    <br><small class="text-success">
+                                <td class="assigned-to-cell">
                                         <i class="fas fa-check"></i> Made: {{ task.made_amount }} {{ task.made_unit }}
                                     </small>
                                     {% endif %}
@@ -278,7 +279,7 @@
                                         <small class="text-warning">Unassigned</small>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="status-cell">
                                     {% if task.status == "not_started" %}
                                         {% if task.requires_scale_selection %}
                                         <button type="button" class="btn btn-primary btn-sm" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
@@ -332,7 +333,7 @@
                                         <span class="badge bg-success">Completed</span>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="time-cell">
                                     {% if task.started_at %}
                                         <small>{{ task.total_time_minutes }} min</small>
                                         {% if task.finished_at and task.assigned_employees|length > 0 %}

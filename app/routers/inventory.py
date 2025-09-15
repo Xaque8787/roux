@@ -267,10 +267,9 @@ async def update_inventory_day(
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/new")
-async def create_manual_task(
+def create_manual_task(
     day_id: int,
     request: Request,
-    assigned_to_ids: list[int] = Form([]),
     inventory_item_id: int = Form(None),
     batch_id: int = Form(None),
     category_id: int = Form(None),
@@ -278,6 +277,18 @@ async def create_manual_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    # Get form data to handle checkbox values
+    form_data = await request.form()
+    assigned_to_ids = []
+    
+    # Extract employee IDs from form data
+    for key, value in form_data.items():
+        if key.startswith('assigned_to_ids'):
+            try:
+                assigned_to_ids.append(int(value))
+            except ValueError:
+                continue
+    
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day or inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Cannot add tasks to finalized day")
@@ -463,13 +474,6 @@ async def resume_task(
     task.paused_at = None
     task.is_paused = False
     db.commit()
-    
-    # Broadcast task resume
-    await broadcast_task_update(day_id, task_id, "task_resumed", {
-        "resumed_at": datetime.utcnow().isoformat(),
-        "total_pause_time": task.total_pause_time,
-        "assigned_to": task.assigned_to.full_name if task.assigned_to else None
-    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
