@@ -850,17 +850,15 @@ function showMadeAmountInput(taskId, recipeName) {
                                     <div class="col-8">
                                         <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
                                     </div>
-                                    <div class="col-4" id="madeUnitSection" ${data.available_units && data.available_units.length === 1 ? 'style="display: none;"' : ''}>
-                                        <select class="form-select" id="madeUnit" required>
-                                            ${data.available_units ? data.available_units.map(unit => 
-                                                `<option value="${unit}">${unit}</option>`
-                                            ).join('') : ''}
-                                        </select>
+                                    <div class="col-4">
+                                        <div class="form-control-plaintext">
+                                            <strong>${data.use_par_unit ? data.par_unit_name : (data.available_units && data.available_units.length > 0 ? data.available_units[0] : 'units')}</strong>
+                                        </div>
+                                        <input type="hidden" id="madeUnit" value="${data.use_par_unit ? data.par_unit_name : (data.available_units && data.available_units.length > 0 ? data.available_units[0] : 'units')}">
                                     </div>
                                 </div>
-                                ${data.available_units && data.available_units.length === 1 ? `
-                                <small class="text-info">Unit: ${data.available_units[0]}</small>
-                                <input type="hidden" id="hiddenMadeUnit" value="${data.available_units[0]}">
+                                ${data.use_par_unit && data.par_unit_equals_info ? `
+                                <small class="text-info">${data.par_unit_equals_info.description}</small>
                                 ` : ''}
                             </div>
                             ${data.inventory_info ? `
@@ -897,9 +895,7 @@ function showMadeAmountInput(taskId, recipeName) {
 function finishTaskWithAmount(taskId) {
     const madeAmount = document.getElementById('madeAmount').value;
     const madeUnitInput = document.getElementById('madeUnit');
-    const hiddenMadeUnit = document.getElementById('hiddenMadeUnit');
-    
-    const madeUnit = madeUnitInput ? madeUnitInput.value : (hiddenMadeUnit ? hiddenMadeUnit.value : '');
+    const madeUnit = madeUnitInput ? madeUnitInput.value : '';
     
     if (!madeAmount || !madeUnit) {
         alert('Please enter amount made and select unit');

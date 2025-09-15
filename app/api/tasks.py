@@ -80,38 +80,6 @@ async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_d
                         "unit": item.batch.yield_unit,
                         "description": f"Each {item.par_unit_name.name} = {auto_amount} {item.batch.yield_unit}"
                     }
-        else:
-            # No par unit settings, fall back to regular unit selection
-            if task.batch and task.batch.yield_unit:
-                # Start with the batch's yield unit
-                available_units = [task.batch.yield_unit]
-                
-                # Add compatible units based on the yield unit type
-                if task.batch.yield_unit in WEIGHT_CONVERSIONS:
-                    available_units.extend([unit for unit in WEIGHT_CONVERSIONS.keys() if unit != task.batch.yield_unit])
-                elif task.batch.yield_unit in VOLUME_CONVERSIONS:
-                    available_units.extend([unit for unit in VOLUME_CONVERSIONS.keys() if unit != task.batch.yield_unit])
-                
-                result["available_units"] = available_units
-            else:
-                # Fallback to common units for variable yield without par units
-                result["available_units"] = list(WEIGHT_CONVERSIONS.keys()) + list(VOLUME_CONVERSIONS.keys())
-    elif task.requires_made_amount and task.batch:
-        # Regular batch task without inventory item
-        if task.batch.yield_unit:
-            # Start with the batch's yield unit
-            available_units = [task.batch.yield_unit]
-            
-            # Add compatible units based on the yield unit type
-            if task.batch.yield_unit in WEIGHT_CONVERSIONS:
-                available_units.extend([unit for unit in WEIGHT_CONVERSIONS.keys() if unit != task.batch.yield_unit])
-            elif task.batch.yield_unit in VOLUME_CONVERSIONS:
-                available_units.extend([unit for unit in VOLUME_CONVERSIONS.keys() if unit != task.batch.yield_unit])
-            
-            result["available_units"] = available_units
-        else:
-            # Fallback to common units
-            result["available_units"] = list(WEIGHT_CONVERSIONS.keys()) + list(VOLUME_CONVERSIONS.keys())
     
     # Add inventory information if available
     if task.inventory_item:
