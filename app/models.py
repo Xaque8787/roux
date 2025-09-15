@@ -246,35 +246,61 @@ class Ingredient(Base):
             if (self.baking_measurement_unit and self.baking_weight_amount and 
                 self.baking_weight_unit and self.baking_weight_amount > 0):
                 
-                # Step 1: Get cost per baking weight unit (e.g., cost per ounce)
+                # Step 1: Get cost per base weight/volume unit (e.g., cost per ounce from ingredient's net cost)
+                base_cost_per_unit = self.cost_per_net_unit  # This is cost per self.net_unit
+                
+                # Step 2: Convert base unit to baking weight unit if needed
                 try:
-                    cost_per_baking_weight_unit = self.get_cost_per_unit(self.baking_weight_unit)
-                except ValueError:
+                    if self.net_unit != self.baking_weight_unit:
+                        # Convert from net_unit to baking_weight_unit
+                        if (self.net_unit in WEIGHT_CONVERSIONS and 
+                            self.baking_weight_unit in WEIGHT_CONVERSIONS):
+                            conversion_factor = convert_weight(1, self.net_unit, self.baking_weight_unit)
+                            cost_per_baking_weight_unit = base_cost_per_unit / conversion_factor
+                        elif (self.net_unit in VOLUME_CONVERSIONS and 
+                              self.baking_weight_unit in VOLUME_CONVERSIONS):
+                            conversion_factor = convert_volume(1, self.net_unit, self.baking_weight_unit)
+                            cost_per_baking_weight_unit = base_cost_per_unit / conversion_factor
+                        else:
+                            # Can't convert between different measurement types
+                            return 0
+                    else:
+                        # Same unit, no conversion needed
+                        cost_per_baking_weight_unit = base_cost_per_unit
+                except (ValueError, ZeroDivisionError):
                     return 0
                 
-                # Step 2: Calculate how much weight the requested unit represents
-                # Example 1: Defined "1 cup = 5 oz", want "1/2 cup"
-                #   - 1 cup = 5 oz, so 1/2 cup = 2.5 oz
-                # Example 2: Defined "1 tbsp = 6 oz", want "1 cup" 
-                #   - 1 tbsp = 6 oz, 1 cup = 16 tbsp, so 1 cup = 16 * 6 = 96 oz
+                # Step 3: Calculate how much weight the requested baking unit represents
+                # Example 1: Defined "1 cup = 6 oz", want "1/2 cup"
+                #   - 1 cup = 6 oz, so 1/2 cup = 3 oz
+                # Example 2: Defined "1 tbsp = 6 oz", want "1 cup"
+                #   - 1 tbsp = 6 oz, 1 cup = 16 tbsp, so 1 cup = 6 oz ÷ 16 = 0.375 oz per tbsp
+                #   - But we want 1 cup = 16 tbsp × 0.375 oz = 6 oz... wait, that's wrong
+                
+                # Let's think about this correctly:
+                # If user defines "1 tbsp = 6 oz", they mean 1 tablespoon of this ingredient weighs 6 oz
+                # So 1 cup (16 tbsp) would weigh 16 × 6 = 96 oz
                 
                 if self.baking_measurement_unit in BAKING_MEASUREMENTS and unit in BAKING_MEASUREMENTS:
-                    # BAKING_MEASUREMENTS values represent "how many of this unit per cup"
-                    # Example: 'cup': 1.0, '1_2_cup': 2.0, 'tbsp': 16.0
+                    # Calculate the weight for the requested unit based on the defined conversion
                     defined_ratio = BAKING_MEASUREMENTS[self.baking_measurement_unit]
                     requested_ratio = BAKING_MEASUREMENTS[unit]
                     
-                    # Calculate how much of the requested unit we need relative to the defined unit
-                    # Example 1: Defined 1 cup (1.0 per cup), want 1/2 cup (2.0 per cup)
-                    #   - We want 1/2 the amount, so multiplier = 1.0 / 2.0 = 0.5
-                    # Example 2: Defined 1 tbsp (16.0 per cup), want 1 cup (1.0 per cup)  
-                    #   - We want 16 times the amount, so multiplier = 16.0 / 1.0 = 16.0
-                    measurement_multiplier = defined_ratio / requested_ratio
+                    # Calculate weight for 1 unit of the requested measurement
+                    # Example 1: Defined "1 cup = 6 oz", want "1/2 cup"
+                    #   - 1 cup = 6 oz, so 1/2 cup = 6 oz × (0.5 cups / 1 cup) = 3 oz
+                    # Example 2: Defined "1 tbsp = 6 oz", want "1 cup"  
+                    #   - 1 tbsp = 6 oz, 1 cup = 16 tbsp, so 1 cup = 6 oz × (16 tbsp / 1 tbsp) = 96 oz
                     
-                    # Calculate weight for the requested measurement
-                    weight_for_requested_unit = self.baking_weight_amount * measurement_multiplier
+                    # Convert defined measurement to cups
+                    defined_cups = 1.0 / defined_ratio  # How many cups is the defined measurement
+                    weight_per_cup = self.baking_weight_amount / defined_cups
                     
-                    # Calculate cost based on that weight
+                    # Convert requested measurement to cups  
+                    requested_cups = 1.0 / requested_ratio  # How many cups is the requested measurement
+                    weight_for_requested_unit = weight_per_cup * requested_cups
+                    
+                    # Calculate cost based on that weight using the baking weight unit cost
                     cost_for_requested_unit = weight_for_requested_unit * cost_per_baking_weight_unit
                     
                     return round(cost_for_requested_unit, 4)
