@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi import Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,9 @@ from .api import ingredients as api_ingredients, batches as api_batches, recipes
 
 # Import dependencies
 from .dependencies import get_current_user
+
+# Import WebSocket manager
+from .websocket import manager, get_websocket_user
 
 # Import template helper functions
 
@@ -68,6 +72,32 @@ app.include_router(api_ingredients.router)
 app.include_router(api_batches.router)
 app.include_router(api_recipes.router)
 app.include_router(api_tasks.router)
+
+# WebSocket endpoint for real-time updates
+@app.websocket("/ws/inventory/{day_id}")
+async def websocket_endpoint(websocket: WebSocket, day_id: int, token: str, db: Session = Depends(get_db)):
+    user = await get_websocket_user(websocket, token, db)
+    if not user:
+        return
+    
+    user_info = {
+        "user_id": user.id,
+        "username": user.full_name or user.username
+    }
+    
+    await manager.connect(websocket, day_id, user_info)
+    
+    try:
+        while True:
+            # Keep connection alive and handle any incoming messages
+            data = await websocket.receive_text()
+            # For now, we just echo back (could be used for heartbeat)
+            await websocket.send_text(f"Echo: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
 
 # Additional API endpoint for batch labor stats
 @app.get("/api/batches/{batch_id}/labor_stats")

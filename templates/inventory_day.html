@@ -18,6 +18,21 @@
     </div>
 </div>
 
+<!-- Real-time Updates Status -->
+<div class="row mb-2">
+    <div class="col-12">
+        <div class="alert alert-info d-flex justify-content-between align-items-center" id="realtimeStatus">
+            <div>
+                <i class="fas fa-wifi" id="connectionIcon"></i>
+                <span id="connectionStatus">Connecting to real-time updates...</span>
+            </div>
+            <div>
+                <small id="activeUsers">Users online: <span id="userCount">0</span></small>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
 <div class="row mb-3">
     <div class="col-12">
@@ -792,5 +807,240 @@ function finishTaskWithAmount(taskId) {
     document.body.appendChild(form);
     form.submit();
 }
+</script>
+
+<script>
+// WebSocket connection for real-time updates
+let ws = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
+function connectWebSocket() {
+    // Get access token from cookie
+    const token = getCookie('access_token');
+    if (!token) {
+        console.error('No access token found');
+        updateConnectionStatus('error', 'Authentication required');
+        return;
+    }
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/inventory/{{ inventory_day.id }}?token=${encodeURIComponent(token)}`;
+    
+    try {
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function(event) {
+            console.log('WebSocket connected');
+            updateConnectionStatus('connected', 'Real-time updates active');
+            reconnectAttempts = 0;
+        };
+        
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                handleRealtimeUpdate(data);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+        
+        ws.onclose = function(event) {
+            console.log('WebSocket disconnected');
+            updateConnectionStatus('disconnected', 'Connection lost');
+            
+            // Attempt to reconnect
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                setTimeout(() => {
+                    console.log(`Reconnection attempt ${reconnectAttempts}`);
+                    connectWebSocket();
+                }, 2000 * reconnectAttempts); // Exponential backoff
+            } else {
+                updateConnectionStatus('error', 'Connection failed - refresh page');
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            updateConnectionStatus('error', 'Connection error');
+        };
+        
+    } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        updateConnectionStatus('error', 'Failed to connect');
+    }
+}
+
+function updateConnectionStatus(status, message) {
+    const statusElement = document.getElementById('connectionStatus');
+    const iconElement = document.getElementById('connectionIcon');
+    const alertElement = document.getElementById('realtimeStatus');
+    
+    statusElement.textContent = message;
+    
+    // Update icon and alert style based on status
+    switch (status) {
+        case 'connected':
+            iconElement.className = 'fas fa-wifi text-success';
+            alertElement.className = 'alert alert-success d-flex justify-content-between align-items-center';
+            break;
+        case 'disconnected':
+            iconElement.className = 'fas fa-wifi text-warning';
+            alertElement.className = 'alert alert-warning d-flex justify-content-between align-items-center';
+            break;
+        case 'error':
+            iconElement.className = 'fas fa-exclamation-triangle text-danger';
+            alertElement.className = 'alert alert-danger d-flex justify-content-between align-items-center';
+            break;
+        default:
+            iconElement.className = 'fas fa-spinner fa-spin text-info';
+            alertElement.className = 'alert alert-info d-flex justify-content-between align-items-center';
+    }
+}
+
+function handleRealtimeUpdate(data) {
+    console.log('Received real-time update:', data);
+    
+    switch (data.type) {
+        case 'task_update':
+            handleTaskUpdate(data.task);
+            break;
+        case 'inventory_update':
+            handleInventoryUpdate(data.inventory);
+            break;
+        case 'user_count_update':
+            handleUserCountUpdate(data);
+            break;
+    }
+}
+
+function handleTaskUpdate(taskData) {
+    const taskRow = document.querySelector(`tr[data-task-id="${taskData.task_id}"]`);
+    if (!taskRow) {
+        // Task might be new, reload the page
+        if (taskData.action === 'created') {
+            showNotification(`New task created: ${taskData.description}`, 'info');
+            setTimeout(() => window.location.reload(), 1000);
+        }
+        return;
+    }
+    
+    // Update task status in the UI
+    const statusCell = taskRow.querySelector('.task-status');
+    const actionsCell = taskRow.querySelector('.task-actions');
+    
+    switch (taskData.action) {
+        case 'started':
+        case 'started_with_scale':
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span>';
+            }
+            showNotification(`Task started by ${taskData.started_by}`, 'success');
+            // Update action buttons
+            setTimeout(() => window.location.reload(), 500);
+            break;
+            
+        case 'paused':
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-warning">Paused</span>';
+            }
+            showNotification(`Task paused by ${taskData.paused_by}`, 'warning');
+            setTimeout(() => window.location.reload(), 500);
+            break;
+            
+        case 'resumed':
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span>';
+            }
+            showNotification(`Task resumed by ${taskData.resumed_by}`, 'info');
+            setTimeout(() => window.location.reload(), 500);
+            break;
+            
+        case 'finished':
+        case 'finished_with_amount':
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="badge bg-success">Completed</span>';
+            }
+            let message = `Task completed by ${taskData.finished_by}`;
+            if (taskData.made_amount) {
+                message += ` (${taskData.made_amount} ${taskData.made_unit})`;
+            }
+            showNotification(message, 'success');
+            setTimeout(() => window.location.reload(), 500);
+            break;
+            
+        case 'assigned':
+        case 'assigned_multiple':
+            showNotification(`Task assigned by ${taskData.assigned_by}`, 'info');
+            setTimeout(() => window.location.reload(), 500);
+            break;
+    }
+}
+
+function handleInventoryUpdate(inventoryData) {
+    showNotification(`Inventory updated by ${inventoryData.updated_by}`, 'info');
+    // Reload page to show updated inventory and regenerated tasks
+    setTimeout(() => window.location.reload(), 1000);
+}
+
+function handleUserCountUpdate(data) {
+    const userCountElement = document.getElementById('userCount');
+    if (userCountElement) {
+        userCountElement.textContent = data.user_count;
+    }
+    
+    // Show user list in tooltip or similar
+    const activeUsersElement = document.getElementById('activeUsers');
+    if (activeUsersElement && data.users) {
+        const userNames = data.users.map(u => u.username).join(', ');
+        activeUsersElement.title = `Active users: ${userNames}`;
+    }
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check' : type === 'warning' ? 'exclamation-triangle' : type === 'danger' ? 'times' : 'info'}-circle"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+// Initialize WebSocket connection when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Only connect if we're on an active (non-finalized) inventory day
+    {% if not inventory_day.finalized %}
+    connectWebSocket();
+    {% else %}
+    updateConnectionStatus('info', 'Day is finalized - real-time updates disabled');
+    {% endif %}
+});
+
+// Clean up WebSocket when page unloads
+window.addEventListener('beforeunload', function() {
+    if (ws) {
+        ws.close();
+    }
+});
 </script>
 {% endblock %}

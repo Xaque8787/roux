@@ -9,6 +9,7 @@ from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay,
                      InventoryDayItem, Task, User, JanitorialTask, JanitorialTaskDay)
 from ..utils.helpers import get_today_date
 from datetime import datetime
+from ..websocket import manager
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 templates = Jinja2Templates(directory="templates")
@@ -218,6 +219,13 @@ async def update_inventory_day(
     
     db.commit()
     
+    # Broadcast inventory update to all connected users
+    await manager.broadcast_inventory_update(day_id, {
+        "day_id": day_id,
+        "updated_by": current_user.full_name or current_user.username,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/new")
@@ -256,6 +264,16 @@ async def create_manual_task(
     
     db.add(task)
     db.commit()
+    
+    # Broadcast task creation to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "created",
+        "description": task.description,
+        "created_by": current_user.full_name or current_user.username,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/assign")
@@ -272,6 +290,15 @@ async def assign_task(
     
     task.assigned_to_id = assigned_to_id
     db.commit()
+    
+    # Broadcast task assignment to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "assigned",
+        "assigned_to_id": assigned_to_id,
+        "assigned_by": current_user.full_name or current_user.username,
+        "timestamp": datetime.utcnow().isoformat()
+    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -298,6 +325,15 @@ async def assign_multiple_employees_to_task(
     
     db.commit()
     
+    # Broadcast task assignment to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "assigned_multiple",
+        "assigned_to_ids": assigned_to_ids,
+        "assigned_by": current_user.full_name or current_user.username,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/start")
@@ -317,6 +353,15 @@ async def start_task(
     task.started_at = datetime.utcnow()
     task.is_paused = False
     db.commit()
+    
+    # Broadcast task start to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "started",
+        "started_by": current_user.full_name or current_user.username,
+        "started_at": task.started_at.isoformat(),
+        "timestamp": datetime.utcnow().isoformat()
+    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -354,6 +399,17 @@ async def start_task_with_scale(
     task.is_paused = False
     db.commit()
     
+    # Broadcast task start with scale to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "started_with_scale",
+        "selected_scale": selected_scale,
+        "scale_factor": task.scale_factor,
+        "started_by": current_user.full_name or current_user.username,
+        "started_at": task.started_at.isoformat(),
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/pause")
@@ -373,6 +429,15 @@ async def pause_task(
     task.paused_at = datetime.utcnow()
     task.is_paused = True
     db.commit()
+    
+    # Broadcast task pause to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "paused",
+        "paused_by": current_user.full_name or current_user.username,
+        "paused_at": task.paused_at.isoformat(),
+        "timestamp": datetime.utcnow().isoformat()
+    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -398,6 +463,14 @@ async def resume_task(
     task.paused_at = None
     task.is_paused = False
     db.commit()
+    
+    # Broadcast task resume to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "resumed",
+        "resumed_by": current_user.full_name or current_user.username,
+        "timestamp": datetime.utcnow().isoformat()
+    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -431,6 +504,18 @@ async def finish_task(
     
     db.commit()
     
+    # Broadcast task completion to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "finished",
+        "finished_by": current_user.full_name or current_user.username,
+        "finished_at": task.finished_at.isoformat(),
+        "made_amount": task.made_amount,
+        "made_unit": task.made_unit,
+        "labor_cost": task.labor_cost,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/finish_with_amount")
@@ -459,6 +544,18 @@ async def finish_task_with_amount(
     task.paused_at = None
     
     db.commit()
+    
+    # Broadcast task completion with amount to all connected users
+    await manager.broadcast_task_update(day_id, {
+        "task_id": task.id,
+        "action": "finished_with_amount",
+        "finished_by": current_user.full_name or current_user.username,
+        "finished_at": task.finished_at.isoformat(),
+        "made_amount": made_amount,
+        "made_unit": made_unit,
+        "labor_cost": task.labor_cost,
+        "timestamp": datetime.utcnow().isoformat()
+    })
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
