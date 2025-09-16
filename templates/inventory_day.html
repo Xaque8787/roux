@@ -571,16 +571,23 @@ let currentAssignTaskId = null;
 // Timer functionality
 function updateTimers() {
     const timers = document.querySelectorAll('.timer');
+    console.log('Updating timers, found:', timers.length);
     timers.forEach(timer => {
         const taskId = timer.dataset.taskId;
         const startedAt = timer.dataset.startedAt;
         const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
+        console.log(`Timer ${taskId}: started=${startedAt}, pause=${pauseTime}`);
         
         if (startedAt) {
             const startTime = new Date(startedAt);
             const now = new Date();
             const elapsedMs = now.getTime() - startTime.getTime();
-            const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000) - Math.floor(pauseTime / 60));
+            const elapsedSeconds = Math.floor(elapsedMs / 1000);
+            const pauseSeconds = pauseTime;
+            const activeSeconds = Math.max(0, elapsedSeconds - pauseSeconds);
+            const elapsedMinutes = Math.floor(activeSeconds / 60);
+            
+            console.log(`Timer ${taskId}: elapsed=${elapsedMinutes}m (${activeSeconds}s active, ${pauseSeconds}s paused)`);
             
             if (elapsedMinutes >= 60) {
                 const hours = Math.floor(elapsedMinutes / 60);
@@ -608,7 +615,7 @@ function connectSSE() {
             const data = JSON.parse(event.data);
             console.log('SSE received:', data);
             
-            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated') {
+            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || data.type === 'task_created') {
                 // Reload page to show updates
                 setTimeout(() => {
                     window.location.reload();
@@ -630,7 +637,7 @@ function connectSSE() {
 document.addEventListener('DOMContentLoaded', function() {
     // Start timer updates
     updateTimers();
-    setInterval(updateTimers, 10000); // Update every 10 seconds
+    setInterval(updateTimers, 5000); // Update every 5 seconds
     
     // Connect to SSE
     connectSSE();
