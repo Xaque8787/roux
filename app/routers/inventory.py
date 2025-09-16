@@ -333,15 +333,11 @@ async def create_manual_task(
     db.add(task)
     db.commit()
     
-    # Broadcast new manual task creation AFTER committing
+    # Broadcast new manual task creation
     try:
-        assigned_employees = []
-        if assigned_to_ids:
-            assigned_employees = [emp.full_name or emp.username for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()]
-        
         await broadcast_task_update(day_id, task.id, "task_created", {
             "description": task.description,
-            "assigned_employees": assigned_employees,
+            "assigned_employees": [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else [],
             "inventory_item": task.inventory_item.name if task.inventory_item else None,
             "batch_name": task.batch.recipe.name if task.batch else None,
             "category": task.category.name if task.category else None,
@@ -350,6 +346,7 @@ async def create_manual_task(
         print(f"✅ Broadcasted manual task creation for task {task.id}")
     except Exception as e:
         print(f"❌ Error broadcasting task creation: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 

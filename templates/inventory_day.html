@@ -614,13 +614,6 @@ function connectSSE() {
                     window.location.reload();
                 }, 500);
             }
-            
-            if (data.type === 'task_created') {
-                // Reload page to show new manual task
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            }
         } catch (error) {
             console.error('Error parsing SSE data:', error);
         }
