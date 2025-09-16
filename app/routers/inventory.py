@@ -358,6 +358,19 @@ async def assign_task(
         raise HTTPException(status_code=404, detail="Task not found")
     
     task.assigned_to_id = assigned_to_id
+    
+    # Broadcast task assignment
+    try:
+        assigned_employee = db.query(User).filter(User.id == assigned_to_id).first()
+        await broadcast_task_update(day_id, task_id, "task_assigned", {
+            "assigned_to": assigned_employee.full_name if assigned_employee else None,
+            "assigned_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted task assignment for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task assignment: {e}")
+        pass
+    
     db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
@@ -814,14 +827,23 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
     for janitorial_day_item in janitorial_day_items:
         janitorial_task = janitorial_day_item.janitorial_task
         
-        # Check if task already exists for this janitorial task (regardless of force_regenerate)
+        # Check if task already exists for this janitorial task
         existing_task = db.query(Task).filter(
             Task.day_id == inventory_day.id,
             Task.janitorial_task_id == janitorial_task.id
         ).first()
         
-        # Skip if task already exists - janitorial tasks should never be duplicated
+        # Handle existing janitorial tasks
         if existing_task:
+            # If task exists but should not be included, delete it (unless it's been started)
+            should_include = (
+                janitorial_task.task_type == 'daily' or
+                (janitorial_task.task_type == 'manual' and janitorial_day_item.include_task)
+            )
+            
+            if not should_include and not existing_task.started_at:
+                # Remove unchecked janitorial task that hasn't been started
+                db.delete(existing_task)
             continue
         
         # Create task if:

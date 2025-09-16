@@ -593,6 +593,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize timers for in-progress tasks
     initializeTimers();
+                    case 'inventory_batch_updated':
+                        console.log('Inventory batch updated, reloading page...');
+                        location.reload();
+                        break;
+                        
+                    case 'tasks_generated':
+                        console.log('Tasks generated, reloading page...');
+                        location.reload();
+                        break;
+                        
     
     // Initialize override checkbox logic
     initializeOverrideCheckboxes();
@@ -608,6 +618,10 @@ function initializeOverrideCheckboxes() {
                 
                 // Uncheck the opposite checkbox
                 const oppositeType = type === 'force' ? 'skip' : 'force';
+                        
+                    case 'task_assigned':
+                        updateTaskAssignment(data.task_id, data);
+                        break;
                 const oppositeCheckbox = document.querySelector(`input[name*="${itemId}"][data-type="${oppositeType}"]`);
                 if (oppositeCheckbox) {
                     oppositeCheckbox.checked = false;
