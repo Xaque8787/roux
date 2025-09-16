@@ -499,6 +499,7 @@ async def start_task_with_scale(
         print(f"✅ Broadcasted task start with scale for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task start: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
