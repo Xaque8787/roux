@@ -280,10 +280,27 @@
                                 </td>
                                 <td>
                                     {% if task.status == "in_progress" %}
-                                        <span class="timer" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}">0m</span>
+                                        <div class="timer-container">
+                                            <span class="timer running" 
+                                                  data-task-id="{{ task.id }}" 
+                                                  data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" 
+                                                  data-pause-time="{{ task.total_pause_time }}">0:00</span>
+                                            <br><small class="text-success">Running</small>
+                                        </div>
                                     {% elif task.status == "paused" %}
-                                        <span class="timer paused" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}" data-paused-at="{{ task.paused_at.isoformat() if task.paused_at else '' }}">{{ task.total_time_minutes }}m</span>
-                                        <br><small class="text-warning">Paused</small>
+                                        <div class="timer-container">
+                                            <span class="timer paused" 
+                                                  data-task-id="{{ task.id }}" 
+                                                  data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" 
+                                                  data-pause-time="{{ task.total_pause_time }}" 
+                                                  data-paused-at="{{ task.paused_at.isoformat() if task.paused_at else '' }}">0:00</span>
+                                            <br><small class="text-warning">Paused</small>
+                                        </div>
+                                    {% elif task.status == "completed" %}
+                                        <div class="timer-container">
+                                            <span class="text-success">{{ task.total_time_minutes }}m</span>
+                                            <br><small class="text-muted">Completed</small>
+                                        </div>
                                     {% elif task.started_at %}
                                         {{ task.total_time_minutes }}m
                                     {% else %}
@@ -571,13 +588,19 @@ let currentAssignTaskId = null;
 
 // Timer functionality
 function updateTimers() {
+    console.log('Updating timers...');
     const timers = document.querySelectorAll('.timer');
+    console.log('Found timers:', timers.length);
+    
     timers.forEach(timer => {
         const taskId = timer.dataset.taskId;
         const startedAt = timer.dataset.startedAt;
         const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
         const pausedAt = timer.dataset.pausedAt;
         const isPaused = timer.classList.contains('paused');
+        const isRunning = timer.classList.contains('running');
+        
+        console.log(`Timer for task ${taskId}: started=${startedAt}, paused=${isPaused}, running=${isRunning}`);
         
         if (startedAt) {
             const startTime = new Date(startedAt);
@@ -591,17 +614,24 @@ function updateTimers() {
             }
             
             // Subtract total pause time (in seconds, convert to ms)
-            const elapsedMinutes = Math.max(0, Math.floor((elapsedMs - (pauseTime * 1000)) / 60000));
+            const elapsedSeconds = Math.max(0, Math.floor((elapsedMs - (pauseTime * 1000)) / 1000));
+            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+            const remainingSeconds = elapsedSeconds % 60;
             
+            // Format as MM:SS or HH:MM:SS
+            let timeText;
             if (elapsedMinutes >= 60) {
                 const hours = Math.floor(elapsedMinutes / 60);
                 const minutes = elapsedMinutes % 60;
-                const timeText = `${hours}:${minutes.toString().padStart(2, '0')}h`;
-                timer.textContent = isPaused ? timeText : timeText;
+                timeText = `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
             } else {
-                const timeText = `${elapsedMinutes}m`;
-                timer.textContent = timeText;
+                timeText = `${elapsedMinutes}:${remainingSeconds.toString().padStart(2, '0')}`;
             }
+            
+            timer.textContent = timeText;
+            console.log(`Updated timer for task ${taskId}: ${timeText}`);
+        } else {
+            timer.textContent = '0:00';
         }
     });
 }
@@ -651,9 +681,14 @@ function connectSSE() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, initializing timers...');
+    
     // Start timer updates
     updateTimers();
-    setInterval(updateTimers, 1000); // Update every 1 second for real-time feel
+    
+    // Update timers every second
+    const timerInterval = setInterval(updateTimers, 1000);
+    console.log('Timer interval started');
     
     // Connect to SSE
     connectSSE();
