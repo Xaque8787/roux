@@ -122,6 +122,42 @@
                         <br><small class="text-muted">Check this for items priced by count (e.g., heads of lettuce) rather than weight/volume</small>
                     </div>
                     
+                    <!-- Use Price Per Weight/Volume Option -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="use_price_per_weight_volume" name="use_price_per_weight_volume" onchange="togglePricePerWeightVolume()">
+                        <label class="form-check-label" for="use_price_per_weight_volume">
+                            Use price per weight/volume
+                        </label>
+                        <br><small class="text-muted">Check this to enter price per unit and auto-calculate total cost</small>
+                    </div>
+                    
+                    <!-- Price Per Weight/Volume Section -->
+                    <div id="pricePerWeightVolumeSection" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="price_per_weight_volume" class="form-label">Price per <span id="pricePerTypeLabel">{% if ingredient.usage_type == 'weight' %}Weight{% else %}Volume{% endif %}</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="price_per_weight_volume" name="price_per_weight_volume" 
+                                               step="0.01" min="0" onchange="calculateTotalFromPricePerUnit()">
+                                        <span class="input-group-text">per <span id="pricePerUnitLabel">{{ ingredient.net_unit }}</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="calculated_total_cost" class="form-label">Calculated Total Cost</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="calculated_total_cost" readonly>
+                                    </div>
+                                    <small class="text-muted">Auto-calculated from price per unit × total weight/volume</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Net Weight/Volume Section -->
                     <h6 class="mt-3" id="netWeightVolumeHeader">Net Weight/Volume</h6>
                     <div id="netWeightVolumeSection" {% if ingredient.use_item_count_pricing %}style="display: none;"{% endif %}>
@@ -131,8 +167,8 @@
                                     <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">{% if ingredient.usage_type == 'weight' %}Weight{% else %}Volume{% endif %}</span> per Item</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                               step="0.01" value="{{ ingredient.net_weight_volume_item or '' }}" onchange="calculateNetCase(); calculateCostPreview();">
-                                        <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview();">
+                                               step="0.01" value="{{ ingredient.net_weight_volume_item or '' }}" onchange="calculateNetCase(); calculateCostPreview(); calculateTotalFromPricePerUnit();">
+                                        <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview(); updatePricePerUnitLabel(); calculateTotalFromPricePerUnit();">
                                             <!-- Options populated by JavaScript -->
                                         </select>
                                     </div>
@@ -141,8 +177,11 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
-                                    <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                           step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview();">
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
+                                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview(); syncPricePerUnit();">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -162,8 +201,11 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="purchase_total_cost_item" class="form-label">Purchase Total Cost</label>
-                                    <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
-                                           step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview();">
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
+                                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview();">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -185,7 +227,7 @@
                                 <div class="mb-3">
                                     <label for="items_per_case" class="form-label">Items per Case</label>
                                     <input type="number" class="form-control" id="items_per_case" name="items_per_case"
-                                           value="{{ ingredient.items_per_case or '' }}" onchange="updateItemCountDisplay(); calculateNetCase(); calculateCostPreview();">
+                                           value="{{ ingredient.items_per_case or '' }}" onchange="updateItemCountDisplay(); calculateNetCase(); calculateCostPreview(); calculateTotalFromPricePerUnit();">
                                 </div>
                             </div>
                             <div class="col-md-6" id="netCaseDisplaySection" {% if ingredient.use_item_count_pricing %}style="display: none;"{% endif %}>
@@ -246,45 +288,6 @@
                                         <option value="oz" {% if ingredient.baking_weight_unit == 'oz' %}selected{% endif %}>Ounces</option>
                                         <option value="g" {% if ingredient.baking_weight_unit == 'g' %}selected{% endif %}>Grams</option>
                                         <option value="lb" {% if ingredient.baking_weight_unit == 'lb' %}selected{% endif %}>Pounds</option>
-    <!-- Use Price Per Weight/Volume Option -->
-    <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" id="use_price_per_weight_volume" name="use_price_per_weight_volume" onchange="togglePricePerWeightVolume()">
-        <label class="form-check-label" for="use_price_per_weight_volume">
-            Use price per weight/volume
-        </label>
-        <br><small class="text-muted">Check this to enter price per unit and auto-calculate total cost</small>
-    </div>
-    
-    <!-- Price Per Weight/Volume Section -->
-    <div id="pricePerWeightVolumeSection" style="display: none;">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label for="price_per_weight_volume" class="form-label">Price per <span id="pricePerTypeLabel">{% if ingredient.usage_type == 'weight' %}Weight{% else %}Volume{% endif %}</span></label>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" id="price_per_weight_volume" name="price_per_weight_volume" 
-                               step="0.01" min="0" onchange="calculateTotalFromPricePerUnit()">
-                        <span class="input-group-text">per <span id="pricePerUnitLabel">{{ ingredient.net_unit }}</span></span>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label for="calculated_total_cost" class="form-label">Calculated Total Cost</label>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" id="calculated_total_cost" readonly>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
-                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview();">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
                                     </select>
                                 </div>
                             </div>
@@ -304,10 +307,7 @@
                         <a href="/ingredients/{{ ingredient.id }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Save Changes
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview(); syncPricePerUnit();">
+                        </button>
                     </div>
                 </form>
             </div>
@@ -540,6 +540,7 @@ function toggleCaseFields() {
     updateItemCountDisplay();
     calculateNetCase();
     calculateCostPreview();
+    calculateTotalFromPricePerUnit();
 }
 
 // Toggle baking conversion fields
@@ -585,44 +586,6 @@ function calculateItemCountCostPreview(totalCost) {
         preview.className = 'alert alert-info';
     }
 }
-
-// Event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize
-    updateAvailableUnits();
-    toggleCaseFields();
-    toggleItemCountPricing();
-    
-    // Add event listeners for cost calculation
-    document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
-    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
-    document.getElementById('net_weight_volume_item').addEventListener('input', function() {
-        calculateNetCase();
-        calculateCostPreview();
-        calculateTotalFromPricePerUnit();
-    });
-    document.getElementById('net_unit').addEventListener('change', function() {
-        calculateNetCase();
-        calculateCostPreview();
-        updatePricePerUnitLabel();
-        calculateTotalFromPricePerUnit();
-    });
-    document.getElementById('items_per_case').addEventListener('input', function() {
-        updateItemCountDisplay();
-        calculateNetCase();
-        calculateCostPreview();
-        calculateTotalFromPricePerUnit();
-    });
-    
-    // Add event listener for price per weight/volume
-    const pricePerInput = document.getElementById('price_per_weight_volume');
-    if (pricePerInput) {
-        pricePerInput.addEventListener('input', calculateTotalFromPricePerUnit);
-    }
-    
-    // Add event listener for total cost to sync back to price per unit
-    document.getElementById('purchase_total_cost').addEventListener('input', syncPricePerUnit);
-});
 
 // Toggle price per weight/volume section
 function togglePricePerWeightVolume() {
@@ -712,6 +675,44 @@ function syncPricePerUnit() {
         const pricePerUnit = totalCost / totalAmount;
         document.getElementById('price_per_weight_volume').value = pricePerUnit.toFixed(4);
         document.getElementById('calculated_total_cost').value = totalCost.toFixed(2);
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize
+    updateAvailableUnits();
+    toggleCaseFields();
+    toggleItemCountPricing();
+    
+    // Add event listeners for cost calculation
+    document.getElementById('purchase_total_cost').addEventListener('input', function() {
+        calculateCostPreview();
+        syncPricePerUnit();
+    });
+    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_weight_volume_item').addEventListener('input', function() {
+        calculateNetCase();
+        calculateCostPreview();
+        calculateTotalFromPricePerUnit();
+    });
+    document.getElementById('net_unit').addEventListener('change', function() {
+        calculateNetCase();
+        calculateCostPreview();
+        updatePricePerUnitLabel();
+        calculateTotalFromPricePerUnit();
+    });
+    document.getElementById('items_per_case').addEventListener('input', function() {
+        updateItemCountDisplay();
+        calculateNetCase();
+        calculateCostPreview();
+        calculateTotalFromPricePerUnit();
+    });
+    
+    // Add event listener for price per weight/volume
+    const pricePerInput = document.getElementById('price_per_weight_volume');
+    if (pricePerInput) {
+        pricePerInput.addEventListener('input', calculateTotalFromPricePerUnit);
     }
 });
 </script>

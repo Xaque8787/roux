@@ -165,8 +165,8 @@
                                     <label for="net_weight_volume_item" class="form-label">Net <span id="netTypeLabel">Weight</span> per Item</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="net_weight_volume_item" name="net_weight_volume_item" 
-                                               step="0.01" required onchange="calculateNetCase(); calculateCostPreview();">
-                                        <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview();">
+                                               step="0.01" required onchange="calculateNetCase(); calculateCostPreview(); calculateTotalFromPricePerUnit();">
+                                        <select class="form-select" id="net_unit" name="net_unit" style="max-width: 100px;" onchange="calculateNetCase(); calculateCostPreview(); updatePricePerUnitLabel(); calculateTotalFromPricePerUnit();">
                                             <!-- Options populated by JavaScript -->
                                         </select>
                                     </div>
@@ -687,6 +687,7 @@ function toggleCaseFields() {
     updateItemCountDisplay();
     calculateNetCase(); // Update the case display
     calculateCostPreview();
+    calculateTotalFromPricePerUnit();
 }
 
 // Toggle baking conversion fields
@@ -732,42 +733,6 @@ function calculateItemCountCostPreview(totalCost) {
         preview.className = 'alert alert-info';
     }
 }
-
-// Event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize
-    updateAvailableUnits();
-    
-    // Add event listeners for cost calculation
-    document.getElementById('purchase_total_cost').addEventListener('input', calculateCostPreview);
-    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
-    document.getElementById('net_weight_volume_item').addEventListener('input', function() {
-        calculateNetCase();
-        calculateCostPreview();
-        calculateTotalFromPricePerUnit();
-    });
-    document.getElementById('net_unit').addEventListener('change', function() {
-        calculateNetCase();
-        calculateCostPreview();
-        updatePricePerUnitLabel();
-        calculateTotalFromPricePerUnit();
-    });
-    document.getElementById('items_per_case').addEventListener('input', function() {
-        updateItemCountDisplay();
-        calculateNetCase();
-        calculateCostPreview();
-        calculateTotalFromPricePerUnit();
-    });
-    
-    // Add event listener for price per weight/volume
-    const pricePerInput = document.getElementById('price_per_weight_volume');
-    if (pricePerInput) {
-        pricePerInput.addEventListener('input', calculateTotalFromPricePerUnit);
-    }
-    
-    // Add event listener for total cost to sync back to price per unit
-    document.getElementById('purchase_total_cost').addEventListener('input', syncPricePerUnit);
-});
 
 // Toggle price per weight/volume section
 function togglePricePerWeightVolume() {
@@ -857,6 +822,42 @@ function syncPricePerUnit() {
         const pricePerUnit = totalCost / totalAmount;
         document.getElementById('price_per_weight_volume').value = pricePerUnit.toFixed(4);
         document.getElementById('calculated_total_cost').value = totalCost.toFixed(2);
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize
+    updateAvailableUnits();
+    
+    // Add event listeners for cost calculation
+    document.getElementById('purchase_total_cost').addEventListener('input', function() {
+        calculateCostPreview();
+        syncPricePerUnit();
+    });
+    document.getElementById('purchase_total_cost_item').addEventListener('input', calculateCostPreview);
+    document.getElementById('net_weight_volume_item').addEventListener('input', function() {
+        calculateNetCase();
+        calculateCostPreview();
+        calculateTotalFromPricePerUnit();
+    });
+    document.getElementById('net_unit').addEventListener('change', function() {
+        calculateNetCase();
+        calculateCostPreview();
+        updatePricePerUnitLabel();
+        calculateTotalFromPricePerUnit();
+    });
+    document.getElementById('items_per_case').addEventListener('input', function() {
+        updateItemCountDisplay();
+        calculateNetCase();
+        calculateCostPreview();
+        calculateTotalFromPricePerUnit();
+    });
+    
+    // Add event listener for price per weight/volume
+    const pricePerInput = document.getElementById('price_per_weight_volume');
+    if (pricePerInput) {
+        pricePerInput.addEventListener('input', calculateTotalFromPricePerUnit);
     }
 });
 </script>
