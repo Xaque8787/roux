@@ -338,7 +338,7 @@
                                         {% endif %}
                                         
                                         {% if task.status in ["not_started", "in_progress", "paused"] %}
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal({{ task.id }}, '{{ task.description|replace("'", "\\'") }}')">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
                                             <i class="fas fa-user-plus"></i>
                                         </button>
                                         {% endif %}
@@ -450,7 +450,6 @@
                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" style="display: inline;">
                     <input type="hidden" name="force_regenerate" value="true">
                     <input type="hidden" name="global_notes" value="{{ inventory_day.global_notes or '' }}">
-                    <!-- Include all current inventory quantities -->
                     {% for day_item in inventory_day_items %}
                     <input type="hidden" name="item_{{ day_item.inventory_item.id }}" value="{{ day_item.quantity }}">
                     {% if day_item.override_create_task %}
@@ -460,7 +459,6 @@
                     <input type="hidden" name="override_no_task_{{ day_item.inventory_item.id }}" value="on">
                     {% endif %}
                     {% endfor %}
-                    <!-- Include all janitorial task settings -->
                     {% for janitorial_day_item in janitorial_day_items %}
                     {% if janitorial_day_item.include_task %}
                     <input type="hidden" name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" value="on">
@@ -573,23 +571,16 @@ let currentAssignTaskId = null;
 // Timer functionality
 function updateTimers() {
     const timers = document.querySelectorAll('.timer');
-    console.log('Updating timers, found:', timers.length);
     timers.forEach(timer => {
         const taskId = timer.dataset.taskId;
         const startedAt = timer.dataset.startedAt;
         const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
-        console.log(`Timer ${taskId}: started=${startedAt}, pause=${pauseTime}`);
         
         if (startedAt) {
             const startTime = new Date(startedAt);
             const now = new Date();
             const elapsedMs = now.getTime() - startTime.getTime();
-            const elapsedSeconds = Math.floor(elapsedMs / 1000);
-            const pauseSeconds = pauseTime;
-            const activeSeconds = Math.max(0, elapsedSeconds - pauseSeconds);
-            const elapsedMinutes = Math.floor(activeSeconds / 60);
-            
-            console.log(`Timer ${taskId}: elapsed=${elapsedMinutes}m (${activeSeconds}s active, ${pauseSeconds}s paused)`);
+            const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000) - Math.floor(pauseTime / 60));
             
             if (elapsedMinutes >= 60) {
                 const hours = Math.floor(elapsedMinutes / 60);
@@ -617,10 +608,7 @@ function connectSSE() {
             const data = JSON.parse(event.data);
             console.log('SSE received:', data);
             
-            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || data.type === 'task_created') {
-            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || 
-                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_finished' || 
-                data.type === 'task_paused' || data.type === 'task_resumed' || data.type === 'task_completed') {
+            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated') {
                 // Reload page to show updates
                 setTimeout(() => {
                     window.location.reload();
@@ -642,7 +630,7 @@ function connectSSE() {
 document.addEventListener('DOMContentLoaded', function() {
     // Start timer updates
     updateTimers();
-    setInterval(updateTimers, 5000); // Update every 5 seconds
+    setInterval(updateTimers, 10000); // Update every 10 seconds
     
     // Connect to SSE
     connectSSE();
