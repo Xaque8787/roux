@@ -452,6 +452,8 @@ async def start_task(
         })
         print(f"✅ Broadcasted task start for task {task_id}")
     except Exception as e:
+        print(f"❌ Error broadcasting task start: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
