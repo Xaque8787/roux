@@ -689,7 +689,7 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleItemCountPricing();
     
     // Initialize price per weight/volume if it was previously set
-    const usePricePerWeightVolume = {{ 'true' if ingredient.uses_price_per_weight_volume else 'false' }};
+    const usePricePerWeightVolume = {% if ingredient.uses_price_per_weight_volume %}true{% else %}false{% endif %};
     const pricePerWeightVolumeValue = '{{ ingredient.price_per_weight_volume or "" }}';
     
     if (usePricePerWeightVolume) {
