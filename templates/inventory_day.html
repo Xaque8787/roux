@@ -1031,16 +1031,18 @@ function showMadeAmountInput(taskId, recipeName) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                                        <div class="col-4">
-                                            <div class="form-control-plaintext">
-                                                <strong>${data.par_unit_name || 'units'}</strong>
-                                            </div>
-                                            <input type="hidden" id="madeUnit" value="${data.par_unit_name || 'units'}">
-                                    <div class="col-6">
+                            <div class="mb-3">
+                                <label for="madeAmount" class="form-label">Amount Made</label>
+                                <div class="row">
+                                    <div class="col-8">
+                                        <input type="number" class="form-control" id="madeAmount" step="0.1" min="0" required>
+                                    </div>
+                                    <div class="col-4">
                                         <div class="form-control-plaintext">
-                                    ${data.par_unit_equals_info ? `
-                                    <small class="text-info">${data.par_unit_equals_info.description}</small>
-                                    ` : ''}
+                                            <strong>${data.par_unit_name || 'units'}</strong>
+                                        </div>
+                                        <input type="hidden" id="madeUnit" value="${data.par_unit_name || 'units'}">
+                                    </div>
                                 </div>
                                 ${data.par_unit_equals_info ? `
                                     <small class="text-info">${data.par_unit_equals_info.description}</small>
@@ -1103,6 +1105,45 @@ function finishTaskWithAmount(taskId) {
     form.appendChild(unitInput);
     document.body.appendChild(form);
     form.submit();
+}
+
+// Timer management
+let activeTimers = new Map();
+
+function startTimer(taskId, startedAt, totalPauseTime = 0) {
+    console.log(`Starting timer for task ${taskId}, started at: ${startedAt}, pause time: ${totalPauseTime}`);
+    
+    // Clear existing timer if any
+    if (activeTimers.has(taskId)) {
+        clearInterval(activeTimers.get(taskId));
+    }
+    
+    const timerElement = document.querySelector(`#timer-${taskId}`);
+    if (!timerElement) {
+        console.log(`Timer element not found for task ${taskId}`);
+        return;
+    }
+    
+    const startTime = new Date(startedAt);
+    
+    const timer = setInterval(() => {
+        const now = new Date();
+        const elapsedMs = now - startTime - (totalPauseTime * 1000);
+        const elapsedMinutes = Math.floor(elapsedMs / (1000 * 60));
+        
+        // Ensure we don't show negative time
+        const displayMinutes = Math.max(0, elapsedMinutes);
+        
+        if (displayMinutes >= 60) {
+            const hours = Math.floor(displayMinutes / 60);
+            const minutes = displayMinutes % 60;
+            timerElement.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
+        } else {
+            timerElement.textContent = `${displayMinutes}m`;
+        }
+    }, 1000);
+    
+    activeTimers.set(taskId, timer);
 }
 
 // Initialize SSE when page loads
