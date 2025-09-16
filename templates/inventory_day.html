@@ -1038,6 +1038,39 @@ function showRegenerateModal() {
     modal.show();
 }
 
+// Real-time timer updates
+function updateTimers() {
+    document.querySelectorAll('.task-timer').forEach(timer => {
+        const taskId = timer.dataset.taskId;
+        const startTime = timer.dataset.startTime;
+        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
+        const isPaused = timer.dataset.isPaused === 'true';
+        
+        if (!startTime || isPaused) {
+            return; // Skip if no start time or task is paused
+        }
+        
+        const now = new Date();
+        const start = new Date(startTime);
+        const elapsedMs = now - start - (pauseTime * 1000); // Convert pause time to milliseconds
+        const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
+        
+        if (elapsedMinutes < 60) {
+            timer.textContent = `${elapsedMinutes}m`;
+        } else {
+            const hours = Math.floor(elapsedMinutes / 60);
+            const minutes = elapsedMinutes % 60;
+            timer.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
+        }
+    });
+}
+
+// Update timers every 30 seconds for better performance
+setInterval(updateTimers, 30000);
+
+// Initial timer update
+updateTimers();
+
 // Cleanup on page unload
 window.addEventListener('beforeunload', function() {
     if (eventSource) {
