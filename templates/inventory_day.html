@@ -603,26 +603,34 @@ function updateTimers() {
         console.log(`Timer for task ${taskId}: started=${startedAt}, paused=${isPaused}, running=${isRunning}`);
         
         if (startedAt) {
-            const startTime = new Date(startedAt);
+            // Handle timezone properly - assume server time is UTC
+            const startTime = new Date(startedAt + (startedAt.includes('Z') ? '' : 'Z'));
             const now = new Date();
             let elapsedMs;
             
             if (isPaused && pausedAt) {
                 // If task is paused, calculate time up to pause point
-                const pauseTime = new Date(pausedAt);
+                const pauseTime = new Date(pausedAt + (pausedAt.includes('Z') ? '' : 'Z'));
                 elapsedMs = pauseTime.getTime() - startTime.getTime();
                 console.log(`Paused task ${taskId}: elapsed from ${startTime} to ${pauseTime} = ${elapsedMs}ms`);
             } else if (isRunning) {
                 // Task is running, calculate current elapsed time
                 elapsedMs = now.getTime() - startTime.getTime();
                 console.log(`Running task ${taskId}: elapsed from ${startTime} to ${now} = ${elapsedMs}ms`);
+                console.log(`Start time UTC: ${startTime.toISOString()}, Current time UTC: ${now.toISOString()}`);
             } else {
                 // Task is not running or paused, use 0
                 elapsedMs = 0;
                 console.log(`Task ${taskId}: not running or paused, using 0`);
             }
             
-            // Subtract total pause time (in seconds, convert to ms)
+            // Ensure we have a positive elapsed time
+            if (elapsedMs < 0) {
+                console.warn(`Task ${taskId}: Negative elapsed time detected (${elapsedMs}ms), setting to 0`);
+                elapsedMs = 0;
+            }
+            
+            // Subtract total pause time (in seconds, convert to ms)  
             const elapsedSeconds = Math.max(0, Math.floor((elapsedMs - (pauseTime * 1000)) / 1000));
             const elapsedMinutes = Math.floor(elapsedSeconds / 60);
             const remainingSeconds = elapsedSeconds % 60;
