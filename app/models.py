@@ -170,6 +170,10 @@ class Ingredient(Base):
     baking_measurement_unit = Column(String)  # cup, tbsp, etc.
     baking_measurement_amount = Column(Float)  # user entered amount
     baking_weight_unit = Column(String)  # oz, g, etc.
+    
+    # Price per weight/volume tracking
+    uses_price_per_weight_volume = Column(Boolean, default=False)
+    price_per_weight_volume = Column(Float)
     baking_weight_amount = Column(Float)  # user entered weight
     
     category = relationship("Category")
