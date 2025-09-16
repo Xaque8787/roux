@@ -231,9 +231,7 @@ async def update_inventory_day(
     # Generate tasks based on inventory levels
     generate_tasks_for_day(db, inventory_day, inventory_day_items, janitorial_day_items, force_regenerate)
     
-    db.commit()
-    
-    # Broadcast inventory updates and task generation
+    # Broadcast inventory updates and task generation BEFORE committing
     try:
         updated_items = []
         for day_item in inventory_day_items:
@@ -245,13 +243,21 @@ async def update_inventory_day(
                 "status": "below_par" if day_item.quantity < day_item.inventory_item.par_level else "good"
             })
         
-        await broadcast_inventory_update(inventory_day.id, 0, "inventory_batch_updated", {
+        await broadcast_inventory_update(inventory_day.id, 0, "inventory_updated", {
             "items": updated_items,
             "force_regenerate": force_regenerate
         })
         print(f"✅ Broadcasted inventory update for day {inventory_day.id}")
         
-        # Get newly created tasks to broadcast
+    except Exception as e:
+        print(f"❌ Error broadcasting inventory update: {e}")
+        pass
+    
+    db.commit()
+    
+    # Broadcast task generation AFTER committing to get accurate task data
+    try:
+        # Get all tasks to broadcast (including newly created ones)
         new_tasks = db.query(Task).filter(Task.day_id == day_id).all()
         tasks_data = []
         for task in new_tasks:
@@ -274,8 +280,7 @@ async def update_inventory_day(
         print(f"✅ Broadcasted task generation for day {inventory_day.id}")
         
     except Exception as e:
-        print(f"❌ Error broadcasting updates: {e}")
-        # Don't fail the request if broadcasting fails
+        print(f"❌ Error broadcasting task generation: {e}")
         pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
@@ -359,7 +364,9 @@ async def assign_task(
     
     task.assigned_to_id = assigned_to_id
     
-    # Broadcast BEFORE committing to ensure connections are still active
+    db.commit()
+    
+    # Broadcast AFTER committing to ensure data is saved
     try:
         assigned_employee = db.query(User).filter(User.id == assigned_to_id).first()
         await broadcast_task_update(day_id, task_id, "task_assigned", {
@@ -370,8 +377,6 @@ async def assign_task(
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
         pass
-    
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -396,7 +401,9 @@ async def assign_multiple_employees_to_task(
     # Store all assigned employee IDs
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
     
-    # Broadcast BEFORE committing to ensure connections are still active
+    db.commit()
+    
+    # Broadcast AFTER committing to ensure data is saved
     try:
         assigned_employees = [emp.full_name or emp.username for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else []
         await broadcast_task_update(day_id, task_id, "task_assigned", {
@@ -409,8 +416,6 @@ async def assign_multiple_employees_to_task(
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
         pass
-    
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 

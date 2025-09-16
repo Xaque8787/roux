@@ -967,8 +967,8 @@ function showMadeAmountInput(taskId, recipeName) {
                             <h5 class="modal-title">Enter Amount Made - ${recipeName}</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                         <label class="form-check-label" for="assign_emp{{ emp.id }}">{{ emp.full_name or emp.username }}</label>
-                                    <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
-                                    <span class="input-group-text">${data.par_unit_name || 'units'}</span>
+                                    <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_emp{{ employee.id }}">
+                                    <label class="form-check-label" for="assign_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
                                 </div>
                                 <input type="hidden" id="hiddenMadeUnit" value="${data.par_unit_name || 'units'}">
                             </div>
