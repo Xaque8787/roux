@@ -814,13 +814,13 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
     for janitorial_day_item in janitorial_day_items:
         janitorial_task = janitorial_day_item.janitorial_task
         
-        # Check if task already exists for this janitorial task
+        # Check if task already exists for this janitorial task (regardless of force_regenerate)
         existing_task = db.query(Task).filter(
             Task.day_id == inventory_day.id,
             Task.janitorial_task_id == janitorial_task.id
         ).first()
         
-        # Skip if task already exists (regardless of force_regenerate for janitorial tasks)
+        # Skip if task already exists - janitorial tasks should never be duplicated
         if existing_task:
             continue
         
