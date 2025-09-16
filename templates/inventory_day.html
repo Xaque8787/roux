@@ -629,7 +629,7 @@ function initializeSSE() {
             const data = JSON.parse(event.data);
             console.log('SSE message received:', data);
             
-            switch(data.type) {
+            switch (data.type) {
                 case 'task_started':
                     handleTaskStarted(data);
                     break;
@@ -862,22 +862,6 @@ function handleTaskCompleted(data) {
             }
         }
     });
-}
-
-function updateTaskAssignment(taskId, data) {
-    console.log(`Updating task ${taskId} assignment`);
-    
-    const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
-    if (!taskRow) {
-        console.log(`Task row not found for task ${taskId}`);
-        return;
-    }
-    
-    // Update assigned to column
-    const assignedCell = taskRow.querySelector('.task-assigned');
-    if (assignedCell && data.assigned_to) {
-        assignedCell.innerHTML = `<small>${data.assigned_to}</small>`;
-    }
 }
 
 // Scale Selection Modal
