@@ -685,6 +685,11 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleCaseFields();
     toggleItemCountPricing();
     
+    // Initialize price per weight/volume if it was previously set
+    {% if ingredient.uses_price_per_weight_volume %}
+    togglePricePerWeightVolume();
+    {% endif %}
+    
     // Add event listeners for cost calculation
     document.getElementById('purchase_total_cost').addEventListener('input', function() {
         calculateCostPreview();
