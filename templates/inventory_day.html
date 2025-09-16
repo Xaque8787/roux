@@ -293,6 +293,8 @@
                                         <span class="badge bg-success">Completed</span>
                                         {% if task.finished_at %}
                                         <br><small class="text-muted">{{ task.total_time_minutes }} min</small>
+                                        {% endif %}
+                                    {% endif %}
                                 </td>
                                 <td class="actions-cell" data-task-id="{{ task.id }}">
                                     {% if not inventory_day.finalized %}
@@ -312,15 +314,30 @@
                                                 <button type="submit" class="btn btn-sm btn-primary">
                                                     <i class="fas fa-play"></i> Start
                                                 </button>
-                                            <button type="button" class="btn btn-sm btn-success" 
+                                            </form>
+                                            {% endif %}
+                                            <br><button type="button" class="btn btn-sm btn-outline-secondary mt-1" 
+                                                    onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
+                                                <i class="fas fa-user-edit"></i> Reassign
+                                            </button>
+                                        {% elif task.status == "in_progress" %}
+                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display: inline;">
+                                                <button type="submit" class="btn btn-sm btn-warning">
+                                                    <i class="fas fa-pause"></i> Pause
+                                                </button>
+                                            </form>
+                                            {% if task.requires_made_amount %}
+                                            <br><button type="button" class="btn btn-sm btn-success mt-1" 
                                                     onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                                <i class="fas fa-check"></i> Finish
+                                                <i class="fas fa-check"></i> Finish & Enter Amount
                                             </button>
                                             {% else %}
-                                            <span class="badge bg-primary">In Progress</span><br>
-                                            <span class="timer-display text-primary" data-task-id="{{ task.id }}" data-start-time="{{ task.started_at.isoformat() }}" data-pause-time="{{ task.total_pause_time }}">
-                                                <i class="fas fa-clock"></i> <span class="timer-text">0m</span>
-                                            </span>
+                                            <br><form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display: inline;">
+                                                <button type="submit" class="btn btn-sm btn-success mt-1">
+                                                    <i class="fas fa-check"></i> Finish
+                                                </button>
+                                            </form>
+                                            {% endif %}
                                         {% elif task.status == "paused" %}
                                             <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display: inline;">
                                                 <button type="submit" class="btn btn-sm btn-info">
@@ -337,83 +354,14 @@
                                             <span class="text-success"><i class="fas fa-check-circle"></i> Done</span>
                                         {% endif %}
                                     {% else %}
-                                        
-                                        {% if task.batch %}
-                                            <br><small class="text-muted">{{ task.batch.recipe.name }}</small>
-                                            {% if not task.batch.variable_yield %}
-                                                <br><small class="text-info">Yield: {{ task.batch.yield_amount }} {{ task.batch.yield_unit }}</small>
-                                            {% else %}
-                                                <br><small class="text-info">Variable Yield</small>
-                                            {% endif %}
-                                        {% endif %}
-                                        {% if task.assigned_to or task.assigned_employee_ids %}
-                                            {% if task.status == "not_started" %}
-                                                {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
-                                                <button type="button" class="btn btn-sm btn-primary" 
-                                                        onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
-                                        <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm btn-outline-info">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                                    <i class="fas fa-play"></i> Start
-                                                </button>
-                                                {% else %}
-                                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display: inline;">
-                                                    <button type="submit" class="btn btn-sm btn-primary">
-                                                        <i class="fas fa-play"></i> Start
-                                                    </button>
-                                                </form>
-                                                {% endif %}
-                                                <br><button type="button" class="btn btn-sm btn-outline-secondary mt-1" 
-                                                        onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
-                                                    <i class="fas fa-user-edit"></i> Reassign
-                                                </button>
-                                            {% elif task.status == "in_progress" %}
-                                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display: inline;">
-                                                    <button type="submit" class="btn btn-sm btn-warning">
-                                                        <i class="fas fa-pause"></i> Pause
-                                                    </button>
-                                                </form>
-                                                {% if task.requires_made_amount %}
-                                                <br><button type="button" class="btn btn-sm btn-success mt-1" 
-                                                        onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                                    <i class="fas fa-check"></i> Finish & Enter Amount
-                                                </button>
-                                                {% else %}
-                                                <br><form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display: inline;">
-                                                    <button type="submit" class="btn btn-sm btn-success mt-1">
-                                                        <i class="fas fa-check"></i> Finish
-                                                    </button>
-                                                </form>
-                                                {% endif %}
-                                            {% elif task.status == "paused" %}
-                                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display: inline;">
-                                                    <button type="submit" class="btn btn-sm btn-info">
-                                                        <i class="fas fa-play"></i> Resume
-                                                    </button>
-                                                </form>
-                                                {% if task.requires_made_amount %}
-                                                <br><button type="button" class="btn btn-sm btn-success mt-1" 
-                                                        onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
-                                                    <i class="fas fa-check"></i> Finish & Enter Amount
-                                            {% elif task.status == "completed" %}
-                                            {% if task.status == "not_started" %}
-                                                {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
-                                                <button type="button" class="btn btn-sm btn-primary" 
-                                                        onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
-                                                    <i class="fas fa-play"></i> Start
-                                                </button>
-                                                {% else %}
-                                                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display: inline;">
-                                                    <button type="submit" class="btn btn-sm btn-primary">
-                                                        <i class="fas fa-play"></i> Start
-                                                    </button>
-                                                </form>
-                                                {% endif %}
-                                                <br><button type="button" class="btn btn-sm btn-outline-primary mt-1" 
-                                                        onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
-                                                    <i class="fas fa-user-plus"></i> Assign
-                                                </button>
-                                            {% endif %}
+                                        {% if task.inventory_item and task.inventory_item.batch %}
+                                            Linked Batch: {{ task.inventory_item.batch.recipe.name }}
+                                        {% elif task.batch %}
+                                            Linked Batch: {{ task.batch.recipe.name }}
+                                        {% elif task.janitorial_task %}
+                                            🧹 {{ task.janitorial_task.title }}
+                                        {% else %}
+                                            Manual Task
                                         {% endif %}
                                     {% endif %}
                                     
@@ -1167,6 +1115,8 @@ function updateTimers() {
             // Calculate elapsed time in milliseconds, subtract pause time (convert to ms)
             const elapsedMs = (now - startTime) - (pauseTime * 1000);
             const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / (1000 * 60)));
+            
+            if (elapsedMinutes < 60) {
                 timer.textContent = `${elapsedMinutes}m`;
             } else {
                 const hours = Math.floor(elapsedMinutes / 60);
