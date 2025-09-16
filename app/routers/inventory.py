@@ -359,11 +359,11 @@ async def assign_task(
     
     task.assigned_to_id = assigned_to_id
     
-    # Broadcast task assignment
+    # Broadcast BEFORE committing to ensure connections are still active
     try:
         assigned_employee = db.query(User).filter(User.id == assigned_to_id).first()
         await broadcast_task_update(day_id, task_id, "task_assigned", {
-            "assigned_to": assigned_employee.full_name if assigned_employee else None,
+            "assigned_to": assigned_employee.full_name or assigned_employee.username if assigned_employee else None,
             "assigned_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task assignment for task {task_id}")
@@ -398,11 +398,12 @@ async def assign_multiple_employees_to_task(
     
     # Broadcast BEFORE committing to ensure connections are still active
     try:
-        assigned_employees = [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else []
+        assigned_employees = [emp.full_name or emp.username for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else []
         await broadcast_task_update(day_id, task_id, "task_assigned", {
             "assigned_employees": assigned_employees,
             "primary_assignee": assigned_employees[0] if assigned_employees else None,
-            "team_size": len(assigned_employees)
+            "team_size": len(assigned_employees),
+            "assigned_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task assignment for task {task_id}")
     except Exception as e:
