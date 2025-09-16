@@ -162,6 +162,8 @@ async def update_ingredient(
     baking_measurement_unit: str = Form(None),
     baking_weight_amount: float = Form(None),
     baking_weight_unit: str = Form(None),
+    uses_price_per_weight_volume: bool = Form(False),
+    price_per_weight_volume: float = Form(None),
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
@@ -196,6 +198,8 @@ async def update_ingredient(
     ingredient.net_weight_volume_item = net_weight_volume_item if not use_item_count_pricing else None
     ingredient.net_unit = net_unit if not use_item_count_pricing else None
     ingredient.has_baking_conversion = has_baking_conversion
+    ingredient.uses_price_per_weight_volume = uses_price_per_weight_volume
+    ingredient.price_per_weight_volume = price_per_weight_volume if uses_price_per_weight_volume else None
     
     # Handle case-specific fields
     if purchase_type == "case":
