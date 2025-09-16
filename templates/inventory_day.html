@@ -949,7 +949,11 @@ function showMadeAmountInput(taskId, recipeName) {
                         <div class="modal-header">
                             <h5 class="modal-title">Enter Amount Made - ${recipeName}</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        <label class="form-check-label" for="assign_emp{{ emp.id }}">{{ emp.full_name or emp.username }}</label>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label for="madeAmount" class="form-label">Amount Made</label>
+                                <div class="input-group">
                                     <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
                                     <span class="input-group-text">${data.par_unit_name || 'units'}</span>
                                 </div>
