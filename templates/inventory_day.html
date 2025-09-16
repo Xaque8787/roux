@@ -616,8 +616,9 @@ function connectSSE() {
             console.log('SSE received:', data);
             
             if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || data.type === 'task_created') {
-            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || data.type === 'task_created' || 
-                data.type === 'task_started' || data.type === 'task_completed' || data.type === 'task_paused' || data.type === 'task_resumed') {
+            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || 
+                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_completed' || 
+                data.type === 'task_paused' || data.type === 'task_resumed') {
                 // Reload page to show updates
                 setTimeout(() => {
                     window.location.reload();
