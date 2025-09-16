@@ -298,14 +298,17 @@ function updateAvailableUnits() {
     const netUnitSelect = document.getElementById('net_unit');
     const netTypeLabel = document.getElementById('netTypeLabel');
     const netTypeLabelCase = document.getElementById('netTypeLabelCase');
+    const pricePerTypeLabel = document.getElementById('pricePerTypeLabel');
     
     // Update labels
     if (usageType === 'weight') {
         netTypeLabel.textContent = 'Weight';
         if (netTypeLabelCase) netTypeLabelCase.textContent = 'Weight';
+        if (pricePerTypeLabel) pricePerTypeLabel.textContent = 'Weight';
     } else {
         netTypeLabel.textContent = 'Volume';
         if (netTypeLabelCase) netTypeLabelCase.textContent = 'Volume';
+        if (pricePerTypeLabel) pricePerTypeLabel.textContent = 'Volume';
     }
     
     // Clear and populate unit options
@@ -323,8 +326,10 @@ function updateAvailableUnits() {
         netUnitSelect.appendChild(option);
     });
     
+    updatePricePerUnitLabel();
     calculateNetCase();
     calculateCostPreview();
+    calculateTotalFromPricePerUnit();
 }
 
 // Calculate net case from item

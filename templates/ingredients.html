@@ -120,6 +120,42 @@
                         <br><small class="text-muted">Check this for items priced by count (e.g., heads of lettuce) rather than weight/volume</small>
                     </div>
                     
+                    <!-- Use Price Per Weight/Volume Option -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="use_price_per_weight_volume" name="use_price_per_weight_volume" onchange="togglePricePerWeightVolume()">
+                        <label class="form-check-label" for="use_price_per_weight_volume">
+                            Use price per weight/volume
+                        </label>
+                        <br><small class="text-muted">Check this to enter price per unit and auto-calculate total cost</small>
+                    </div>
+                    
+                    <!-- Price Per Weight/Volume Section -->
+                    <div id="pricePerWeightVolumeSection" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="price_per_weight_volume" class="form-label">Price per <span id="pricePerTypeLabel">Weight</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="price_per_weight_volume" name="price_per_weight_volume" 
+                                               step="0.01" min="0" onchange="calculateTotalFromPricePerUnit()">
+                                        <span class="input-group-text">per <span id="pricePerUnitLabel">lb</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="calculated_total_cost" class="form-label">Calculated Total Cost</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="calculated_total_cost" readonly>
+                                    </div>
+                                    <small class="text-muted">Auto-calculated from price per unit × total weight/volume</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Net Weight/Volume Section -->
                     <h6 class="mt-3" id="netWeightVolumeHeader">Net Weight/Volume</h6>
                     <div id="netWeightVolumeSection">
@@ -139,8 +175,11 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="purchase_total_cost" class="form-label">Purchase Total Cost</label>
-                                    <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                           step="0.01" onchange="calculateCostPreview();">
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
+                                               step="0.01" onchange="calculateCostPreview(); syncPricePerUnit();">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -160,8 +199,11 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="purchase_total_cost_item" class="form-label">Purchase Total Cost</label>
-                                    <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
-                                           step="0.01" onchange="calculateCostPreview();">
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
+                                               step="0.01" onchange="calculateCostPreview();">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -181,7 +223,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="items_per_case" class="form-label">Items per Case</label>
-                                    <input type="number" class="form-control" id="items_per_case" name="items_per_case" onchange="updateItemCountDisplay(); calculateNetCase(); calculateCostPreview();">
+                                    <input type="number" class="form-control" id="items_per_case" name="items_per_case" onchange="updateItemCountDisplay(); calculateNetCase(); calculateCostPreview(); calculateTotalFromPricePerUnit();">
                                 </div>
                             </div>
                             <div class="col-md-6" id="netCaseDisplaySection">
@@ -448,14 +490,17 @@ function updateAvailableUnits() {
     const netUnitSelect = document.getElementById('net_unit');
     const netTypeLabel = document.getElementById('netTypeLabel');
     const netTypeLabelCase = document.getElementById('netTypeLabelCase');
+    const pricePerTypeLabel = document.getElementById('pricePerTypeLabel');
     
     // Update labels
     if (usageType === 'weight') {
         netTypeLabel.textContent = 'Weight';
         if (netTypeLabelCase) netTypeLabelCase.textContent = 'Weight';
+        if (pricePerTypeLabel) pricePerTypeLabel.textContent = 'Weight';
     } else {
         netTypeLabel.textContent = 'Volume';
         if (netTypeLabelCase) netTypeLabelCase.textContent = 'Volume';
+        if (pricePerTypeLabel) pricePerTypeLabel.textContent = 'Volume';
     }
     
     // Clear and populate unit options
@@ -469,8 +514,10 @@ function updateAvailableUnits() {
         netUnitSelect.appendChild(option);
     });
     
+    updatePricePerUnitLabel();
     calculateNetCase();
     calculateCostPreview();
+    calculateTotalFromPricePerUnit();
 }
 
 // Calculate net case from item
@@ -706,6 +753,12 @@ document.addEventListener('DOMContentLoaded', function() {
         updateItemCountDisplay();
         calculateNetCase();
         calculateCostPreview();
+        calculateTotalFromPricePerUnit();
+    });
+    
+    // Add event listener for price per weight/volume
+    document.getElementById('price_per_weight_volume').addEventListener('input', function() {
+        calculateTotalFromPricePerUnit();
     });
 });
 </script>
