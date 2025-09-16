@@ -151,9 +151,10 @@ async def update_ingredient(
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
     use_item_count_pricing: bool = Form(False),
-    net_weight_volume_item: float = Form(...),
-    net_unit: str = Form(...),
-    purchase_total_cost: float = Form(...),
+    net_weight_volume_item: float = Form(None),
+    net_unit: str = Form(None),
+    purchase_total_cost: float = Form(None),
+    purchase_total_cost_item: float = Form(None),
     breakable_case: bool = Form(False),
     items_per_case: int = Form(None),
     net_weight_volume_case: float = Form(None),
@@ -168,16 +169,31 @@ async def update_ingredient(
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     
+    # Validate required fields based on pricing type
+    if not use_item_count_pricing:
+        if net_weight_volume_item is None:
+            raise HTTPException(status_code=400, detail="Net weight/volume per item is required when not using item count pricing")
+        if not net_unit:
+            raise HTTPException(status_code=400, detail="Net unit is required when not using item count pricing")
+        if purchase_total_cost is None:
+            raise HTTPException(status_code=400, detail="Purchase total cost is required when not using item count pricing")
+    else:
+        if purchase_total_cost_item is None:
+            raise HTTPException(status_code=400, detail="Purchase total cost is required when using item count pricing")
+    
+    # Use the appropriate cost field based on pricing type
+    final_purchase_cost = purchase_total_cost_item if use_item_count_pricing else purchase_total_cost
+    
     ingredient.name = name
     ingredient.category_id = category_id if category_id else None
     ingredient.vendor_id = vendor_id if vendor_id else None
     ingredient.vendor_unit_id = vendor_unit_id if vendor_unit_id else None
     ingredient.purchase_type = purchase_type
     ingredient.purchase_unit_name = purchase_unit_name
-    ingredient.purchase_total_cost = purchase_total_cost
+    ingredient.purchase_total_cost = final_purchase_cost
     ingredient.breakable_case = breakable_case
     ingredient.use_item_count_pricing = use_item_count_pricing
-    ingredient.net_weight_volume_item = net_weight_volume_item
+    ingredient.net_weight_volume_item = net_weight_volume_item if not use_item_count_pricing else None
     ingredient.net_unit = net_unit if not use_item_count_pricing else None
     ingredient.has_baking_conversion = has_baking_conversion
     
@@ -186,9 +202,13 @@ async def update_ingredient(
         ingredient.items_per_case = items_per_case
         if not use_item_count_pricing:
             ingredient.net_weight_volume_case = (net_weight_volume_item * items_per_case if items_per_case and net_weight_volume_item else None)
+        else:
+            ingredient.net_weight_volume_case = None
     else:
         if not use_item_count_pricing:
             ingredient.net_weight_volume_case = net_weight_volume_item
+        else:
+            ingredient.net_weight_volume_case = None
         ingredient.items_per_case = None
     
     # Handle baking conversion
