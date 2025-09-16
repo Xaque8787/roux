@@ -338,7 +338,7 @@
                                         {% endif %}
                                         
                                         {% if task.status in ["not_started", "in_progress", "paused"] %}
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal({{ task.id }}, '{{ task.description|replace("'", "\\'") }}')">
                                             <i class="fas fa-user-plus"></i>
                                         </button>
                                         {% endif %}
@@ -450,6 +450,7 @@
                 <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" style="display: inline;">
                     <input type="hidden" name="force_regenerate" value="true">
                     <input type="hidden" name="global_notes" value="{{ inventory_day.global_notes or '' }}">
+                    <!-- Include all current inventory quantities -->
                     {% for day_item in inventory_day_items %}
                     <input type="hidden" name="item_{{ day_item.inventory_item.id }}" value="{{ day_item.quantity }}">
                     {% if day_item.override_create_task %}
@@ -459,6 +460,7 @@
                     <input type="hidden" name="override_no_task_{{ day_item.inventory_item.id }}" value="on">
                     {% endif %}
                     {% endfor %}
+                    <!-- Include all janitorial task settings -->
                     {% for janitorial_day_item in janitorial_day_items %}
                     {% if janitorial_day_item.include_task %}
                     <input type="hidden" name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" value="on">
@@ -617,8 +619,8 @@ function connectSSE() {
             
             if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || data.type === 'task_created') {
             if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || 
-                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_completed' || 
-                data.type === 'task_paused' || data.type === 'task_resumed') {
+                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_finished' || 
+                data.type === 'task_paused' || data.type === 'task_resumed' || data.type === 'task_completed') {
                 // Reload page to show updates
                 setTimeout(() => {
                     window.location.reload();

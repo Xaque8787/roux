@@ -333,7 +333,7 @@ async def create_manual_task(
     db.add(task)
     db.commit()
     
-    # Broadcast new manual task creation
+    # Broadcast new manual task creation AFTER commit
     try:
         await broadcast_task_update(day_id, task.id, "task_created", {
             "description": task.description,
@@ -346,6 +346,7 @@ async def create_manual_task(
         print(f"✅ Broadcasted manual task creation for task {task.id}")
     except Exception as e:
         print(f"❌ Error broadcasting task creation: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -402,7 +403,7 @@ async def assign_multiple_employees_to_task(
     
     db.commit()
     
-    # Broadcast AFTER committing to ensure data is saved
+    # Broadcast task assignment AFTER committing to ensure data is saved
     try:
         assigned_employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all() if assigned_to_ids else []
         employee_names = [emp.full_name or emp.username for emp in assigned_employees]
@@ -415,6 +416,7 @@ async def assign_multiple_employees_to_task(
         print(f"✅ Broadcasted task assignment for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -437,7 +439,7 @@ async def start_task(
     
     db.commit()
     
-    # Broadcast task start
+    # Broadcast task start AFTER commit
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
             "started_at": datetime.utcnow().isoformat(),
@@ -446,6 +448,7 @@ async def start_task(
         print(f"✅ Broadcasted task start for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task start: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -516,7 +519,7 @@ async def pause_task(
     
     db.commit()
     
-    # Broadcast task pause
+    # Broadcast task pause AFTER commit
     try:
         await broadcast_task_update(day_id, task_id, "task_paused", {
             "paused_at": datetime.utcnow().isoformat(),
@@ -526,6 +529,7 @@ async def pause_task(
         print(f"✅ Broadcasted task pause for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task pause: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -553,7 +557,7 @@ async def resume_task(
     
     db.commit()
     
-    # Broadcast task resume
+    # Broadcast task resume AFTER commit
     try:
         await broadcast_task_update(day_id, task_id, "task_resumed", {
             "resumed_at": datetime.utcnow().isoformat(),
@@ -563,6 +567,7 @@ async def resume_task(
         print(f"✅ Broadcasted task resume for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task resume: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -596,9 +601,9 @@ async def finish_task(
     
     db.commit()
     
-    # Broadcast task completion
+    # Broadcast task completion AFTER commit
     try:
-        await broadcast_task_update(day_id, task_id, "task_completed", {
+        await broadcast_task_update(day_id, task_id, "task_finished", {
             "finished_at": datetime.utcnow().isoformat(),
             "total_time": task.total_time_minutes,
             "labor_cost": task.labor_cost,
@@ -606,9 +611,10 @@ async def finish_task(
             "made_amount": task.made_amount,
             "made_unit": task.made_unit
         })
-        print(f"✅ Broadcasted task completion for task {task_id}")
+        print(f"✅ Broadcasted task finish for task {task_id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task completion: {e}")
+        print(f"❌ Error broadcasting task finish: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -644,9 +650,9 @@ async def finish_task_with_amount(
     
     db.commit()
     
-    # Broadcast task completion with amount
+    # Broadcast task completion with amount AFTER commit
     try:
-        await broadcast_task_update(day_id, task_id, "task_completed", {
+        await broadcast_task_update(day_id, task_id, "task_finished", {
             "finished_at": datetime.utcnow().isoformat(),
             "total_time": task.total_time_minutes,
             "made_amount": task.made_amount,
@@ -654,9 +660,10 @@ async def finish_task_with_amount(
             "labor_cost": task.labor_cost,
             "completed_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task completion with amount for task {task_id}")
+        print(f"✅ Broadcasted task finish with amount for task {task_id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task completion: {e}")
+        print(f"❌ Error broadcasting task finish: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
