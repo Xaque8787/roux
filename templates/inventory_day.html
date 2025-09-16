@@ -25,15 +25,12 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5><i class="fas fa-save"></i> Update Inventory & Generate Tasks</h5>
-                    <div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="force_regenerate" name="force_regenerate">
-                            <label class="form-check-label" for="force_regenerate">
-                                Force Regenerate All Tasks
-                            </label>
-                        </div>
+                    <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-sync"></i> Update & Generate Tasks
+                        </button>
+                        <button type="button" class="btn btn-warning" onclick="showRegenerateModal()">
+                            <i class="fas fa-exclamation-triangle"></i> Regenerate All Tasks
                         </button>
                     </div>
                 </div>
@@ -66,7 +63,6 @@
                                 <th data-sortable data-sort-type="number">Quantity</th>
                                 <th data-sortable data-sort-type="number">Par</th>
                                 <th data-sortable data-sort-type="text">Status</th>
-                                <th data-sortable data-sort-type="text">Linked Batch</th>
                                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
                                 <th>Override</th>
                                 {% endif %}
@@ -85,6 +81,9 @@
                                         🔘
                                     {% endif %}
                                     <strong>{{ day_item.inventory_item.name }}</strong>
+                                    {% if day_item.inventory_item.batch %}
+                                        <br><small class="text-muted">Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}</small>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
@@ -118,26 +117,19 @@
                                         <span class="badge bg-success">Good</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% if day_item.inventory_item.batch %}
-                                        <small>Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}</small>
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
                                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
                                 <td>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" 
+                                    <div class="form-check">
+                                        <input class="form-check-input override-checkbox" type="checkbox" 
                                                name="override_create_{{ day_item.inventory_item.id }}" 
-                                               form="inventoryForm"
+                                               form="inventoryForm" data-type="force"
                                                {% if day_item.override_create_task %}checked{% endif %}>
                                         <label class="form-check-label">Force</label>
                                     </div>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" 
+                                    <div class="form-check">
+                                        <input class="form-check-input override-checkbox" type="checkbox" 
                                                name="override_no_task_{{ day_item.inventory_item.id }}" 
-                                               form="inventoryForm"
+                                               form="inventoryForm" data-type="skip"
                                                {% if day_item.override_no_task %}checked{% endif %}>
                                         <label class="form-check-label">Skip</label>
                                     </div>
@@ -148,27 +140,64 @@
                         </tbody>
                     </table>
                 </div>
-                
-                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
-                <div class="mt-3">
-                    <h6>Janitorial Tasks</h6>
-                    {% for janitorial_day_item in janitorial_day_items %}
-                    {% if janitorial_day_item.janitorial_task.task_type == 'manual' %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" 
-                               name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" 
-                               form="inventoryForm"
-                               {% if janitorial_day_item.include_task %}checked{% endif %}>
-                        <label class="form-check-label">
-                            🧹 {{ janitorial_day_item.janitorial_task.title }}
-                        </label>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-                </div>
-                {% endif %}
             </div>
         </div>
+        
+        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-broom"></i> Janitorial Tasks</h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#manualTaskModal">
+                    <i class="fas fa-plus"></i> Add Manual Task
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Task</th>
+                                <th>Type</th>
+                                <th>Include</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for janitorial_day_item in janitorial_day_items %}
+                            <tr>
+                                <td>
+                                    🧹 <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
+                                    {% if janitorial_day_item.janitorial_task.instructions %}
+                                        <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:50] }}{% if janitorial_day_item.janitorial_task.instructions|length > 50 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
+                                        <span class="badge bg-primary">Daily</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Manual</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if janitorial_day_item.janitorial_task.task_type == 'daily' %}
+                                        <span class="badge bg-success">Auto-Included</span>
+                                    {% else %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" 
+                                                   form="inventoryForm"
+                                                   {% if janitorial_day_item.include_task %}checked{% endif %}>
+                                            <label class="form-check-label">Include</label>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     
     <!-- Right Column: Tasks -->
@@ -244,7 +273,6 @@
                                         <span class="badge bg-secondary">Not Started</span>
                                     {% elif task.status == "in_progress" %}
                                         <span class="badge bg-primary">In Progress</span>
-                                        <br><span class="timer" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}">0m</span>
                                     {% elif task.status == "paused" %}
                                         <span class="badge bg-warning">Paused</span>
                                     {% elif task.status == "completed" %}
@@ -252,7 +280,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if task.started_at %}
+                                    {% if task.status == "in_progress" %}
+                                        <span class="timer" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}">0m</span>
+                                    {% elif task.started_at %}
                                         {{ task.total_time_minutes }}m
                                     {% else %}
                                         -
@@ -321,75 +351,21 @@
             </div>
         </div>
         
-        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+        {% if inventory_day.finalized %}
         <div class="card mt-3">
             <div class="card-header">
-                <h5><i class="fas fa-plus"></i> Add Manual Task</h5>
+                <h5><i class="fas fa-chart-bar"></i> Day Report</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Task Description</label>
-                        <input type="text" class="form-control" id="description" name="description" required>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="inventory_item_id" class="form-label">Inventory Item (Optional)</label>
-                                <select class="form-select" id="inventory_item_id" name="inventory_item_id">
-                                    <option value="">Select Item</option>
-                                    {% for item in inventory_day_items %}
-                                    <option value="{{ item.inventory_item.id }}">{{ item.inventory_item.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="batch_id" class="form-label">Batch (Optional)</label>
-                                <select class="form-select" id="batch_id" name="batch_id">
-                                    <option value="">Select Batch</option>
-                                    {% for batch in batches %}
-                                    <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="category_id" class="form-label">Category (Optional)</label>
-                        <select class="form-select" id="category_id" name="category_id">
-                            <option value="">Select Category</option>
-                            {% for cat in categories %}
-                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Assign To (Optional)</label>
-                        {% for emp in employees %}
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp{{ emp.id }}">
-                            <label class="form-check-label" for="emp{{ emp.id }}">
-                                {{ emp.full_name or emp.username }}
-                            </label>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-plus"></i> Add Task
-                    </button>
-                </form>
+                <a href="/inventory/reports/{{ inventory_day.id }}" class="btn btn-info">
+                    <i class="fas fa-chart-bar"></i> View Full Report
+                </a>
             </div>
         </div>
         {% endif %}
     </div>
     
-    <!-- Right Column: Day Actions -->
+    <!-- Right Column: Day Information -->
     <div class="col-md-6">
         {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card">
@@ -443,19 +419,129 @@
                 {% endif %}
             </div>
         </div>
-        
-        {% if inventory_day.finalized %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5><i class="fas fa-chart-bar"></i> Day Report</h5>
+    </div>
+</div>
+
+<!-- Regenerate All Tasks Modal -->
+<div class="modal fade" id="regenerateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-warning">
+                    <i class="fas fa-exclamation-triangle"></i> Regenerate All Tasks
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="card-body">
-                <a href="/inventory/reports/{{ inventory_day.id }}" class="btn btn-info">
-                    <i class="fas fa-chart-bar"></i> View Full Report
-                </a>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This will delete ALL tasks for this day, including:
+                    <ul class="mb-0 mt-2">
+                        <li>Tasks that are currently in progress</li>
+                        <li>Tasks that have been completed</li>
+                        <li>Manual tasks that were added</li>
+                    </ul>
+                </div>
+                <p>New tasks will be generated based on current inventory levels and janitorial task settings.</p>
+                <p><strong>This action cannot be undone.</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" style="display: inline;">
+                    <input type="hidden" name="force_regenerate" value="true">
+                    <input type="hidden" name="global_notes" value="{{ inventory_day.global_notes or '' }}">
+                    {% for day_item in inventory_day_items %}
+                    <input type="hidden" name="item_{{ day_item.inventory_item.id }}" value="{{ day_item.quantity }}">
+                    {% if day_item.override_create_task %}
+                    <input type="hidden" name="override_create_{{ day_item.inventory_item.id }}" value="on">
+                    {% endif %}
+                    {% if day_item.override_no_task %}
+                    <input type="hidden" name="override_no_task_{{ day_item.inventory_item.id }}" value="on">
+                    {% endif %}
+                    {% endfor %}
+                    {% for janitorial_day_item in janitorial_day_items %}
+                    {% if janitorial_day_item.janitorial_task.task_type == 'manual' and janitorial_day_item.include_task %}
+                    <input type="hidden" name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" value="on">
+                    {% endif %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash-alt"></i> Regenerate All Tasks
+                    </button>
+                </form>
             </div>
         </div>
-        {% endif %}
+    </div>
+</div>
+
+<!-- Manual Task Modal -->
+<div class="modal fade" id="manualTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Manual Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Task Description</label>
+                        <input type="text" class="form-control" id="description" name="description" required>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="inventory_item_id" class="form-label">Inventory Item (Optional)</label>
+                                <select class="form-select" id="inventory_item_id" name="inventory_item_id">
+                                    <option value="">Select Item</option>
+                                    {% for item in inventory_day_items %}
+                                    <option value="{{ item.inventory_item.id }}">{{ item.inventory_item.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="batch_id" class="form-label">Batch (Optional)</label>
+                                <select class="form-select" id="batch_id" name="batch_id">
+                                    <option value="">Select Batch</option>
+                                    {% for batch in batches %}
+                                    <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category (Optional)</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">Select Category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Assign To (Optional)</label>
+                        {% for emp in employees %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ emp.id }}" id="emp{{ emp.id }}">
+                            <label class="form-check-label" for="emp{{ emp.id }}">
+                                {{ emp.full_name or emp.username }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add Task
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -507,7 +593,29 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize timers for in-progress tasks
     initializeTimers();
+    
+    // Initialize override checkbox logic
+    initializeOverrideCheckboxes();
 });
+
+function initializeOverrideCheckboxes() {
+    // Prevent both Force and Skip from being checked at the same time
+    document.querySelectorAll('.override-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                const itemId = this.name.match(/\d+/)[0];
+                const type = this.dataset.type;
+                
+                // Uncheck the opposite checkbox
+                const oppositeType = type === 'force' ? 'skip' : 'force';
+                const oppositeCheckbox = document.querySelector(`input[name*="${itemId}"][data-type="${oppositeType}"]`);
+                if (oppositeCheckbox) {
+                    oppositeCheckbox.checked = false;
+                }
+            }
+        });
+    });
+}
 
 function initializeSSE() {
     if (eventSource) {
@@ -564,14 +672,15 @@ function startTimer(taskId, startTime, pauseTimeSeconds = 0) {
     const interval = setInterval(() => {
         const now = new Date();
         const elapsedMs = now.getTime() - startTime.getTime();
-        const elapsedSeconds = Math.max(0, Math.floor(elapsedMs / 1000) - pauseTimeSeconds);
-        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        const workingSeconds = Math.max(0, elapsedSeconds - pauseTimeSeconds);
+        const workingMinutes = Math.floor(workingSeconds / 60);
         
-        if (elapsedMinutes < 60) {
-            timerElement.textContent = `${elapsedMinutes}m`;
+        if (workingMinutes < 60) {
+            timerElement.textContent = `${workingMinutes}m`;
         } else {
-            const hours = Math.floor(elapsedMinutes / 60);
-            const minutes = elapsedMinutes % 60;
+            const hours = Math.floor(workingMinutes / 60);
+            const minutes = workingMinutes % 60;
             timerElement.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
         }
     }, 1000);
@@ -583,11 +692,6 @@ function stopTimer(taskId) {
     if (timers.has(taskId)) {
         clearInterval(timers.get(taskId));
         timers.delete(taskId);
-    }
-    
-    const timerElement = document.querySelector(`.timer[data-task-id="${taskId}"]`);
-    if (timerElement) {
-        timerElement.remove();
     }
 }
 
@@ -602,17 +706,16 @@ function handleTaskStarted(data) {
             const taskId = viewLink.href.split('/tasks/')[1];
             if (taskId == data.task_id) {
                 const statusCell = row.cells[2];
-                statusCell.innerHTML = `
-                    <span class="badge bg-primary">In Progress</span>
-                    <br><span class="timer" data-task-id="${data.task_id}" data-started-at="${data.started_at}" data-pause-time="0">0m</span>
-                `;
+                statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span>';
+                
+                const timeCell = row.cells[3];
+                timeCell.innerHTML = `<span class="timer" data-task-id="${data.task_id}" data-started-at="${data.started_at}" data-pause-time="0">0m</span>`;
                 
                 // Start the timer
                 startTimer(data.task_id, new Date(data.started_at), 0);
                 
                 // Update action buttons
                 const actionsCell = row.cells[4];
-                const currentButtons = actionsCell.innerHTML;
                 const viewButton = actionsCell.querySelector('.btn-outline-info').outerHTML;
                 
                 actionsCell.innerHTML = `
@@ -649,6 +752,10 @@ function handleTaskPaused(data) {
                 const statusCell = row.cells[2];
                 statusCell.innerHTML = '<span class="badge bg-warning">Paused</span>';
                 
+                const timeCell = row.cells[3];
+                const totalMinutes = Math.floor((data.total_pause_time || 0) / 60);
+                timeCell.textContent = `${totalMinutes}m`;
+                
                 // Update action buttons
                 const actionsCell = row.cells[4];
                 const viewButton = actionsCell.querySelector('.btn-outline-info').outerHTML;
@@ -677,10 +784,10 @@ function handleTaskResumed(data) {
             const taskId = viewLink.href.split('/tasks/')[1];
             if (taskId == data.task_id) {
                 const statusCell = row.cells[2];
-                statusCell.innerHTML = `
-                    <span class="badge bg-primary">In Progress</span>
-                    <br><span class="timer" data-task-id="${data.task_id}" data-started-at="${data.resumed_at}" data-pause-time="${data.total_pause_time}">0m</span>
-                `;
+                statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span>';
+                
+                const timeCell = row.cells[3];
+                timeCell.innerHTML = `<span class="timer" data-task-id="${data.task_id}" data-started-at="${data.resumed_at}" data-pause-time="${data.total_pause_time}">0m</span>`;
                 
                 // Start the timer with pause time
                 startTimer(data.task_id, new Date(data.resumed_at), data.total_pause_time);
@@ -726,7 +833,7 @@ function handleTaskCompleted(data) {
                 const timeCell = row.cells[3];
                 timeCell.textContent = `${data.total_time}m`;
                 
-                // Update action buttons - only show view button
+                // Update action buttons - keep view button
                 const actionsCell = row.cells[4];
                 const viewButton = actionsCell.querySelector('.btn-outline-info').outerHTML;
                 actionsCell.innerHTML = viewButton;
@@ -898,6 +1005,12 @@ function showAssignModal(taskId, taskDescription) {
     document.getElementById('assignForm').action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/assign_multiple`;
     
     const modal = new bootstrap.Modal(document.getElementById('assignModal'));
+    modal.show();
+}
+
+// Regenerate Modal
+function showRegenerateModal() {
+    const modal = new bootstrap.Modal(document.getElementById('regenerateModal'));
     modal.show();
 }
 
