@@ -279,7 +279,8 @@
                                     {% if task.status == "not_started" %}
                                         <span class="badge bg-secondary">Not Started</span>
                                     {% elif task.status == "in_progress" %}
-                                        <span class="badge bg-primary">In Progress</span>
+                                        <span class="badge bg-primary">In Progress</span><br>
+                                        <small class="timer text-primary" data-task-id="{{ task.id }}" data-start-time="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}">Calculating...</small>
                                         <div class="live-timer mt-1" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time or 0 }}">
                                             <small class="text-info">⏱️ <span class="timer-display">0:00</span></small>
                                         </div>
@@ -639,21 +640,53 @@ function handleSSEEvent(data) {
         case 'task_started':
             updateTaskStatus(data.task_id, 'in_progress', data.started_at);
             addTimerToTask(data.task_id, data.started_at);
+            const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+            if (taskRow) {
+                const statusCell = taskRow.querySelector('td:nth-child(4)'); // Status column
+                if (statusCell) {
+                    statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span><br><small class="timer text-primary" data-task-id="' + data.task_id + '" data-start-time="' + data.started_at + '" data-pause-time="0">Calculating...</small>';
+                }
+            }
             break;
             
         case 'task_paused':
             updateTaskStatus(data.task_id, 'paused');
             removeTimerFromTask(data.task_id);
+            const taskRowPaused = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+            if (taskRowPaused) {
+                const statusCell = taskRowPaused.querySelector('td:nth-child(4)'); // Status column
+                if (statusCell) {
+                    const timer = statusCell.querySelector('.timer');
+                    if (timer) {
+                        timer.dataset.pauseTime = data.total_pause_time || '0';
+                    }
+                    statusCell.innerHTML = '<span class="badge bg-warning">Paused</span><br><small class="text-muted">Paused at ' + formatTime(data.paused_at) + '</small>';
+                }
+            }
             break;
             
         case 'task_resumed':
             updateTaskStatus(data.task_id, 'in_progress', data.resumed_at);
             addTimerToTask(data.task_id, data.resumed_at);
+            const taskRowResumed = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+            if (taskRowResumed) {
+                const statusCell = taskRowResumed.querySelector('td:nth-child(4)'); // Status column
+                if (statusCell) {
+                    statusCell.innerHTML = '<span class="badge bg-primary">In Progress</span><br><small class="timer text-primary" data-task-id="' + data.task_id + '" data-start-time="' + data.started_at + '" data-pause-time="' + (data.total_pause_time || '0') + '">Calculating...</small>';
+                }
+            }
             break;
             
         case 'task_completed':
             updateTaskStatus(data.task_id, 'completed', null, data.total_time, data.labor_cost);
             removeTimerFromTask(data.task_id);
+            const taskRowCompleted = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
+            if (taskRowCompleted) {
+                const statusCell = taskRowCompleted.querySelector('td:nth-child(4)'); // Status column
+                if (statusCell) {
+                    statusCell.innerHTML = '<span class="badge bg-success">Completed</span><br><small class="text-success">Finished at ' + formatTime(data.finished_at) + '</small>';
+                }
+            }
             break;
             
         case 'inventory_batch_updated':
@@ -974,6 +1007,16 @@ function startTaskWithScale(taskId) {
     form.submit();
 }
 
+function formatTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+    });
+}
+
 function showMadeAmountInput(taskId, recipeName) {
     fetch(`/api/tasks/${taskId}/finish_requirements`)
         .then(response => response.json())
@@ -991,18 +1034,18 @@ function showMadeAmountInput(taskId, recipeName) {
                             <div class="mb-3">
                                 <label class="form-label">Amount Made:</label>
                                 <div class="row">
-                                    <div class="col-8">
+                                    <div class="col-6">
                                         <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
                                     </div>
-                                    <div class="col-4">
+                                    <div class="col-6">
                                         <div class="form-control-plaintext">
-                                            <strong>${data.use_par_unit ? data.par_unit_name : (data.available_units && data.available_units.length > 0 ? data.available_units[0] : 'units')}</strong>
+                                            <strong>${data.par_unit_name || 'units'}</strong>
                                         </div>
-                                        <input type="hidden" id="madeUnit" value="${data.use_par_unit ? data.par_unit_name : (data.available_units && data.available_units.length > 0 ? data.available_units[0] : 'units')}">
+                                        <input type="hidden" id="madeUnit" value="${data.par_unit_name || 'units'}">
                                     </div>
                                 </div>
-                                ${data.use_par_unit && data.par_unit_equals_info ? `
-                                <small class="text-info">${data.par_unit_equals_info.description}</small>
+                                ${data.par_unit_equals_info ? `
+                                    <small class="text-info">${data.par_unit_equals_info.description}</small>
                                 ` : ''}
                             </div>
                             ${data.inventory_info ? `
@@ -1038,11 +1081,10 @@ function showMadeAmountInput(taskId, recipeName) {
 
 function finishTaskWithAmount(taskId) {
     const madeAmount = document.getElementById('madeAmount').value;
-    const madeUnitInput = document.getElementById('madeUnit');
-    const madeUnit = madeUnitInput ? madeUnitInput.value : '';
+    const madeUnit = document.getElementById('madeUnit').value;
     
     if (!madeAmount || !madeUnit) {
-        alert('Please enter amount made and select unit');
+        alert('Please enter amount made');
         return;
     }
     
@@ -1070,6 +1112,9 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Inventory day page loaded');
     initializeSSE();
     startLiveTimers();
+    
+    // Start timer updates
+    setInterval(updateTimers, 1000);
 });
 
 // Live timer functionality
@@ -1084,6 +1129,27 @@ function startLiveTimers() {
 }
 
 function updateTimers() {
+    document.querySelectorAll('.timer').forEach(timer => {
+        const taskId = timer.dataset.taskId;
+        const startTime = timer.dataset.startTime;
+        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
+        
+        if (startTime) {
+            const start = new Date(startTime);
+            const now = new Date();
+            const elapsedMs = now - start - (pauseTime * 1000); // Subtract pause time in milliseconds
+            const elapsedMinutes = Math.floor(elapsedMs / (1000 * 60));
+            
+            if (elapsedMinutes < 60) {
+                timer.textContent = `${elapsedMinutes}m`;
+            } else {
+                const hours = Math.floor(elapsedMinutes / 60);
+                const minutes = elapsedMinutes % 60;
+                timer.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
+            }
+        }
+    });
+    
     const timers = document.querySelectorAll('.live-timer');
     const now = new Date();
     
