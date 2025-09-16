@@ -404,17 +404,17 @@ async def assign_multiple_employees_to_task(
     
     # Broadcast AFTER committing to ensure data is saved
     try:
-        assigned_employees = [emp.full_name or emp.username for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else []
+        assigned_employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all() if assigned_to_ids else []
+        employee_names = [emp.full_name or emp.username for emp in assigned_employees]
         await broadcast_task_update(day_id, task_id, "task_assigned", {
-            "assigned_employees": assigned_employees,
-            "primary_assignee": assigned_employees[0] if assigned_employees else None,
-            "team_size": len(assigned_employees),
+            "assigned_employees": employee_names,
+            "primary_assignee": employee_names[0] if employee_names else None,
+            "team_size": len(employee_names),
             "assigned_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task assignment for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
-        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
