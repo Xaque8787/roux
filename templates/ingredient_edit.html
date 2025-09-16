@@ -124,7 +124,8 @@
                     
                     <!-- Use Price Per Weight/Volume Option -->
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="use_price_per_weight_volume" name="use_price_per_weight_volume" onchange="togglePricePerWeightVolume()">
+                        <input type="checkbox" class="form-check-input" id="use_price_per_weight_volume" name="uses_price_per_weight_volume" 
+                               {% if ingredient.uses_price_per_weight_volume %}checked{% endif %} onchange="togglePricePerWeightVolume()">
                         <label class="form-check-label" for="use_price_per_weight_volume">
                             Use price per weight/volume
                         </label>
@@ -132,7 +133,7 @@
                     </div>
                     
                     <!-- Price Per Weight/Volume Section -->
-                    <div id="pricePerWeightVolumeSection" style="display: none;">
+                    <div id="pricePerWeightVolumeSection" {% if ingredient.uses_price_per_weight_volume %}style="display: block;"{% else %}style="display: none;"{% endif %}>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
@@ -140,7 +141,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text">$</span>
                                         <input type="number" class="form-control" id="price_per_weight_volume" name="price_per_weight_volume" 
-                                               step="0.01" min="0" onchange="calculateTotalFromPricePerUnit()">
+                                               step="0.01" min="0" value="{{ ingredient.price_per_weight_volume or '' }}" onchange="calculateTotalFromPricePerUnit()">
                                         <span class="input-group-text">per <span id="pricePerUnitLabel">{{ ingredient.net_unit }}</span></span>
                                     </div>
                                 </div>
@@ -180,7 +181,9 @@
                                     <div class="input-group">
                                         <span class="input-group-text">$</span>
                                         <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
-                                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview(); syncPricePerUnit();">
+                                               step="0.01" value="{{ ingredient.purchase_total_cost }}" 
+                                               {% if ingredient.uses_price_per_weight_volume %}readonly style="background-color: #e9ecef;"{% endif %}
+                                               onchange="calculateCostPreview(); syncPricePerUnit();">
                                     </div>
                                 </div>
                             </div>
@@ -686,11 +689,16 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleItemCountPricing();
     
     // Initialize price per weight/volume if it was previously set
-    {% if ingredient.uses_price_per_weight_volume %}
-    document.getElementById('use_price_per_weight_volume').checked = true;
-    document.getElementById('price_per_weight_volume').value = '{{ ingredient.price_per_weight_volume or "" }}';
-    togglePricePerWeightVolume();
-    {% endif %}
+    const usePricePerWeightVolume = {{ 'true' if ingredient.uses_price_per_weight_volume else 'false' }};
+    const pricePerWeightVolumeValue = '{{ ingredient.price_per_weight_volume or "" }}';
+    
+    if (usePricePerWeightVolume) {
+        document.getElementById('use_price_per_weight_volume').checked = true;
+        if (pricePerWeightVolumeValue) {
+            document.getElementById('price_per_weight_volume').value = pricePerWeightVolumeValue;
+        }
+        togglePricePerWeightVolume();
+    }
     
     // Add event listeners for cost calculation
     document.getElementById('purchase_total_cost').addEventListener('input', function() {
