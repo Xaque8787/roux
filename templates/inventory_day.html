@@ -282,7 +282,8 @@
                                     {% if task.status == "in_progress" %}
                                         <span class="timer" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}">0m</span>
                                     {% elif task.status == "paused" %}
-                                        {{ task.total_time_minutes }}m (paused)
+                                        <span class="timer paused" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}" data-paused-at="{{ task.paused_at.isoformat() if task.paused_at else '' }}">{{ task.total_time_minutes }}m</span>
+                                        <br><small class="text-warning">Paused</small>
                                     {% elif task.started_at %}
                                         {{ task.total_time_minutes }}m
                                     {% else %}
@@ -575,19 +576,31 @@ function updateTimers() {
         const taskId = timer.dataset.taskId;
         const startedAt = timer.dataset.startedAt;
         const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
+        const pausedAt = timer.dataset.pausedAt;
+        const isPaused = timer.classList.contains('paused');
         
         if (startedAt) {
             const startTime = new Date(startedAt);
             const now = new Date();
-            const elapsedMs = now.getTime() - startTime.getTime();
-            const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000) - Math.floor(pauseTime / 60));
+            let elapsedMs = now.getTime() - startTime.getTime();
+            
+            // If task is paused, calculate time up to pause point
+            if (isPaused && pausedAt) {
+                const pauseTime = new Date(pausedAt);
+                elapsedMs = pauseTime.getTime() - startTime.getTime();
+            }
+            
+            // Subtract total pause time (in seconds, convert to ms)
+            const elapsedMinutes = Math.max(0, Math.floor((elapsedMs - (pauseTime * 1000)) / 60000));
             
             if (elapsedMinutes >= 60) {
                 const hours = Math.floor(elapsedMinutes / 60);
                 const minutes = elapsedMinutes % 60;
-                timer.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
+                const timeText = `${hours}:${minutes.toString().padStart(2, '0')}h`;
+                timer.textContent = isPaused ? timeText : timeText;
             } else {
-                timer.textContent = `${elapsedMinutes}m`;
+                const timeText = `${elapsedMinutes}m`;
+                timer.textContent = timeText;
             }
         }
     });
@@ -611,10 +624,18 @@ function connectSSE() {
             if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || 
                 data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_paused' || 
                 data.type === 'task_resumed' || data.type === 'task_completed') {
-                // Reload page to show updates
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
+                // For timer-related events, update timers immediately then reload
+                if (data.type === 'task_started' || data.type === 'task_paused' || data.type === 'task_resumed') {
+                    updateTimers();
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    // For other events, just reload
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                }
             }
         } catch (error) {
             console.error('Error parsing SSE data:', error);
@@ -632,7 +653,7 @@ function connectSSE() {
 document.addEventListener('DOMContentLoaded', function() {
     // Start timer updates
     updateTimers();
-    setInterval(updateTimers, 10000); // Update every 10 seconds
+    setInterval(updateTimers, 1000); // Update every 1 second for real-time feel
     
     // Connect to SSE
     connectSSE();
