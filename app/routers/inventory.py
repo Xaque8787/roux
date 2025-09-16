@@ -333,11 +333,16 @@ async def create_manual_task(
     db.add(task)
     db.commit()
     
-    # Broadcast new manual task creation
+    # Broadcast manual task creation AFTER committing
     try:
+        assigned_employees = []
+        if assigned_to_ids:
+            employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
+            assigned_employees = [emp.full_name or emp.username for emp in employees]
+        
         await broadcast_task_update(day_id, task.id, "task_created", {
             "description": task.description,
-            "assigned_employees": [emp.full_name for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else [],
+            "assigned_employees": assigned_employees,
             "inventory_item": task.inventory_item.name if task.inventory_item else None,
             "batch_name": task.batch.recipe.name if task.batch else None,
             "category": task.category.name if task.category else None,
@@ -346,7 +351,6 @@ async def create_manual_task(
         print(f"✅ Broadcasted manual task creation for task {task.id}")
     except Exception as e:
         print(f"❌ Error broadcasting task creation: {e}")
-        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -403,9 +407,13 @@ async def assign_multiple_employees_to_task(
     
     db.commit()
     
-    # Broadcast AFTER committing to ensure data is saved
+    # Broadcast assignment AFTER committing
     try:
-        assigned_employees = [emp.full_name or emp.username for emp in db.query(User).filter(User.id.in_(assigned_to_ids)).all()] if assigned_to_ids else []
+        assigned_employees = []
+        if assigned_to_ids:
+            employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
+            assigned_employees = [emp.full_name or emp.username for emp in employees]
+        
         await broadcast_task_update(day_id, task_id, "task_assigned", {
             "assigned_employees": assigned_employees,
             "primary_assignee": assigned_employees[0] if assigned_employees else None,
@@ -415,7 +423,6 @@ async def assign_multiple_employees_to_task(
         print(f"✅ Broadcasted task assignment for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
-        pass
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -433,7 +440,11 @@ async def start_task(
     if task.status != "not_started":
         raise HTTPException(status_code=400, detail="Task already started")
     
-    # Broadcast BEFORE committing
+    task.started_at = datetime.utcnow()
+    task.is_paused = False
+    db.commit()
+    
+    # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
             "started_at": datetime.utcnow().isoformat(),
@@ -441,12 +452,6 @@ async def start_task(
         })
         print(f"✅ Broadcasted task start for task {task_id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task start: {e}")
-        pass
-    
-    task.started_at = datetime.utcnow()
-    task.is_paused = False
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -464,18 +469,6 @@ async def start_task_with_scale(
     
     if task.status != "not_started":
         raise HTTPException(status_code=400, detail="Task already started")
-    
-    # Broadcast BEFORE committing
-    try:
-        await broadcast_task_update(day_id, task_id, "task_started", {
-            "started_at": datetime.utcnow().isoformat(),
-            "started_by": current_user.full_name or current_user.username,
-            "scale": selected_scale
-        })
-        print(f"✅ Broadcasted task start with scale for task {task_id}")
-    except Exception as e:
-        print(f"❌ Error broadcasting task start: {e}")
-        pass
     
     # Set scale information
     task.selected_scale = selected_scale
@@ -496,6 +489,17 @@ async def start_task_with_scale(
     task.is_paused = False
     db.commit()
     
+    # Broadcast AFTER committing
+    try:
+        await broadcast_task_update(day_id, task_id, "task_started", {
+            "started_at": datetime.utcnow().isoformat(),
+            "started_by": current_user.full_name or current_user.username,
+            "scale": selected_scale
+        })
+        print(f"✅ Broadcasted task start with scale for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task start: {e}")
+    
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/pause")
@@ -512,7 +516,11 @@ async def pause_task(
     if task.status != "in_progress":
         raise HTTPException(status_code=400, detail="Task is not in progress")
     
-    # Broadcast BEFORE committing
+    task.paused_at = datetime.utcnow()
+    task.is_paused = True
+    db.commit()
+    
+    # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_paused", {
             "paused_at": datetime.utcnow().isoformat(),
@@ -522,11 +530,6 @@ async def pause_task(
         print(f"✅ Broadcasted task pause for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task pause: {e}")
-        pass
-    
-    task.paused_at = datetime.utcnow()
-    task.is_paused = True
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -544,7 +547,16 @@ async def resume_task(
     if task.status != "paused":
         raise HTTPException(status_code=400, detail="Task is not paused")
     
-    # Broadcast BEFORE committing
+    # Add pause time to total
+    if task.paused_at:
+        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        task.total_pause_time += int(pause_duration)
+    
+    task.paused_at = None
+    task.is_paused = False
+    db.commit()
+    
+    # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_resumed", {
             "resumed_at": datetime.utcnow().isoformat(),
@@ -554,16 +566,6 @@ async def resume_task(
         print(f"✅ Broadcasted task resume for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task resume: {e}")
-        pass
-    
-    # Add pause time to total
-    if task.paused_at:
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
-        task.total_pause_time += int(pause_duration)
-    
-    task.paused_at = None
-    task.is_paused = False
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -595,7 +597,9 @@ async def finish_task(
         task.made_amount = task.batch.yield_amount * task.scale_factor
         task.made_unit = task.batch.yield_unit
     
-    # Broadcast BEFORE committing
+    db.commit()
+    
+    # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
             "finished_at": datetime.utcnow().isoformat(),
@@ -608,9 +612,6 @@ async def finish_task(
         print(f"✅ Broadcasted task completion for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
-        pass
-    
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
@@ -644,7 +645,9 @@ async def finish_task_with_amount(
     task.is_paused = False
     task.paused_at = None
     
-    # Broadcast BEFORE committing
+    db.commit()
+    
+    # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
             "finished_at": datetime.utcnow().isoformat(),
@@ -657,9 +660,6 @@ async def finish_task_with_amount(
         print(f"✅ Broadcasted task completion with amount for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
-        pass
-    
-    db.commit()
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 

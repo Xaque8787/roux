@@ -608,7 +608,9 @@ function connectSSE() {
             const data = JSON.parse(event.data);
             console.log('SSE received:', data);
             
-            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated') {
+            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || 
+                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_paused' || 
+                data.type === 'task_resumed' || data.type === 'task_completed') {
                 // Reload page to show updates
                 setTimeout(() => {
                     window.location.reload();
