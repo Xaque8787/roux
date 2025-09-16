@@ -1166,9 +1166,9 @@ function updateTimers() {
             const start = new Date(startTime);
             const now = new Date();
             const elapsedMs = now - start - (pauseTime * 1000); // Subtract pause time in milliseconds
-            const elapsedMinutes = Math.floor(elapsedMs / (1000 * 60));
-            
-            if (elapsedMinutes < 60) {
+            // Calculate elapsed time in milliseconds, subtract pause time (convert to ms)
+            const elapsedMs = (now - startTime) - (pauseTime * 1000);
+            const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / (1000 * 60)));
                 timer.textContent = `${elapsedMinutes}m`;
             } else {
                 const hours = Math.floor(elapsedMinutes / 60);
