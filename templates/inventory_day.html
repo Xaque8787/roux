@@ -314,32 +314,15 @@
                                                 <button type="submit" class="btn btn-sm btn-primary">
                                                     <i class="fas fa-play"></i> Start
                                                 </button>
-                                            </form>
-                                            {% endif %}
-                                            {% if task.assigned_to or task.assigned_employee_ids %}
-                                            <br><button type="button" class="btn btn-sm btn-outline-secondary mt-1" 
-                                                    onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
-                                                <i class="fas fa-user-edit"></i> Reassign
-                                            </button>
-                                            {% endif %}
-                                        {% elif task.status == "in_progress" %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display: inline;">
-                                                <button type="submit" class="btn btn-sm btn-warning">
-                                                    <i class="fas fa-pause"></i> Pause
-                                                </button>
-                                            </form>
-                                            {% if task.requires_made_amount %}
                                             <button type="button" class="btn btn-sm btn-success" 
                                                     onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                                 <i class="fas fa-check"></i> Finish
                                             </button>
                                             {% else %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display: inline;">
-                                                <button type="submit" class="btn btn-sm btn-success">
-                                                    <i class="fas fa-check"></i> Finish
-                                                </button>
-                                            </form>
-                                            {% endif %}
+                                            <span class="badge bg-primary">In Progress</span><br>
+                                            <span class="timer-display text-primary" data-task-id="{{ task.id }}" data-start-time="{{ task.started_at.isoformat() }}" data-pause-time="{{ task.total_pause_time }}">
+                                                <i class="fas fa-clock"></i> <span class="timer-text">0m</span>
+                                            </span>
                                         {% elif task.status == "paused" %}
                                             <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display: inline;">
                                                 <button type="submit" class="btn btn-sm btn-info">
@@ -356,11 +339,23 @@
                                             <span class="text-success"><i class="fas fa-check-circle"></i> Done</span>
                                         {% endif %}
                                     {% else %}
+                                        
+                                        {% if task.batch %}
+                                            <br><small class="text-muted">{{ task.batch.recipe.name }}</small>
+                                            {% if not task.batch.variable_yield %}
+                                                <br><small class="text-info">Yield: {{ task.batch.yield_amount }} {{ task.batch.yield_unit }}</small>
+                                            {% else %}
+                                                <br><small class="text-info">Variable Yield</small>
+                                            {% endif %}
+                                        {% endif %}
                                         {% if task.assigned_to or task.assigned_employee_ids %}
                                             {% if task.status == "not_started" %}
                                                 {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
                                                 <button type="button" class="btn btn-sm btn-primary" 
                                                         onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
+                                        <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
                                                     <i class="fas fa-play"></i> Start
                                                 </button>
                                                 {% else %}
@@ -402,13 +397,7 @@
                                                 <br><button type="button" class="btn btn-sm btn-success mt-1" 
                                                         onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                                     <i class="fas fa-check"></i> Finish & Enter Amount
-                                                </button>
-                                                {% endif %}
                                             {% elif task.status == "completed" %}
-                                                <span class="text-success"><i class="fas fa-check-circle"></i> Done</span>
-                                            {% endif %}
-                                        {% else %}
-                                            <!-- Unassigned tasks can still be started -->
                                             {% if task.status == "not_started" %}
                                                 {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
                                                 <button type="button" class="btn btn-sm btn-primary" 
