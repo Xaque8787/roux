@@ -593,16 +593,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize timers for in-progress tasks
     initializeTimers();
-                    case 'inventory_batch_updated':
-                        console.log('Inventory batch updated, reloading page...');
-                        location.reload();
-                        break;
-                        
-                    case 'tasks_generated':
-                        console.log('Tasks generated, reloading page...');
-                        location.reload();
-                        break;
-                        
     
     // Initialize override checkbox logic
     initializeOverrideCheckboxes();
@@ -618,10 +608,6 @@ function initializeOverrideCheckboxes() {
                 
                 // Uncheck the opposite checkbox
                 const oppositeType = type === 'force' ? 'skip' : 'force';
-                        
-                    case 'task_assigned':
-                        updateTaskAssignment(data.task_id, data);
-                        break;
                 const oppositeCheckbox = document.querySelector(`input[name*="${itemId}"][data-type="${oppositeType}"]`);
                 if (oppositeCheckbox) {
                     oppositeCheckbox.checked = false;
@@ -643,14 +629,36 @@ function initializeSSE() {
             const data = JSON.parse(event.data);
             console.log('SSE message received:', data);
             
-            if (data.type === 'task_started') {
-                handleTaskStarted(data);
-            } else if (data.type === 'task_paused') {
-                handleTaskPaused(data);
-            } else if (data.type === 'task_resumed') {
-                handleTaskResumed(data);
-            } else if (data.type === 'task_completed') {
-                handleTaskCompleted(data);
+            switch(data.type) {
+                case 'task_started':
+                    handleTaskStarted(data);
+                    break;
+                    
+                case 'task_paused':
+                    handleTaskPaused(data);
+                    break;
+                    
+                case 'task_resumed':
+                    handleTaskResumed(data);
+                    break;
+                    
+                case 'task_completed':
+                    handleTaskCompleted(data);
+                    break;
+                    
+                case 'inventory_batch_updated':
+                    console.log('Inventory batch updated, reloading page...');
+                    location.reload();
+                    break;
+                    
+                case 'tasks_generated':
+                    console.log('Tasks generated, reloading page...');
+                    location.reload();
+                    break;
+                    
+                case 'task_assigned':
+                    updateTaskAssignment(data.task_id, data);
+                    break;
             }
         } catch (error) {
             console.error('Error parsing SSE message:', error);
@@ -854,6 +862,22 @@ function handleTaskCompleted(data) {
             }
         }
     });
+}
+
+function updateTaskAssignment(taskId, data) {
+    console.log(`Updating task ${taskId} assignment`);
+    
+    const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+    if (!taskRow) {
+        console.log(`Task row not found for task ${taskId}`);
+        return;
+    }
+    
+    // Update assigned to column
+    const assignedCell = taskRow.querySelector('.task-assigned');
+    if (assignedCell && data.assigned_to) {
+        assignedCell.innerHTML = `<small>${data.assigned_to}</small>`;
+    }
 }
 
 // Scale Selection Modal
