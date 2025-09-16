@@ -246,6 +246,45 @@
                                         <option value="oz" {% if ingredient.baking_weight_unit == 'oz' %}selected{% endif %}>Ounces</option>
                                         <option value="g" {% if ingredient.baking_weight_unit == 'g' %}selected{% endif %}>Grams</option>
                                         <option value="lb" {% if ingredient.baking_weight_unit == 'lb' %}selected{% endif %}>Pounds</option>
+    <!-- Use Price Per Weight/Volume Option -->
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="use_price_per_weight_volume" name="use_price_per_weight_volume" onchange="togglePricePerWeightVolume()">
+        <label class="form-check-label" for="use_price_per_weight_volume">
+            Use price per weight/volume
+        </label>
+        <br><small class="text-muted">Check this to enter price per unit and auto-calculate total cost</small>
+    </div>
+    
+    <!-- Price Per Weight/Volume Section -->
+    <div id="pricePerWeightVolumeSection" style="display: none;">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="price_per_weight_volume" class="form-label">Price per <span id="pricePerTypeLabel">{% if ingredient.usage_type == 'weight' %}Weight{% else %}Volume{% endif %}</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="price_per_weight_volume" name="price_per_weight_volume" 
+                               step="0.01" min="0" onchange="calculateTotalFromPricePerUnit()">
+                        <span class="input-group-text">per <span id="pricePerUnitLabel">{{ ingredient.net_unit }}</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="calculated_total_cost" class="form-label">Calculated Total Cost</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="calculated_total_cost" readonly>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="purchase_total_cost_item" name="purchase_total_cost_item" 
+                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview();">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
                                     </select>
                                 </div>
                             </div>
@@ -265,7 +304,10 @@
                         <a href="/ingredients/{{ ingredient.id }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Save Changes
-                        </button>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="purchase_total_cost" name="purchase_total_cost" 
+                               step="0.01" value="{{ ingredient.purchase_total_cost }}" onchange="calculateCostPreview(); syncPricePerUnit();">
                     </div>
                 </form>
             </div>
@@ -557,16 +599,120 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('net_weight_volume_item').addEventListener('input', function() {
         calculateNetCase();
         calculateCostPreview();
+        calculateTotalFromPricePerUnit();
     });
     document.getElementById('net_unit').addEventListener('change', function() {
         calculateNetCase();
         calculateCostPreview();
+        updatePricePerUnitLabel();
+        calculateTotalFromPricePerUnit();
     });
     document.getElementById('items_per_case').addEventListener('input', function() {
         updateItemCountDisplay();
         calculateNetCase();
         calculateCostPreview();
+        calculateTotalFromPricePerUnit();
     });
+    
+    // Add event listener for price per weight/volume
+    const pricePerInput = document.getElementById('price_per_weight_volume');
+    if (pricePerInput) {
+        pricePerInput.addEventListener('input', calculateTotalFromPricePerUnit);
+    }
+    
+    // Add event listener for total cost to sync back to price per unit
+    document.getElementById('purchase_total_cost').addEventListener('input', syncPricePerUnit);
+});
+
+// Toggle price per weight/volume section
+function togglePricePerWeightVolume() {
+    const checkbox = document.getElementById('use_price_per_weight_volume');
+    const section = document.getElementById('pricePerWeightVolumeSection');
+    const purchaseTotalCost = document.getElementById('purchase_total_cost');
+    const pricePerInput = document.getElementById('price_per_weight_volume');
+    
+    if (checkbox.checked) {
+        section.style.display = 'block';
+        purchaseTotalCost.readOnly = true;
+        purchaseTotalCost.style.backgroundColor = '#e9ecef';
+        updatePricePerUnitLabel();
+        calculateTotalFromPricePerUnit();
+    } else {
+        section.style.display = 'none';
+        purchaseTotalCost.readOnly = false;
+        purchaseTotalCost.style.backgroundColor = '';
+        pricePerInput.value = '';
+        document.getElementById('calculated_total_cost').value = '';
+    }
+}
+
+// Update price per unit label based on current unit
+function updatePricePerUnitLabel() {
+    const usageType = document.querySelector('input[name="usage_type"]:checked').value;
+    const netUnit = document.getElementById('net_unit').value;
+    const pricePerTypeLabel = document.getElementById('pricePerTypeLabel');
+    const pricePerUnitLabel = document.getElementById('pricePerUnitLabel');
+    
+    if (pricePerTypeLabel) {
+        pricePerTypeLabel.textContent = usageType === 'weight' ? 'Weight' : 'Volume';
+    }
+    
+    if (pricePerUnitLabel && netUnit) {
+        pricePerUnitLabel.textContent = netUnit;
+    }
+}
+
+// Calculate total cost from price per unit
+function calculateTotalFromPricePerUnit() {
+    const checkbox = document.getElementById('use_price_per_weight_volume');
+    if (!checkbox.checked) return;
+    
+    const pricePerUnit = parseFloat(document.getElementById('price_per_weight_volume').value) || 0;
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    
+    let totalAmount = 0;
+    
+    if (purchaseType === 'case' && netItem > 0 && itemsPerCase > 0) {
+        totalAmount = netItem * itemsPerCase;
+    } else if (purchaseType === 'single' && netItem > 0) {
+        totalAmount = netItem;
+    }
+    
+    if (pricePerUnit > 0 && totalAmount > 0) {
+        const totalCost = pricePerUnit * totalAmount;
+        document.getElementById('calculated_total_cost').value = totalCost.toFixed(2);
+        document.getElementById('purchase_total_cost').value = totalCost.toFixed(2);
+        calculateCostPreview();
+    } else {
+        document.getElementById('calculated_total_cost').value = '';
+    }
+}
+
+// Sync price per unit when total cost is manually changed
+function syncPricePerUnit() {
+    const checkbox = document.getElementById('use_price_per_weight_volume');
+    if (!checkbox.checked) return;
+    
+    const totalCost = parseFloat(document.getElementById('purchase_total_cost').value) || 0;
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    
+    let totalAmount = 0;
+    
+    if (purchaseType === 'case' && netItem > 0 && itemsPerCase > 0) {
+        totalAmount = netItem * itemsPerCase;
+    } else if (purchaseType === 'single' && netItem > 0) {
+        totalAmount = netItem;
+    }
+    
+    if (totalCost > 0 && totalAmount > 0) {
+        const pricePerUnit = totalCost / totalAmount;
+        document.getElementById('price_per_weight_volume').value = pricePerUnit.toFixed(4);
+        document.getElementById('calculated_total_cost').value = totalCost.toFixed(2);
+    }
 });
 </script>
 {% endblock %}

@@ -744,10 +744,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('net_weight_volume_item').addEventListener('input', function() {
         calculateNetCase();
         calculateCostPreview();
+        calculateTotalFromPricePerUnit();
     });
     document.getElementById('net_unit').addEventListener('change', function() {
         calculateNetCase();
         calculateCostPreview();
+        updatePricePerUnitLabel();
+        calculateTotalFromPricePerUnit();
     });
     document.getElementById('items_per_case').addEventListener('input', function() {
         updateItemCountDisplay();
@@ -757,9 +760,104 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Add event listener for price per weight/volume
-    document.getElementById('price_per_weight_volume').addEventListener('input', function() {
+    const pricePerInput = document.getElementById('price_per_weight_volume');
+    if (pricePerInput) {
+        pricePerInput.addEventListener('input', calculateTotalFromPricePerUnit);
+    }
+    
+    // Add event listener for total cost to sync back to price per unit
+    document.getElementById('purchase_total_cost').addEventListener('input', syncPricePerUnit);
+});
+
+// Toggle price per weight/volume section
+function togglePricePerWeightVolume() {
+    const checkbox = document.getElementById('use_price_per_weight_volume');
+    const section = document.getElementById('pricePerWeightVolumeSection');
+    const purchaseTotalCost = document.getElementById('purchase_total_cost');
+    const pricePerInput = document.getElementById('price_per_weight_volume');
+    
+    if (checkbox.checked) {
+        section.style.display = 'block';
+        purchaseTotalCost.readOnly = true;
+        purchaseTotalCost.style.backgroundColor = '#e9ecef';
+        updatePricePerUnitLabel();
         calculateTotalFromPricePerUnit();
-    });
+    } else {
+        section.style.display = 'none';
+        purchaseTotalCost.readOnly = false;
+        purchaseTotalCost.style.backgroundColor = '';
+        pricePerInput.value = '';
+        document.getElementById('calculated_total_cost').value = '';
+    }
+}
+
+// Update price per unit label based on current unit
+function updatePricePerUnitLabel() {
+    const usageType = document.querySelector('input[name="usage_type"]:checked').value;
+    const netUnit = document.getElementById('net_unit').value;
+    const pricePerTypeLabel = document.getElementById('pricePerTypeLabel');
+    const pricePerUnitLabel = document.getElementById('pricePerUnitLabel');
+    
+    if (pricePerTypeLabel) {
+        pricePerTypeLabel.textContent = usageType === 'weight' ? 'Weight' : 'Volume';
+    }
+    
+    if (pricePerUnitLabel && netUnit) {
+        pricePerUnitLabel.textContent = netUnit;
+    }
+}
+
+// Calculate total cost from price per unit
+function calculateTotalFromPricePerUnit() {
+    const checkbox = document.getElementById('use_price_per_weight_volume');
+    if (!checkbox.checked) return;
+    
+    const pricePerUnit = parseFloat(document.getElementById('price_per_weight_volume').value) || 0;
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    
+    let totalAmount = 0;
+    
+    if (purchaseType === 'case' && netItem > 0 && itemsPerCase > 0) {
+        totalAmount = netItem * itemsPerCase;
+    } else if (purchaseType === 'single' && netItem > 0) {
+        totalAmount = netItem;
+    }
+    
+    if (pricePerUnit > 0 && totalAmount > 0) {
+        const totalCost = pricePerUnit * totalAmount;
+        document.getElementById('calculated_total_cost').value = totalCost.toFixed(2);
+        document.getElementById('purchase_total_cost').value = totalCost.toFixed(2);
+        calculateCostPreview();
+    } else {
+        document.getElementById('calculated_total_cost').value = '';
+    }
+}
+
+// Sync price per unit when total cost is manually changed
+function syncPricePerUnit() {
+    const checkbox = document.getElementById('use_price_per_weight_volume');
+    if (!checkbox.checked) return;
+    
+    const totalCost = parseFloat(document.getElementById('purchase_total_cost').value) || 0;
+    const netItem = parseFloat(document.getElementById('net_weight_volume_item').value) || 0;
+    const purchaseType = document.querySelector('input[name="purchase_type"]:checked').value;
+    const itemsPerCase = parseInt(document.getElementById('items_per_case').value) || 0;
+    
+    let totalAmount = 0;
+    
+    if (purchaseType === 'case' && netItem > 0 && itemsPerCase > 0) {
+        totalAmount = netItem * itemsPerCase;
+    } else if (purchaseType === 'single' && netItem > 0) {
+        totalAmount = netItem;
+    }
+    
+    if (totalCost > 0 && totalAmount > 0) {
+        const pricePerUnit = totalCost / totalAmount;
+        document.getElementById('price_per_weight_volume').value = pricePerUnit.toFixed(4);
+        document.getElementById('calculated_total_cost').value = totalCost.toFixed(2);
+    }
 });
 </script>
 {% endblock %}
