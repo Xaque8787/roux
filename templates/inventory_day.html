@@ -25,16 +25,11 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5><i class="fas fa-save"></i> Update Inventory & Generate Tasks</h5>
-                    {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
-                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#manualTaskModal">
-                        <i class="fas fa-plus"></i> Add Manual Task
-                    </button>
-                    {% endif %}
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-sync"></i> Update & Generate Tasks
                         </button>
-                        <button type="button" class="btn btn-warning" onclick="showRegenerateModal()">
+                        <button type="button" class="btn btn-danger" onclick="showRegenerateModal()">
                             <i class="fas fa-exclamation-triangle"></i> Regenerate All Tasks
                         </button>
                     </div>
@@ -124,14 +119,14 @@
                                 </td>
                                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
                                 <td>
-                                    <div class="form-check">
+                                    <div class="form-check" style="font-size: 0.8em;">
                                         <input class="form-check-input override-checkbox" type="checkbox" 
                                                name="override_create_{{ day_item.inventory_item.id }}" 
                                                form="inventoryForm" data-type="force"
                                                {% if day_item.override_create_task %}checked{% endif %}>
                                         <label class="form-check-label">Force</label>
                                     </div>
-                                    <div class="form-check">
+                                    <div class="form-check" style="font-size: 0.8em;">
                                         <input class="form-check-input override-checkbox" type="checkbox" 
                                                name="override_no_task_{{ day_item.inventory_item.id }}" 
                                                form="inventoryForm" data-type="skip"
@@ -150,11 +145,8 @@
         
         {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card mt-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header">
                 <h5><i class="fas fa-broom"></i> Janitorial Tasks</h5>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#manualTaskModal">
-                    <i class="fas fa-plus"></i> Add Manual Task
-                </button>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -208,8 +200,13 @@
     <!-- Right Column: Tasks -->
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-tasks"></i> Tasks</h5>
+                {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#manualTaskModal">
+                    <i class="fas fa-plus"></i> Add Manual Task
+                </button>
+                {% endif %}
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -241,9 +238,6 @@
                                         🔘
                                     {% endif %}
                                     <small>{{ task.description }}</small>
-                                    {% if task.batch %}
-                                        <br><small class="text-muted">Linked Batch: {{ task.batch.recipe.name }}</small>
-                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if task.assigned_employee_ids %}
@@ -287,6 +281,8 @@
                                 <td>
                                     {% if task.status == "in_progress" %}
                                         <span class="timer" data-task-id="{{ task.id }}" data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" data-pause-time="{{ task.total_pause_time }}">0m</span>
+                                    {% elif task.status == "paused" %}
+                                        {{ task.total_time_minutes }}m (paused)
                                     {% elif task.started_at %}
                                         {{ task.total_time_minutes }}m
                                     {% else %}
@@ -432,15 +428,439 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title text-warning">
+                <h5 class="modal-title text-danger">
                     <i class="fas fa-exclamation-triangle"></i> Regenerate All Tasks
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-warning">
+                <div class="alert alert-danger">
                     <strong>Warning:</strong> This will delete ALL tasks for this day, including:
                     <ul class="mb-0 mt-2">
                         <li>Tasks that are currently in progress</li>
                         <li>Tasks that have been completed</li>
-                        <li>Manual
+                        <li>Manual tasks that were added</li>
+                        <li>All time tracking data</li>
+                    </ul>
+                </div>
+                <p>This action cannot be undone. Are you sure you want to proceed?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" style="display: inline;">
+                    <input type="hidden" name="force_regenerate" value="true">
+                    <input type="hidden" name="global_notes" value="{{ inventory_day.global_notes or '' }}">
+                    {% for day_item in inventory_day_items %}
+                    <input type="hidden" name="item_{{ day_item.inventory_item.id }}" value="{{ day_item.quantity }}">
+                    {% if day_item.override_create_task %}
+                    <input type="hidden" name="override_create_{{ day_item.inventory_item.id }}" value="on">
+                    {% endif %}
+                    {% if day_item.override_no_task %}
+                    <input type="hidden" name="override_no_task_{{ day_item.inventory_item.id }}" value="on">
+                    {% endif %}
+                    {% endfor %}
+                    {% for janitorial_day_item in janitorial_day_items %}
+                    {% if janitorial_day_item.include_task %}
+                    <input type="hidden" name="janitorial_{{ janitorial_day_item.janitorial_task.id }}" value="on">
+                    {% endif %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Yes, Regenerate All Tasks
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manual Task Modal -->
+<div class="modal fade" id="manualTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Manual Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Task Description</label>
+                        <input type="text" class="form-control" id="description" name="description" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="inventory_item_id" class="form-label">Linked Inventory Item (Optional)</label>
+                        <select class="form-select" id="inventory_item_id" name="inventory_item_id">
+                            <option value="">No inventory item</option>
+                            {% for day_item in inventory_day_items %}
+                            <option value="{{ day_item.inventory_item.id }}">{{ day_item.inventory_item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="batch_id" class="form-label">Linked Batch (Optional)</label>
+                        <select class="form-select" id="batch_id" name="batch_id">
+                            <option value="">No batch</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch.id }}">{{ batch.recipe.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category (Optional)</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">No category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.icon or '🔘' }} {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Assign To (Optional)</label>
+                        {% for employee in employees %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_emp{{ employee.id }}">
+                            <label class="form-check-label" for="assign_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Employee Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Employee(s)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Task:</strong> <span id="assignTaskDescription"></span></p>
+                <div class="mb-3">
+                    <label class="form-label">Select Employee(s):</label>
+                    {% for employee in employees %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_modal_emp{{ employee.id }}">
+                        <label class="form-check-label" for="assign_modal_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitAssignment()">Assign</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentAssignTaskId = null;
+
+// Timer functionality
+function updateTimers() {
+    const timers = document.querySelectorAll('.timer');
+    timers.forEach(timer => {
+        const taskId = timer.dataset.taskId;
+        const startedAt = timer.dataset.startedAt;
+        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
+        
+        if (startedAt) {
+            const startTime = new Date(startedAt);
+            const now = new Date();
+            const elapsedMs = now.getTime() - startTime.getTime();
+            const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000) - Math.floor(pauseTime / 60));
+            
+            if (elapsedMinutes >= 60) {
+                const hours = Math.floor(elapsedMinutes / 60);
+                const minutes = elapsedMinutes % 60;
+                timer.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
+            } else {
+                timer.textContent = `${elapsedMinutes}m`;
+            }
+        }
+    });
+}
+
+// SSE Connection for real-time updates
+let eventSource = null;
+
+function connectSSE() {
+    if (eventSource) {
+        eventSource.close();
+    }
+    
+    eventSource = new EventSource(`/events/inventory/{{ inventory_day.id }}`);
+    
+    eventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('SSE received:', data);
+            
+            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated') {
+                // Reload page to show updates
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            }
+        } catch (error) {
+            console.error('Error parsing SSE data:', error);
+        }
+    };
+    
+    eventSource.onerror = function(error) {
+        console.error('SSE error:', error);
+        // Reconnect after 5 seconds
+        setTimeout(connectSSE, 5000);
+    };
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Start timer updates
+    updateTimers();
+    setInterval(updateTimers, 10000); // Update every 10 seconds
+    
+    // Connect to SSE
+    connectSSE();
+    
+    // Override checkbox logic
+    document.querySelectorAll('.override-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                const itemId = this.name.match(/\d+/)[0];
+                const type = this.dataset.type;
+                
+                // Uncheck the opposite checkbox
+                const oppositeType = type === 'force' ? 'skip' : 'force';
+                const oppositeCheckbox = document.querySelector(`input[name*="${itemId}"][data-type="${oppositeType}"]`);
+                if (oppositeCheckbox) {
+                    oppositeCheckbox.checked = false;
+                }
+            }
+        });
+    });
+});
+
+// Show regenerate modal
+function showRegenerateModal() {
+    const modal = new bootstrap.Modal(document.getElementById('regenerateModal'));
+    modal.show();
+}
+
+// Show assign modal
+function showAssignModal(taskId, description) {
+    currentAssignTaskId = taskId;
+    document.getElementById('assignTaskDescription').textContent = description;
+    
+    // Clear previous selections
+    document.querySelectorAll('#assignModal input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    const modal = new bootstrap.Modal(document.getElementById('assignModal'));
+    modal.show();
+}
+
+// Submit assignment
+function submitAssignment() {
+    const selectedEmployees = [];
+    document.querySelectorAll('#assignModal input[type="checkbox"]:checked').forEach(cb => {
+        selectedEmployees.push(cb.value);
+    });
+    
+    if (selectedEmployees.length === 0) {
+        alert('Please select at least one employee.');
+        return;
+    }
+    
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${currentAssignTaskId}/assign_multiple`;
+    form.style.display = 'none';
+    
+    selectedEmployees.forEach(empId => {
+        const input = document.createElement('input');
+        input.name = 'assigned_to_ids';
+        input.value = empId;
+        form.appendChild(input);
+    });
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Scale Selection Modal
+function showScaleSelection(taskId, recipeName) {
+    fetch(`/api/tasks/${taskId}/scale_options`)
+        .then(response => response.json())
+        .then(scales => {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Select Batch Scale - ${recipeName}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Select batch scale to make:</label>
+                                <select class="form-select" id="scaleSelect" required>
+                                    <option value="">Choose scale...</option>
+                                    ${scales.map(scale => 
+                                        `<option value="${scale.key}" data-yield="${scale.yield}">${scale.label} - ${scale.yield}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale(${taskId})">Start Task</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+            
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading scale options:', error);
+            alert('Error loading scale options');
+        });
+}
+
+function startTaskWithScale(taskId) {
+    const scaleSelect = document.getElementById('scaleSelect');
+    const selectedScale = scaleSelect.value;
+    
+    if (!selectedScale) {
+        alert('Please select a batch scale');
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
+    form.style.display = 'none';
+    
+    const scaleInput = document.createElement('input');
+    scaleInput.name = 'selected_scale';
+    scaleInput.value = selectedScale;
+    
+    form.appendChild(scaleInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Made Amount Input Modal
+function showMadeAmountInput(taskId, recipeName) {
+    fetch(`/api/tasks/${taskId}/finish_requirements`)
+        .then(response => response.json())
+        .then(data => {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Enter Amount Made - ${recipeName}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Amount Made:</label>
+                                <div class="row">
+                                    <div class="col-8">
+                                        <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="form-control-plaintext">
+                                            ${data.use_par_unit ? data.par_unit_name : 'units'}
+                                        </div>
+                                        <input type="hidden" id="madeUnit" value="${data.use_par_unit ? data.par_unit_name : 'units'}">
+                                    </div>
+                                </div>
+                                ${data.par_unit_equals_info ? `
+                                <small class="text-info">${data.par_unit_equals_info.description}</small>
+                                ` : ''}
+                            </div>
+                            ${data.inventory_info ? `
+                            <div class="alert alert-info">
+                                <small>
+                                    <strong>Current Inventory:</strong> ${data.inventory_info.current} ${data.inventory_info.par_unit_name}<br>
+                                    <strong>Par Level:</strong> ${data.inventory_info.par_level} ${data.inventory_info.par_unit_name}
+                                </small>
+                            </div>
+                            ` : ''}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount(${taskId})">Finish Task</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+            
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading finish requirements:', error);
+            alert('Error loading task requirements');
+        });
+}
+
+function finishTaskWithAmount(taskId) {
+    const madeAmount = document.getElementById('madeAmount').value;
+    const madeUnit = document.getElementById('madeUnit').value;
+    
+    if (!madeAmount) {
+        alert('Please enter amount made');
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
+    form.style.display = 'none';
+    
+    const amountInput = document.createElement('input');
+    amountInput.name = 'made_amount';
+    amountInput.value = madeAmount;
+    
+    const unitInput = document.createElement('input');
+    unitInput.name = 'made_unit';
+    unitInput.value = madeUnit;
+    
+    form.appendChild(amountInput);
+    form.appendChild(unitInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+{% endblock %}
