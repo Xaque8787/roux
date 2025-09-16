@@ -193,6 +193,8 @@ async def update_ingredient(
     ingredient.purchase_total_cost = final_purchase_cost
     ingredient.breakable_case = breakable_case
     ingredient.use_item_count_pricing = use_item_count_pricing
+    ingredient.uses_price_per_weight_volume = uses_price_per_weight_volume
+    ingredient.price_per_weight_volume = price_per_weight_volume if uses_price_per_weight_volume else None
     ingredient.net_weight_volume_item = net_weight_volume_item if not use_item_count_pricing else None
     ingredient.net_unit = net_unit if not use_item_count_pricing else None
     ingredient.has_baking_conversion = has_baking_conversion
