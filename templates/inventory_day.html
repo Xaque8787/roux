@@ -588,6 +588,23 @@ let eventSource = null;
 let timers = new Map();
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Handle override checkbox mutual exclusion
+    document.querySelectorAll('.override-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                const itemId = this.dataset.itemId;
+                const type = this.dataset.type;
+                
+                // Uncheck the opposite checkbox for the same item
+                const oppositeType = type === 'force' ? 'skip' : 'force';
+                const oppositeCheckbox = document.querySelector(`input[data-item-id="${itemId}"][data-type="${oppositeType}"]`);
+                if (oppositeCheckbox) {
+                    oppositeCheckbox.checked = false;
+                }
+            }
+        });
+    });
+    
     console.log('Inventory day page loaded');
     
     // Initialize SSE connection
@@ -949,11 +966,7 @@ function showMadeAmountInput(taskId, recipeName) {
                         <div class="modal-header">
                             <h5 class="modal-title">Enter Amount Made - ${recipeName}</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label for="madeAmount" class="form-label">Amount Made</label>
-                                <div class="input-group">
+                                        <label class="form-check-label" for="assign_emp{{ emp.id }}">{{ emp.full_name or emp.username }}</label>
                                     <input type="number" class="form-control" id="madeAmount" step="0.01" min="0" required>
                                     <span class="input-group-text">${data.par_unit_name || 'units'}</span>
                                 </div>
@@ -1037,39 +1050,6 @@ function showRegenerateModal() {
     const modal = new bootstrap.Modal(document.getElementById('regenerateModal'));
     modal.show();
 }
-
-// Real-time timer updates
-function updateTimers() {
-    document.querySelectorAll('.task-timer').forEach(timer => {
-        const taskId = timer.dataset.taskId;
-        const startTime = timer.dataset.startTime;
-        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
-        const isPaused = timer.dataset.isPaused === 'true';
-        
-        if (!startTime || isPaused) {
-            return; // Skip if no start time or task is paused
-        }
-        
-        const now = new Date();
-        const start = new Date(startTime);
-        const elapsedMs = now - start - (pauseTime * 1000); // Convert pause time to milliseconds
-        const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
-        
-        if (elapsedMinutes < 60) {
-            timer.textContent = `${elapsedMinutes}m`;
-        } else {
-            const hours = Math.floor(elapsedMinutes / 60);
-            const minutes = elapsedMinutes % 60;
-            timer.textContent = `${hours}:${minutes.toString().padStart(2, '0')}h`;
-        }
-    });
-}
-
-// Update timers every 30 seconds for better performance
-setInterval(updateTimers, 30000);
-
-// Initial timer update
-updateTimers();
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', function() {
