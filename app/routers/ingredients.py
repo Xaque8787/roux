@@ -145,12 +145,15 @@ async def update_ingredient(
     ingredient_id: int,
     request: Request,
     name: str = Form(...),
+    usage_type: str = Form(...),
     category_id: int = Form(None),
     vendor_id: int = Form(None),
     purchase_type: str = Form(...),
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
     use_item_count_pricing: bool = Form(False),
+    uses_price_per_weight_volume: bool = Form(False),
+    price_per_weight_volume: float = Form(None),
     net_weight_volume_item: float = Form(None),
     net_unit: str = Form(None),
     purchase_total_cost: float = Form(None),
@@ -185,6 +188,7 @@ async def update_ingredient(
     final_purchase_cost = purchase_total_cost_item if use_item_count_pricing else purchase_total_cost
     
     ingredient.name = name
+    ingredient.usage_type = usage_type
     ingredient.category_id = category_id if category_id else None
     ingredient.vendor_id = vendor_id if vendor_id else None
     ingredient.vendor_unit_id = vendor_unit_id if vendor_unit_id else None
@@ -193,8 +197,6 @@ async def update_ingredient(
     ingredient.purchase_total_cost = final_purchase_cost
     ingredient.breakable_case = breakable_case
     ingredient.use_item_count_pricing = use_item_count_pricing
-    ingredient.uses_price_per_weight_volume = uses_price_per_weight_volume
-    ingredient.price_per_weight_volume = price_per_weight_volume if uses_price_per_weight_volume else None
     ingredient.uses_price_per_weight_volume = uses_price_per_weight_volume
     ingredient.price_per_weight_volume = price_per_weight_volume if uses_price_per_weight_volume else None
     ingredient.net_weight_volume_item = net_weight_volume_item if not use_item_count_pricing else None
