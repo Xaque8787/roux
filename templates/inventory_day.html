@@ -605,12 +605,15 @@ function updateTimers() {
         if (startedAt) {
             const startTime = new Date(startedAt);
             const now = new Date();
-            let elapsedMs = now.getTime() - startTime.getTime();
+            let elapsedMs;
             
-            // If task is paused, calculate time up to pause point
             if (isPaused && pausedAt) {
+                // If task is paused, calculate time up to pause point
                 const pauseTime = new Date(pausedAt);
                 elapsedMs = pauseTime.getTime() - startTime.getTime();
+            } else {
+                // Task is running, calculate current elapsed time
+                elapsedMs = now.getTime() - startTime.getTime();
             }
             
             // Subtract total pause time (in seconds, convert to ms)
@@ -629,7 +632,7 @@ function updateTimers() {
             }
             
             timer.textContent = timeText;
-            console.log(`Updated timer for task ${taskId}: ${timeText}`);
+            console.log(`Updated timer for task ${taskId}: ${timeText} (running: ${isRunning}, paused: ${isPaused})`);
         } else {
             timer.textContent = '0:00';
         }
