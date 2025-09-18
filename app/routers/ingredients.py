@@ -38,6 +38,8 @@ async def create_ingredient(
     purchase_unit_name: str = Form(...),
     vendor_unit_id: int = Form(None),
     use_item_count_pricing: bool = Form(False),
+    uses_price_per_weight_volume: bool = Form(False),
+    price_per_weight_volume: float = Form(None),
     net_weight_volume_item: float = Form(None),
     net_unit: str = Form(...),
     purchase_total_cost: float = Form(None),
@@ -78,6 +80,8 @@ async def create_ingredient(
         purchase_total_cost=final_purchase_cost,
         breakable_case=breakable_case,
         use_item_count_pricing=use_item_count_pricing,
+        uses_price_per_weight_volume=uses_price_per_weight_volume,
+        price_per_weight_volume=price_per_weight_volume if uses_price_per_weight_volume else None,
         net_weight_volume_item=net_weight_volume_item if not use_item_count_pricing else None,
         net_unit=net_unit if not use_item_count_pricing else None,
         has_baking_conversion=has_baking_conversion
