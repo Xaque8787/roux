@@ -316,6 +316,7 @@
                                 <th data-sortable data-sort-type="text">Purchase Info</th>
                                 <th data-sortable data-sort-type="text">Net Amount</th>
                                 <th data-sortable data-sort-type="currency">Total Cost</th>
+                                <th data-sortable data-sort-type="text">Vendor</th>
                                 <th data-sortable data-sort-type="text">Category</th>
                                 <th>Actions</th>
                             </tr>
@@ -366,6 +367,7 @@
                                     </small>
                                 </td>
                                 <td>${{ "%.2f"|format(ing.purchase_total_cost) }}</td>
+                                <td>{{ ing.vendor.name if ing.vendor else '-' }}</td>
                                 <td>{{ ing.category.name if ing.category else '-' }}</td>
                                 <td>
                                     <a href="/ingredients/{{ ing.id }}" class="btn btn-sm btn-info">

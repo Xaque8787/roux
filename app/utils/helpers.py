@@ -26,6 +26,8 @@ def create_default_categories(db: Session):
         ("Beverages", "ingredient", "🥤", "#17a2b8"),
         ("Spices & Seasoning", "ingredient", "🌶️", "#dc3545"),
         ("Cleaning & Non-Food", "ingredient", "🧼", "#6c757d"),
+        ("Paper Goods", "ingredient", "📦", "#6c757d"),
+        ("Condiments", "ingredient", "🌭", "#dc3545"),
         ("General", "ingredient", "✅", "#28a745"),
         
         # Batches
