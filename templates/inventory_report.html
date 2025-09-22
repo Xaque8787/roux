@@ -106,7 +106,11 @@
                             {% for task in tasks %}
                             <tr>
                                 <td>
-                                    <small>{{ task.description }}</small>
+                                   {% set task_identifier = task.inventory_item.name.lower().replace(' ', '_')|regex_replace('[^a-z0-9_]', '') if task.inventory_item else (task.janitorial_task.title.lower().replace(' ', '_')|regex_replace('[^a-z0-9_]', '') if task.janitorial_task else 'manual_' + task.id|string) %}
+                                   {% if not task.auto_generated and task.inventory_item %}
+                                       {% set task_identifier = task_identifier + '_manual' %}
+                                   {% endif %}
+                                   <a href="/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/{{ task_identifier }}" class="btn btn-sm btn-outline-info">
                                 </td>
                                 <td>
                                     {% if task.assigned_to %}

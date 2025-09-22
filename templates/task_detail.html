@@ -6,7 +6,7 @@
 <div class="row">
     <div class="col-12">
         <h1><i class="fas fa-tasks"></i> Task Details</h1>
-        <a href="/inventory/day/{{ inventory_day.id }}" class="btn btn-secondary mb-3">
+        <a href="/inventory/day/{{ inventory_day.date.isoformat() }}" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Inventory Day
         </a>
     </div>
@@ -57,7 +57,7 @@
                                 <span class="badge bg-primary">In Progress</span>
                             {% elif task.status == "paused" %}
                                 {% if task.requires_made_amount %}
-                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput('{{ task_identifier }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                     <i class="fas fa-check"></i> Finish & Enter Amount
                                 </button>
                                 {% else %}
@@ -269,24 +269,24 @@
                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
                 <div class="d-grid gap-2">
                     {% if task.status == "not_started" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/{{ task_identifier }}/start">
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-play"></i> Start Task
                         </button>
                     </form>
                     {% elif task.status == "in_progress" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/{{ task_identifier }}/pause">
                         <button type="submit" class="btn btn-warning w-100">
                             <i class="fas fa-pause"></i> Pause Task
                         </button>
                     </form>
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/{{ task_identifier }}/finish">
                         <button type="submit" class="btn btn-success w-100">
                             <i class="fas fa-check"></i> Finish Task
                         </button>
                     </form>
                     {% elif task.status == "paused" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/{{ task_identifier }}/resume">
                         <button type="submit" class="btn btn-info w-100">
                             <i class="fas fa-play"></i> Resume Task
                         </button>
@@ -358,7 +358,14 @@
 
 <script>
 // Scale Selection Modal (same as inventory_day.html)
-function showScaleSelection(taskId, recipeName) {
+function showScaleSelection(taskIdentifier, recipeName) {
+    // We need to get the task ID from the identifier for the API call
+    const taskId = getTaskIdFromIdentifier(taskIdentifier);
+    if (!taskId) {
+        alert('Error: Could not find task ID');
+        return;
+    }
+    
     fetch(`/api/tasks/${taskId}/scale_options`)
         .then(response => response.json())
         .then(scales => {
@@ -384,7 +391,7 @@ function showScaleSelection(taskId, recipeName) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale(${taskId})">Start Task</button>
+                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale('${taskIdentifier}')">Start Task</button>
                         </div>
                     </div>
                 </div>
@@ -404,7 +411,7 @@ function showScaleSelection(taskId, recipeName) {
         });
 }
 
-function startTaskWithScale(taskId) {
+function startTaskWithScale(taskIdentifier) {
     const scaleSelect = document.getElementById('scaleSelect');
     const selectedScale = scaleSelect.value;
     
@@ -415,7 +422,7 @@ function startTaskWithScale(taskId) {
     
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
+    form.action = `/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/${taskIdentifier}/start_with_scale`;
     form.style.display = 'none';
     
     const scaleInput = document.createElement('input');
@@ -428,7 +435,14 @@ function startTaskWithScale(taskId) {
 }
 
 // Made Amount Input Modal (same as inventory_day.html)
-function showMadeAmountInput(taskId, recipeName) {
+function showMadeAmountInput(taskIdentifier, recipeName) {
+    // We need to get the task ID from the identifier for the API call
+    const taskId = getTaskIdFromIdentifier(taskIdentifier);
+    if (!taskId) {
+        alert('Error: Could not find task ID');
+        return;
+    }
+    
     fetch(`/api/tasks/${taskId}/finish_requirements`)
         .then(response => response.json())
         .then(data => {
@@ -472,7 +486,7 @@ function showMadeAmountInput(taskId, recipeName) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount(${taskId})">Finish Task</button>
+                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount('${taskIdentifier}')">Finish Task</button>
                         </div>
                     </div>
                 </div>
@@ -492,7 +506,7 @@ function showMadeAmountInput(taskId, recipeName) {
         });
 }
 
-function finishTaskWithAmount(taskId) {
+function finishTaskWithAmount(taskIdentifier) {
     const madeAmount = document.getElementById('madeAmount').value;
     const madeUnitInput = document.getElementById('madeUnit');
     
@@ -505,7 +519,7 @@ function finishTaskWithAmount(taskId) {
     
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
+    form.action = `/inventory/day/{{ inventory_day.date.isoformat() }}/tasks/${taskIdentifier}/finish_with_amount`;
     form.style.display = 'none';
     
     const amountInput = document.createElement('input');
@@ -520,6 +534,19 @@ function finishTaskWithAmount(taskId) {
     form.appendChild(unitInput);
     document.body.appendChild(form);
     form.submit();
+}
+
+// Helper function to get task ID from identifier (for API calls that still need numeric IDs)
+function getTaskIdFromIdentifier(taskIdentifier) {
+    // This would need to be populated from the server side
+    // For now, we'll extract from the current page context
+    const tasks = document.querySelectorAll('[data-task-identifier]');
+    for (const taskElement of tasks) {
+        if (taskElement.dataset.taskIdentifier === taskIdentifier) {
+            return parseInt(taskElement.dataset.taskId);
+        }
+    }
+    return null;
 }
 </script>
 {% endblock %}
