@@ -932,7 +932,7 @@ async def inventory_day_detail(day_date: str, request: Request, db: Session = De
         elif task.janitorial_task:
             task_identifier = generate_task_identifier("janitorial", task.janitorial_task.title)
         else:
-            task_identifier = f"manual_{task.id}"
+            task_identifier = generate_task_identifier("manual", task.description, True)
         
         task_identifiers[task.id] = task_identifier
     
