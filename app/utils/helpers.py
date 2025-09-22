@@ -367,3 +367,35 @@ def get_inventory_day_by_date(db: Session, day_date: str):
         return db.query(InventoryDay).filter(InventoryDay.date == date_obj).first()
     except ValueError:
         return None
+
+def get_inventory_item_by_identifier(db: Session, item_identifier: str):
+    """Get inventory item by identifier (ID or clean name)"""
+    from ..models import InventoryItem
+    
+    # Try to find item by ID first (for backward compatibility)
+    try:
+        item_id = int(item_identifier)
+        return db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    except ValueError:
+        # Not a number, try to find by name
+        clean_name = item_identifier.replace('_', ' ')
+        return db.query(InventoryItem).filter(InventoryItem.name.ilike(clean_name)).first()
+
+def generate_inventory_item_identifier(item_name: str) -> str:
+    """Generate a clean identifier for inventory items"""
+    clean_name = item_name.lower()
+    clean_name = clean_name.replace(' ', '_')
+    clean_name = clean_name.replace('-', '_')
+    clean_name = re.sub(r'[^a-z0-9_]', '', clean_name)
+    
+    # Remove multiple consecutive underscores
+    clean_name = re.sub(r'_+', '_', clean_name)
+    
+    # Remove leading/trailing underscores
+    clean_name = clean_name.strip('_')
+    
+    # Ensure we have something
+    if not clean_name:
+        clean_name = 'unnamed_item'
+    
+    return clean_name
