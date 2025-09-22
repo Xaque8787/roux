@@ -7,7 +7,7 @@ from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay,
                      InventoryDayItem, Task, User, JanitorialTask, JanitorialTaskDay)
-from ..utils.helpers import get_today_date, generate_task_identifier, get_task_by_identifier, get_inventory_day_by_date
+from ..utils.helpers import get_today_date
 from datetime import datetime
 
 # Import SSE broadcasting functions
@@ -137,7 +137,7 @@ async def create_inventory_day(
     # Check if day already exists
     existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date_obj).first()
     if existing_day:
-        return RedirectResponse(url=f"/inventory/day/{existing_day.date.isoformat()}", status_code=302)
+        return RedirectResponse(url=f"/inventory/day/{existing_day.id}", status_code=302)
     
     # Create new inventory day
     inventory_day = InventoryDay(
@@ -173,7 +173,7 @@ async def create_inventory_day(
     
     # Broadcast day creation
     try:
-        await broadcast_day_update_by_date(inventory_date_obj.isoformat(), "day_created", {
+        await broadcast_day_update(inventory_day.id, "day_created", {
             "date": inventory_date_obj.isoformat(),
             "employees_working": inventory_day.employees_working
         })
@@ -183,18 +183,18 @@ async def create_inventory_day(
         # Don't fail the request if broadcasting fails
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{inventory_date_obj.isoformat()}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
 
-@router.post("/day/{day_date}/update")
+@router.post("/day/{day_id}/update")
 async def update_inventory_day(
-    day_date: str,
+    day_id: int,
     request: Request,
     global_notes: str = Form(""),
     force_regenerate: bool = Form(False),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    inventory_day = get_inventory_day_by_date(db, day_date)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
@@ -208,8 +208,8 @@ async def update_inventory_day(
     form_data = await request.form()
     
     # Process inventory item quantities
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == inventory_day.id).all()
-    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == inventory_day.id).all()
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
     
     for day_item in inventory_day_items:
         item_key = f"item_{day_item.inventory_item_id}"
@@ -258,20 +258,11 @@ async def update_inventory_day(
     # Broadcast task generation AFTER committing to get accurate task data
     try:
         # Get all tasks to broadcast (including newly created ones)
-        new_tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
+        new_tasks = db.query(Task).filter(Task.day_id == day_id).all()
         tasks_data = []
         for task in new_tasks:
-            # Generate task identifier for each task
-            if task.inventory_item:
-                task_identifier = generate_task_identifier("inventory", task.inventory_item.name, not task.auto_generated)
-            elif task.janitorial_task:
-                task_identifier = generate_task_identifier("janitorial", task.janitorial_task.title)
-            else:
-                task_identifier = f"manual_{task.id}"
-            
             task_info = {
                 "id": task.id,
-                "identifier": task_identifier,
                 "description": task.description,
                 "status": task.status,
                 "auto_generated": task.auto_generated,
@@ -292,11 +283,11 @@ async def update_inventory_day(
         print(f"❌ Error broadcasting task generation: {e}")
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/new")
+@router.post("/day/{day_id}/tasks/new")
 async def create_manual_task(
-    day_date: str,
+    day_id: int,
     request: Request,
     inventory_item_id: int = Form(None),
     batch_id: int = Form(None),
@@ -305,10 +296,6 @@ async def create_manual_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    inventory_day = get_inventory_day_by_date(db, day_date)
-    if not inventory_day:
-        raise HTTPException(status_code=404, detail="Inventory day not found")
-    
     # Get form data to handle checkbox values
     form_data = await request.form()
     assigned_to_ids = []
@@ -321,12 +308,13 @@ async def create_manual_task(
             except ValueError:
                 continue
     
-    if inventory_day.finalized:
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+    if not inventory_day or inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Cannot add tasks to finalized day")
     
     # Create a single task with multiple employees assigned
     task = Task(
-        day_id=inventory_day.id,
+        day_id=day_id,
         assigned_to_id=assigned_to_ids[0] if assigned_to_ids else None,  # Primary assignee
         inventory_item_id=inventory_item_id if inventory_item_id else None,
         batch_id=batch_id if batch_id else None,  # Direct batch assignment or from inventory item
@@ -352,14 +340,7 @@ async def create_manual_task(
             employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
             assigned_employees = [emp.full_name or emp.username for emp in employees]
         
-        # Generate task identifier
-        if task.inventory_item:
-            task_identifier = generate_task_identifier("inventory", task.inventory_item.name, True)
-        else:
-            task_identifier = f"manual_{task.id}"
-        
-        await broadcast_task_update(inventory_day.id, task.id, "task_created", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task.id, "task_created", {
             "description": task.description,
             "assigned_employees": assigned_employees,
             "inventory_item": task.inventory_item.name if task.inventory_item else None,
@@ -371,17 +352,17 @@ async def create_manual_task(
     except Exception as e:
         print(f"❌ Error broadcasting task creation: {e}")
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/assign")
+@router.post("/day/{day_id}/tasks/{task_id}/assign")
 async def assign_task(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     assigned_to_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -392,27 +373,26 @@ async def assign_task(
     # Broadcast AFTER committing to ensure data is saved
     try:
         assigned_employee = db.query(User).filter(User.id == assigned_to_id).first()
-        await broadcast_task_update(task.day_id, task.id, "task_assigned", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_assigned", {
             "assigned_to": assigned_employee.full_name or assigned_employee.username if assigned_employee else None,
             "assigned_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task assignment for task {task.id}")
+        print(f"✅ Broadcasted task assignment for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/assign_multiple")
+@router.post("/day/{day_id}/tasks/{task_id}/assign_multiple")
 async def assign_multiple_employees_to_task(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     assigned_to_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -434,27 +414,26 @@ async def assign_multiple_employees_to_task(
             employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
             assigned_employees = [emp.full_name or emp.username for emp in employees]
         
-        await broadcast_task_update(task.day_id, task.id, "task_assigned", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_assigned", {
             "assigned_employees": assigned_employees,
             "primary_assignee": assigned_employees[0] if assigned_employees else None,
             "team_size": len(assigned_employees),
             "assigned_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task assignment for task {task.id}")
+        print(f"✅ Broadcasted task assignment for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task assignment: {e}")
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/start")
+@router.post("/day/{day_id}/tasks/{task_id}/start")
 async def start_task(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -467,27 +446,26 @@ async def start_task(
     
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(task.day_id, task.id, "task_started", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_started", {
             "started_at": datetime.utcnow().isoformat(),
             "started_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task start for task {task.id}")
+        print(f"✅ Broadcasted task start for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task start: {e}")
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/start_with_scale")
+@router.post("/day/{day_id}/tasks/{task_id}/start_with_scale")
 async def start_task_with_scale(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     selected_scale: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -515,27 +493,26 @@ async def start_task_with_scale(
     
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(task.day_id, task.id, "task_started", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_started", {
             "started_at": datetime.utcnow().isoformat(),
             "started_by": current_user.full_name or current_user.username,
             "scale": selected_scale
         })
-        print(f"✅ Broadcasted task start with scale for task {task.id}")
+        print(f"✅ Broadcasted task start with scale for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task start: {e}")
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/pause")
+@router.post("/day/{day_id}/tasks/{task_id}/pause")
 async def pause_task(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -548,26 +525,25 @@ async def pause_task(
     
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(task.day_id, task.id, "task_paused", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_paused", {
             "paused_at": datetime.utcnow().isoformat(),
             "paused_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
-        print(f"✅ Broadcasted task pause for task {task.id}")
+        print(f"✅ Broadcasted task pause for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task pause: {e}")
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/resume")
+@router.post("/day/{day_id}/tasks/{task_id}/resume")
 async def resume_task(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -585,26 +561,25 @@ async def resume_task(
     
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(task.day_id, task.id, "task_resumed", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_resumed", {
             "resumed_at": datetime.utcnow().isoformat(),
             "resumed_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
-        print(f"✅ Broadcasted task resume for task {task.id}")
+        print(f"✅ Broadcasted task resume for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task resume: {e}")
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/finish")
+@router.post("/day/{day_id}/tasks/{task_id}/finish")
 async def finish_task(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -629,8 +604,7 @@ async def finish_task(
     
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(task.day_id, task.id, "task_completed", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_completed", {
             "finished_at": datetime.utcnow().isoformat(),
             "total_time": task.total_time_minutes,
             "labor_cost": task.labor_cost,
@@ -638,22 +612,22 @@ async def finish_task(
             "made_amount": task.made_amount,
             "made_unit": task.made_unit
         })
-        print(f"✅ Broadcasted task completion for task {task.id}")
+        print(f"✅ Broadcasted task completion for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/finish_with_amount")
+@router.post("/day/{day_id}/tasks/{task_id}/finish_with_amount")
 async def finish_task_with_amount(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     made_amount: float = Form(...),
     made_unit: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -678,8 +652,7 @@ async def finish_task_with_amount(
     
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(task.day_id, task.id, "task_completed", {
-            "identifier": task_identifier,
+        await broadcast_task_update(day_id, task_id, "task_completed", {
             "finished_at": datetime.utcnow().isoformat(),
             "total_time": task.total_time_minutes,
             "made_amount": task.made_amount,
@@ -687,50 +660,46 @@ async def finish_task_with_amount(
             "labor_cost": task.labor_cost,
             "completed_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task completion with amount for task {task.id}")
+        print(f"✅ Broadcasted task completion with amount for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.post("/day/{day_date}/tasks/{task_identifier}/notes")
+@router.post("/day/{day_id}/tasks/{task_id}/notes")
 async def update_task_notes(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     notes: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
     task.notes = notes
     db.commit()
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}/tasks/{task_identifier}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}/tasks/{task_id}", status_code=302)
 
-@router.get("/day/{day_date}/tasks/{task_identifier}", response_class=HTMLResponse)
+@router.get("/day/{day_id}/tasks/{task_id}", response_class=HTMLResponse)
 async def task_detail(
-    day_date: str,
-    task_identifier: str,
+    day_id: int,
+    task_id: int,
     request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    inventory_day = get_inventory_day_by_date(db, day_date)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
-    task = get_task_by_identifier(db, day_date, task_identifier)
+    task = db.query(Task).options(
+        joinedload(Task.batch).joinedload(Batch.recipe)
+    ).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Load relationships
-    if task.batch:
-        db.refresh(task, ['batch'])
-        if task.batch.recipe:
-            db.refresh(task.batch, ['recipe'])
     
     employees = db.query(User).filter(User.is_active == True).all()
     
@@ -744,18 +713,17 @@ async def task_detail(
         "current_user": current_user,
         "inventory_day": inventory_day,
         "task": task,
-        "task_identifier": task_identifier,
         "employees": employees,
         "task_summary": task_summary
     })
 
-@router.post("/day/{day_date}/finalize")
+@router.post("/day/{day_id}/finalize")
 async def finalize_inventory_day(
-    day_date: str,
+    day_id: int,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    inventory_day = get_inventory_day_by_date(db, day_date)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
@@ -767,32 +735,32 @@ async def finalize_inventory_day(
     
     # Broadcast day finalization
     try:
-        await broadcast_day_update(inventory_day.id, "day_finalized", {
+        await broadcast_day_update(day_id, "day_finalized", {
             "finalized_at": datetime.utcnow().isoformat()
         })
-        print(f"✅ Broadcasted day finalization for day {inventory_day.id}")
+        print(f"✅ Broadcasted day finalization for day {day_id}")
     except Exception as e:
         print(f"❌ Error broadcasting day finalization: {e}")
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{day_date}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
-@router.get("/reports/{day_date}")
+@router.get("/reports/{day_id}")
 async def inventory_report(
-    day_date: str,
+    day_id: int,
     request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    inventory_day = get_inventory_day_by_date(db, day_date)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
     if not inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Day must be finalized to view report")
     
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == inventory_day.id).all()
-    tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).all()
     employees = db.query(User).filter(User.is_active == True).all()
     
     # Calculate statistics
@@ -904,51 +872,38 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
             )
             db.add(task)
 
-@router.get("/day/{day_date}", response_class=HTMLResponse)
-async def inventory_day_detail(day_date: str, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    inventory_day = get_inventory_day_by_date(db, day_date)
+@router.get("/day/{day_id}", response_class=HTMLResponse)
+async def inventory_day_detail(day_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
     
-    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == inventory_day.id).all()
-    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == inventory_day.id).all()
-    tasks = db.query(Task).filter(Task.day_id == inventory_day.id).order_by(Task.id).all()
+    inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
+    janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
+    tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
     employees = db.query(User).filter(User.is_active == True).all()
     batches = db.query(Batch).all()  # Add batches for manual task creation
     categories = db.query(Category).filter(Category.type.in_(["batch", "inventory"])).all()
     
     # Calculate task summaries for completed tasks
     task_summaries = {}
-    task_identifiers = {}
     for task in tasks:
         if task.status == "completed" and task.inventory_item:
             summary = calculate_task_summary(task, db)
             if summary:
                 task_summaries[task.id] = summary
-        
-        # Generate task identifier for each task
-        if task.inventory_item:
-            task_identifier = generate_task_identifier("inventory", task.inventory_item.name, not task.auto_generated)
-        elif task.janitorial_task:
-            task_identifier = generate_task_identifier("janitorial", task.janitorial_task.title)
-        else:
-            task_identifier = generate_task_identifier("manual", task.description, True)
-        
-        task_identifiers[task.id] = task_identifier
     
     return templates.TemplateResponse("inventory_day.html", {
         "request": request,
         "current_user": current_user,
         "inventory_day": inventory_day,
-        "day_date": day_date,
         "inventory_day_items": inventory_day_items,
         "janitorial_day_items": janitorial_day_items,
         "tasks": tasks,
         "employees": employees,
         "batches": batches,
         "categories": categories,
-        "task_summaries": task_summaries,
-        "task_identifiers": task_identifiers
+        "task_summaries": task_summaries
     })
 
 def calculate_task_summary(task, db):
@@ -1019,7 +974,6 @@ def calculate_task_summary(task, db):
 @router.get("/items/{item_id}/edit", response_class=HTMLResponse)
 async def inventory_item_edit_page(item_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
@@ -1052,7 +1006,6 @@ async def update_inventory_item(
     current_user = Depends(require_admin)
 ):
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
@@ -1072,7 +1025,6 @@ async def update_inventory_item(
 @router.get("/items/{item_id}/delete")
 async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
