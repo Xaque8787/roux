@@ -173,7 +173,7 @@ async def create_inventory_day(
     
     # Broadcast day creation
     try:
-        await broadcast_day_update(inventory_day.id, "day_created", {
+        await broadcast_day_update_by_date(inventory_date_obj.isoformat(), "day_created", {
             "date": inventory_date_obj.isoformat(),
             "employees_working": inventory_day.employees_working
         })
@@ -183,7 +183,7 @@ async def create_inventory_day(
         # Don't fail the request if broadcasting fails
         pass
     
-    return RedirectResponse(url=f"/inventory/day/{inventory_day.id}", status_code=302)
+    return RedirectResponse(url=f"/inventory/day/{inventory_date_obj.isoformat()}", status_code=302)
 
 @router.post("/day/{day_date}/update")
 async def update_inventory_day(
