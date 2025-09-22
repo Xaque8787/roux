@@ -745,11 +745,20 @@ class Task(Base):
         if self.batch and self.batch.variable_yield:
             return True
         
-        # Inventory items with par unit settings require made amount
+        # Inventory items with par unit settings require made amount ONLY if:
+        # 1. They don't have a linked batch (manual restocking), OR
+        # 2. They have a linked batch with variable yield
         if (self.inventory_item and 
             self.inventory_item.par_unit_name and 
             self.inventory_item.par_unit_equals_type):
-            return True
+            
+            # If inventory item has a linked batch
+            if self.inventory_item.batch:
+                # Only require input if the batch has variable yield
+                return self.inventory_item.batch.variable_yield
+            else:
+                # No linked batch = manual restocking, require input
+                return True
         
         return False
 
