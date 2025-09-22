@@ -299,6 +299,19 @@ def get_task_by_identifier(db: Session, day_date: str, task_identifier: str):
     if not inventory_day:
         return None
     
+    # Handle manual_X pattern (fallback for manual tasks without proper names)
+    if task_identifier.startswith('manual_'):
+        try:
+            task_id = int(task_identifier[7:])  # Remove 'manual_' prefix
+            task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.id == task_id
+            ).first()
+            if task:
+                return task
+        except ValueError:
+            pass
+    
     # Try to find task by identifier
     if task_identifier.endswith('_manual'):
         # Manual task - could be inventory-based or standalone
@@ -306,7 +319,7 @@ def get_task_by_identifier(db: Session, day_date: str, task_identifier: str):
         
         # First try to find by inventory item name
         inventory_item = db.query(InventoryItem).filter(
-            InventoryItem.name.ilike(base_name.replace('_', ' '))
+            InventoryItem.name.ilike(f"%{base_name.replace('_', ' ')}%")
         ).first()
         
         if inventory_item:
@@ -331,7 +344,7 @@ def get_task_by_identifier(db: Session, day_date: str, task_identifier: str):
         # Regular inventory task or janitorial task
         # First try inventory item
         inventory_item = db.query(InventoryItem).filter(
-            InventoryItem.name.ilike(task_identifier.replace('_', ' '))
+            InventoryItem.name.ilike(f"%{task_identifier.replace('_', ' ')}%")
         ).first()
         
         if inventory_item:
@@ -345,7 +358,7 @@ def get_task_by_identifier(db: Session, day_date: str, task_identifier: str):
         
         # Try janitorial task
         janitorial_task = db.query(JanitorialTask).filter(
-            JanitorialTask.title.ilike(task_identifier.replace('_', ' '))
+            JanitorialTask.title.ilike(f"%{task_identifier.replace('_', ' ')}%")
         ).first()
         
         if janitorial_task:
