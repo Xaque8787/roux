@@ -137,7 +137,7 @@ async def create_inventory_day(
     # Check if day already exists
     existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date_obj).first()
     if existing_day:
-        return RedirectResponse(url=f"/inventory/day/{existing_day.id}", status_code=302)
+        return RedirectResponse(url=f"/inventory/day/{existing_day.date.isoformat()}", status_code=302)
     
     # Create new inventory day
     inventory_day = InventoryDay(
