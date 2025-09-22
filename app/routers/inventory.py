@@ -1017,15 +1017,8 @@ def calculate_task_summary(task, db):
     return summary
 
 @router.get("/items/{item_id}/edit", response_class=HTMLResponse)
-async def inventory_item_edit_page(item_identifier: str, request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    # Try to find item by ID first (for backward compatibility), then by name
-    try:
-        item_id = int(item_identifier)
-        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    except ValueError:
-        # Not a number, try to find by name
-        clean_name = item_identifier.replace('_', ' ')
-        item = db.query(InventoryItem).filter(InventoryItem.name.ilike(clean_name)).first()
+async def inventory_item_edit_page(item_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
@@ -1045,7 +1038,7 @@ async def inventory_item_edit_page(item_identifier: str, request: Request, db: S
 
 @router.post("/items/{item_id}/edit")
 async def update_inventory_item(
-    item_identifier: str,
+    item_id: int,
     request: Request,
     name: str = Form(...),
     par_unit_name_id: int = Form(None),
@@ -1058,14 +1051,7 @@ async def update_inventory_item(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
-    # Try to find item by ID first (for backward compatibility), then by name
-    try:
-        item_id = int(item_identifier)
-        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    except ValueError:
-        # Not a number, try to find by name
-        clean_name = item_identifier.replace('_', ' ')
-        item = db.query(InventoryItem).filter(InventoryItem.name.ilike(clean_name)).first()
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
@@ -1084,15 +1070,8 @@ async def update_inventory_item(
     return RedirectResponse(url="/inventory", status_code=302)
 
 @router.get("/items/{item_id}/delete")
-async def delete_inventory_item(item_identifier: str, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    # Try to find item by ID first (for backward compatibility), then by name
-    try:
-        item_id = int(item_identifier)
-        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    except ValueError:
-        # Not a number, try to find by name
-        clean_name = item_identifier.replace('_', ' ')
-        item = db.query(InventoryItem).filter(InventoryItem.name.ilike(clean_name)).first()
+async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
