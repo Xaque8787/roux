@@ -189,6 +189,13 @@ class Ingredient(Base):
         """Get list of available units for this ingredient"""
         units = []
         
+        # If using item count pricing, add item and case units
+        if self.use_item_count_pricing:
+            units.append('item')
+            if self.purchase_type == 'case' and self.items_per_case:
+                units.append('case')
+            return units
+        
         # Add base units based on usage type
         if self.usage_type == 'weight':
             units.extend(list(WEIGHT_CONVERSIONS.keys()))
@@ -204,8 +211,14 @@ class Ingredient(Base):
     def get_cost_per_unit(self, unit):
         """Calculate cost per unit for a given unit"""
         if self.use_item_count_pricing:
-            # For item count pricing, return cost per item
-            return self.cost_per_item
+            # For item count pricing, handle item and case units
+            if unit == 'item':
+                return self.cost_per_item
+            elif unit == 'case' and self.purchase_type == 'case':
+                return self.purchase_total_cost  # Full case cost
+            else:
+                # Fallback to cost per item for any other unit
+                return self.cost_per_item
         
         # Calculate base cost per net unit
         if not self.net_weight_volume_item or not self.purchase_total_cost:
