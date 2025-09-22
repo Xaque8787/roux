@@ -373,6 +373,9 @@
                                 </td>
                                 <td>
                                     {% if current_user.role == "admin" %}
+                                    <a href="/inventory/janitorial_tasks/{{ janitorial_task.id }}/edit" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
                                     <a href="/inventory/janitorial_tasks/{{ janitorial_task.id }}/delete" class="btn btn-sm btn-danger" 
                                        onclick="return confirm('Are you sure?')">
                                         <i class="fas fa-trash"></i>

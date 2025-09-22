@@ -100,6 +100,45 @@ async def create_janitorial_task(
     
     return RedirectResponse(url="/inventory", status_code=302)
 
+@router.get("/janitorial_tasks/{task_id}/edit", response_class=HTMLResponse)
+async def janitorial_task_edit_page(
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    janitorial_task = db.query(JanitorialTask).filter(JanitorialTask.id == task_id).first()
+    if not janitorial_task:
+        raise HTTPException(status_code=404, detail="Janitorial task not found")
+    
+    return templates.TemplateResponse("janitorial_task_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "janitorial_task": janitorial_task
+    })
+
+@router.post("/janitorial_tasks/{task_id}/edit")
+async def update_janitorial_task(
+    task_id: int,
+    request: Request,
+    title: str = Form(...),
+    instructions: str = Form(""),
+    task_type: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    janitorial_task = db.query(JanitorialTask).filter(JanitorialTask.id == task_id).first()
+    if not janitorial_task:
+        raise HTTPException(status_code=404, detail="Janitorial task not found")
+    
+    janitorial_task.title = title
+    janitorial_task.instructions = instructions if instructions else None
+    janitorial_task.task_type = task_type
+    
+    db.commit()
+    
+    return RedirectResponse(url="/inventory", status_code=302)
+
 @router.get("/janitorial_tasks/{task_id}/delete")
 async def delete_janitorial_task(
     task_id: int,

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ janitorial_task.title }} - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-broom"></i> Edit Janitorial Task: {{ janitorial_task.title }}</h1>
+        <a href="/inventory" class="btn btn-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Inventory
+        </a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-edit"></i> Janitorial Task Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/inventory/janitorial_tasks/{{ janitorial_task.id }}/edit">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Task Title</label>
+                        <input type="text" class="form-control" id="title" name="title" 
+                               value="{{ janitorial_task.title }}" 
+                               placeholder="e.g. Clean kitchen floors, Empty trash bins" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="instructions" class="form-label">Instructions (Optional)</label>
+                        <textarea class="form-control" id="instructions" name="instructions" rows="4" 
+                                  placeholder="Detailed instructions for completing this task...">{{ janitorial_task.instructions or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Task Type</label>
+                        <div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="task_type" id="daily_task" value="daily" 
+                                       {% if janitorial_task.task_type == 'daily' %}checked{% endif %}>
+                                <label class="form-check-label" for="daily_task">
+                                    Daily Task
+                                </label>
+                                <br><small class="text-muted">Automatically added to every inventory day</small>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="task_type" id="manual_task" value="manual"
+                                       {% if janitorial_task.task_type == 'manual' %}checked{% endif %}>
+                                <label class="form-check-label" for="manual_task">
+                                    Add Manually
+                                </label>
+                                <br><small class="text-muted">Choose when to include in daily tasks</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="/inventory" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Task Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Current Type:</strong> 
+                    {% if janitorial_task.task_type == 'daily' %}
+                        <span class="badge bg-primary">Daily Task</span>
+                        <br><small class="text-muted">This task is automatically included in every inventory day</small>
+                    {% else %}
+                        <span class="badge bg-secondary">Manual Task</span>
+                        <br><small class="text-muted">This task is added manually to specific days when needed</small>
+                    {% endif %}
+                </p>
+                
+                {% if janitorial_task.instructions %}
+                <p><strong>Current Instructions:</strong></p>
+                <div class="border p-3 bg-light rounded">
+                    {{ janitorial_task.instructions|replace('\n', '<br>')|safe }}
+                </div>
+                {% else %}
+                <p><strong>Instructions:</strong> <span class="text-muted">No instructions provided</span></p>
+                {% endif %}
+                
+                <p><strong>Created:</strong> {{ janitorial_task.created_at.strftime('%Y-%m-%d %H:%M') if janitorial_task.created_at else 'N/A' }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
