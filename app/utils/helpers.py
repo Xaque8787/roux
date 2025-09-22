@@ -1,6 +1,7 @@
 from datetime import date
 from sqlalchemy.orm import Session
 from ..models import Category, VendorUnit, Vendor, ParUnitName, JanitorialTask
+import re
 
 def create_default_categories(db: Session):
     """Create default categories with Unicode emojis if they don't exist"""
@@ -255,3 +256,114 @@ def get_task_emoji(task):
     
     # Final fallback
     return "🔘"
+
+def generate_task_identifier(task_type: str, name: str, is_manual: bool = False) -> str:
+    """Generate a clean, URL-safe task identifier"""
+    # Clean the name: lowercase, replace spaces with underscores, strip special chars
+    clean_name = name.lower()
+    clean_name = clean_name.replace(' ', '_')
+    clean_name = clean_name.replace('-', '_')
+    clean_name = re.sub(r'[^a-z0-9_]', '', clean_name)
+    
+    # Remove multiple consecutive underscores
+    clean_name = re.sub(r'_+', '_', clean_name)
+    
+    # Remove leading/trailing underscores
+    clean_name = clean_name.strip('_')
+    
+    # Ensure we have something
+    if not clean_name:
+        clean_name = 'unnamed_task'
+    
+    # Add suffix based on type
+    if task_type == "inventory":
+        return f"{clean_name}_manual" if is_manual else clean_name
+    elif task_type == "janitorial":
+        return clean_name
+    else:
+        return f"{clean_name}_manual"
+
+def get_task_by_identifier(db: Session, day_date: str, task_identifier: str):
+    """Get a task by its identifier within a specific day"""
+    from datetime import datetime
+    from ..models import InventoryDay, Task, InventoryItem, JanitorialTask
+    
+    # Convert date string to date object
+    try:
+        date_obj = datetime.strptime(day_date, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+    
+    # Get the inventory day
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date_obj).first()
+    if not inventory_day:
+        return None
+    
+    # Try to find task by identifier
+    if task_identifier.endswith('_manual'):
+        # Manual task - could be inventory-based or standalone
+        base_name = task_identifier[:-7]  # Remove '_manual' suffix
+        
+        # First try to find by inventory item name
+        inventory_item = db.query(InventoryItem).filter(
+            InventoryItem.name.ilike(base_name.replace('_', ' '))
+        ).first()
+        
+        if inventory_item:
+            task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.inventory_item_id == inventory_item.id,
+                Task.auto_generated == False
+            ).first()
+            if task:
+                return task
+        
+        # If not found by inventory item, try by description pattern
+        task = db.query(Task).filter(
+            Task.day_id == inventory_day.id,
+            Task.auto_generated == False,
+            Task.description.ilike(f"%{base_name.replace('_', ' ')}%")
+        ).first()
+        
+        return task
+    
+    else:
+        # Regular inventory task or janitorial task
+        # First try inventory item
+        inventory_item = db.query(InventoryItem).filter(
+            InventoryItem.name.ilike(task_identifier.replace('_', ' '))
+        ).first()
+        
+        if inventory_item:
+            task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.inventory_item_id == inventory_item.id,
+                Task.auto_generated == True
+            ).first()
+            if task:
+                return task
+        
+        # Try janitorial task
+        janitorial_task = db.query(JanitorialTask).filter(
+            JanitorialTask.title.ilike(task_identifier.replace('_', ' '))
+        ).first()
+        
+        if janitorial_task:
+            task = db.query(Task).filter(
+                Task.day_id == inventory_day.id,
+                Task.janitorial_task_id == janitorial_task.id
+            ).first()
+            return task
+    
+    return None
+
+def get_inventory_day_by_date(db: Session, day_date: str):
+    """Get inventory day by date string"""
+    from datetime import datetime
+    from ..models import InventoryDay
+    
+    try:
+        date_obj = datetime.strptime(day_date, '%Y-%m-%d').date()
+        return db.query(InventoryDay).filter(InventoryDay.date == date_obj).first()
+    except ValueError:
+        return None

@@ -71,43 +71,43 @@ sse_manager = SSEManager()
 # SSE Router
 router = APIRouter(prefix="/events", tags=["sse"])
 
-@router.get("/inventory/{day_id}")
-async def inventory_day_events(day_id: int):
+@router.get("/inventory/{day_date}")
+async def inventory_day_events(day_date: str):
     """SSE endpoint for inventory day real-time updates"""
-    logger.info(f"New SSE connection request for inventory day {day_id}")
+    logger.info(f"New SSE connection request for inventory day {day_date}")
     
     async def event_generator():
         queue = asyncio.Queue()
-        room = f"inventory_day_{day_id}"
+        room = f"inventory_day_{day_date}"
         logger.info(f"Creating SSE connection for room: {room}")
         
         try:
             await sse_manager.add_connection(room, queue)
             
             # Send initial connection confirmation
-            initial_message = f"data: {json.dumps({'type': 'connected', 'day_id': day_id})}\n\n"
-            logger.info(f"Sending initial connection message for day {day_id}")
+            initial_message = f"data: {json.dumps({'type': 'connected', 'day_date': day_date})}\n\n"
+            logger.info(f"Sending initial connection message for day {day_date}")
             yield initial_message
             
             while True:
                 try:
                     # Wait for messages with timeout for heartbeat
                     message = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    logger.debug(f"Sending SSE message: {message.strip()}")
+                    logger.debug(f"Sending SSE message for {day_date}: {message.strip()}")
                     yield message
                 except asyncio.TimeoutError:
                     # Send heartbeat to keep connection alive
                     heartbeat = f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-                    logger.debug(f"Sending heartbeat for day {day_id}")
+                    logger.debug(f"Sending heartbeat for day {day_date}")
                     yield heartbeat
                     
         except asyncio.CancelledError:
-            logger.info(f"SSE connection cancelled for day {day_id}")
+            logger.info(f"SSE connection cancelled for day {day_date}")
         except Exception as e:
-            logger.error(f"SSE error for day {day_id}: {e}")
+            logger.error(f"SSE error for day {day_date}: {e}")
         finally:
             await sse_manager.remove_connection(room, queue)
-            logger.info(f"SSE connection cleanup completed for day {day_id}")
+            logger.info(f"SSE connection cleanup completed for day {day_date}")
     
     return StreamingResponse(
         event_generator(),
@@ -120,11 +120,33 @@ async def inventory_day_events(day_id: int):
         }
     )
 
-# Helper functions for broadcasting specific events
+# Helper functions for broadcasting specific events  
 async def broadcast_task_update(day_id: int, task_id: int, event_type: str, task_data: Dict[str, Any]):
     """Broadcast task-related updates"""
-    logger.info(f"Broadcasting task update - Day: {day_id}, Task: {task_id}, Event: {event_type}")
-    await sse_manager.broadcast_to_room(f"inventory_day_{day_id}", {
+    # Get the day date for the room name
+    from .database import SessionLocal
+    from .models import InventoryDay
+    
+    db = SessionLocal()
+    try:
+        inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+        if inventory_day:
+            day_date = inventory_day.date.isoformat()
+            logger.info(f"Broadcasting task update - Day: {day_date}, Task: {task_id}, Event: {event_type}")
+            await sse_manager.broadcast_to_room(f"inventory_day_{day_date}", {
+                "type": event_type,
+                "task_id": task_id,
+                **task_data
+            })
+        else:
+            logger.error(f"Could not find inventory day with ID {day_id}")
+    finally:
+        db.close()
+
+async def broadcast_task_update_by_date(day_date: str, task_id: int, event_type: str, task_data: Dict[str, Any]):
+    """Broadcast task-related updates using day date"""
+    logger.info(f"Broadcasting task update - Day: {day_date}, Task: {task_id}, Event: {event_type}")
+    await sse_manager.broadcast_to_room(f"inventory_day_{day_date}", {
         "type": event_type,
         "task_id": task_id,
         **task_data
@@ -132,8 +154,30 @@ async def broadcast_task_update(day_id: int, task_id: int, event_type: str, task
 
 async def broadcast_inventory_update(day_id: int, item_id: int, event_type: str, inventory_data: Dict[str, Any]):
     """Broadcast inventory-related updates"""
-    logger.info(f"Broadcasting inventory update - Day: {day_id}, Item: {item_id}, Event: {event_type}")
-    await sse_manager.broadcast_to_room(f"inventory_day_{day_id}", {
+    # Get the day date for the room name
+    from .database import SessionLocal
+    from .models import InventoryDay
+    
+    db = SessionLocal()
+    try:
+        inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+        if inventory_day:
+            day_date = inventory_day.date.isoformat()
+            logger.info(f"Broadcasting inventory update - Day: {day_date}, Item: {item_id}, Event: {event_type}")
+            await sse_manager.broadcast_to_room(f"inventory_day_{day_date}", {
+                "type": event_type,
+                "item_id": item_id,
+                **inventory_data
+            })
+        else:
+            logger.error(f"Could not find inventory day with ID {day_id}")
+    finally:
+        db.close()
+
+async def broadcast_inventory_update_by_date(day_date: str, item_id: int, event_type: str, inventory_data: Dict[str, Any]):
+    """Broadcast inventory-related updates using day date"""
+    logger.info(f"Broadcasting inventory update - Day: {day_date}, Item: {item_id}, Event: {event_type}")
+    await sse_manager.broadcast_to_room(f"inventory_day_{day_date}", {
         "type": event_type,
         "item_id": item_id,
         **inventory_data
@@ -141,9 +185,31 @@ async def broadcast_inventory_update(day_id: int, item_id: int, event_type: str,
 
 async def broadcast_day_update(day_id: int, event_type: str, day_data: Dict[str, Any]):
     """Broadcast day-level updates"""
-    logger.info(f"Broadcasting day update - Day: {day_id}, Event: {event_type}")
-    await sse_manager.broadcast_to_room(f"inventory_day_{day_id}", {
+    # Get the day date for the room name
+    from .database import SessionLocal
+    from .models import InventoryDay
+    
+    db = SessionLocal()
+    try:
+        inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
+        if inventory_day:
+            day_date = inventory_day.date.isoformat()
+            logger.info(f"Broadcasting day update - Day: {day_date}, Event: {event_type}")
+            await sse_manager.broadcast_to_room(f"inventory_day_{day_date}", {
+                "type": event_type,
+                "day_id": day_id,
+                **day_data
+            })
+        else:
+            logger.error(f"Could not find inventory day with ID {day_id}")
+    finally:
+        db.close()
+
+async def broadcast_day_update_by_date(day_date: str, event_type: str, day_data: Dict[str, Any]):
+    """Broadcast day-level updates using day date"""
+    logger.info(f"Broadcasting day update - Day: {day_date}, Event: {event_type}")
+    await sse_manager.broadcast_to_room(f"inventory_day_{day_date}", {
         "type": event_type,
-        "day_id": day_id,
+        "day_date": day_date,
         **day_data
     })
