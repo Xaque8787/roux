@@ -32,8 +32,8 @@ COPY app/ ./app/
 COPY templates/ ./templates/
 COPY static/ ./static/
 
-# Create directories for data persistence
-RUN mkdir -p /app/data && chown -R app:app /app
+# Create directories for data persistence with proper permissions
+RUN mkdir -p /app/data && chmod 755 /app/data && chown -R app:app /app
 
 # Switch to non-root user
 USER app
