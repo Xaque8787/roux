@@ -33,13 +33,13 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 
 # Create directories for data persistence with proper permissions
-RUN mkdir -p /app/data && chown -R app:app /app/data && chmod -R 777 /app/data
+RUN mkdir -p /app/data && chown -R app:app /app/data && chmod -R 755 /app/data
 
 # Switch to non-root user
 USER app
 
-# Create .keep file as app user to ensure proper ownership
-RUN touch /app/data/.keep
+# Create .keep file as app user and ensure directory is writable
+RUN touch /app/data/.keep && chmod 755 /app/data
 
 # Add local Python packages to PATH
 ENV PATH=/home/app/.local/bin:$PATH

@@ -3,7 +3,6 @@ services:
     build:
       context: .
       target: production
-    user: "1000:1000"
     ports:
       - "8000:8000"
     environment:
