@@ -33,7 +33,7 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 
 # Create directories for data persistence with proper permissions
-RUN mkdir -p /app/data && chmod 755 /app/data && chown -R app:app /app
+RUN mkdir -p /app/data && chmod 777 /app/data && chown -R app:app /app
 
 # Switch to non-root user
 USER app
@@ -43,7 +43,7 @@ ENV PATH=/home/app/.local/bin:$PATH
 
 # Set environment variables
 ENV PYTHONPATH=/app
-ENV DATABASE_URL=sqlite:///./data/food_cost.db
+ENV DATABASE_URL=sqlite:////app/data/food_cost.db
 
 # Expose port
 EXPOSE 8000
