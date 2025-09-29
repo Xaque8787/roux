@@ -7,9 +7,9 @@ services:
       - "8000:8000"
     environment:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - DATABASE_URL=sqlite:///app/data/food_cost.db
+      - DATABASE_URL=sqlite:///home/app/data/food_cost.db
     volumes:
-      - ./data:/app/data
+      - ./data:/home/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/login')"]
@@ -27,9 +27,9 @@ services:
       - "8001:8000"
     environment:
       - SECRET_KEY=dev-secret-key
-      - DATABASE_URL=sqlite:///./data/food_cost_dev.db
+      - DATABASE_URL=sqlite:///home/app/data/food_cost_dev.db
     volumes:
       - .:/app
-      - ./data:/app/data
+      - ./data:/home/app/data
     profiles:
       - dev

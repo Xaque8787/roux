@@ -5,22 +5,24 @@ import os
 
 # Smart database path detection for both Docker and bare metal
 def get_database_url():
-    # Check if we're in Docker environment
-    if os.path.exists('/app/data'):
-        # Docker environment - ensure directory is writable
+    # Check if we're in Docker environment by looking for container-specific paths
+    if os.path.exists('/app') and os.path.exists('/home/app'):
+        # Docker environment - use writable home directory instead of /app/data
+        data_dir = '/home/app/data'
         try:
-            # Try to create the directory if it doesn't exist
-            os.makedirs('/app/data', mode=0o755, exist_ok=True)
+            os.makedirs(data_dir, mode=0o755, exist_ok=True)
             # Test write permissions
-            test_file = '/app/data/.write_test'
+            test_file = f'{data_dir}/.write_test'
             with open(test_file, 'w') as f:
                 f.write('test')
             os.remove(test_file)
-            print("Docker data directory is writable")
+            print(f"Docker data directory is writable: {data_dir}")
+            return f"sqlite:///{data_dir}/food_cost.db"
         except Exception as e:
             print(f"Warning: Docker data directory not writable: {e}")
-        
-        return os.getenv("DATABASE_URL", "sqlite:///app/data/food_cost.db")
+            # Fallback to /tmp for Docker if home directory fails
+            print("Using /tmp as fallback for Docker database storage")
+            return "sqlite:////tmp/food_cost.db"
     else:
         # Bare metal environment - create data directory if it doesn't exist
         data_dir = './data'
