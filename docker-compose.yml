@@ -9,7 +9,7 @@ services:
       - "8000:8000"
     environment:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - DATABASE_URL=sqlite:///app/data/food_cost.db
+      - DATABASE_URL=sqlite:////app/data/food_cost.db
     volumes:
       - ./data:/app/data
     restart: unless-stopped

@@ -19,7 +19,7 @@ def get_database_url():
         return os.getenv("DATABASE_URL", "sqlite:///./data/food_cost.db")
     else:
         # Docker environment - use absolute path
-        return os.getenv("DATABASE_URL", "sqlite:///app/data/food_cost.db")
+        return os.getenv("DATABASE_URL", "sqlite:////app/data/food_cost.db")
 
 DATABASE_URL = get_database_url()
 print(f"Using database URL: {DATABASE_URL}")
