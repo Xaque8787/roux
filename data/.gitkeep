@@ -1,0 +1,2 @@
+# This file ensures the data directory is tracked by git
+# The data directory will be copied to the container and used for SQLite database storage

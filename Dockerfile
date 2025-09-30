@@ -31,15 +31,14 @@ COPY --from=builder /root/.local /home/app/.local
 COPY app/ ./app/
 COPY templates/ ./templates/
 COPY static/ ./static/
+COPY data/ ./data/
 
-# Create directories for data persistence with proper permissions
-RUN mkdir -p /app/data && chown -R app:app /app/data && chmod -R 755 /app/data
+# Ensure data directory has proper permissions
+RUN chown -R app:app /app/data && chmod -R 755 /app/data
 
 # Switch to non-root user
 USER app
 
-# Create .keep file as app user and ensure directory is writable
-RUN touch /app/data/.keep && chmod 755 /app/data
 
 # Add local Python packages to PATH
 ENV PATH=/home/app/.local/bin:$PATH
