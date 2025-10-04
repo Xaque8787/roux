@@ -237,25 +237,25 @@ class Ingredient(Base):
             return base_cost_per_net_unit
         
         # Handle baking measurements
-        if (unit in BAKING_MEASUREMENTS and self.has_baking_conversion and 
+        if (unit in BAKING_MEASUREMENTS and self.has_baking_conversion and
             self.baking_weight_amount and self.baking_weight_unit):
-            
+
             # Convert from baking measurement to weight
             if unit in BAKING_MEASUREMENTS:
                 # Convert baking unit to weight
                 weight_per_baking_unit = self.baking_weight_amount / BAKING_MEASUREMENTS[self.baking_measurement_unit]
-                weight_for_requested_unit = weight_per_baking_unit * BAKING_MEASUREMENTS[unit]
-                
+                weight_for_requested_unit = weight_per_baking_unit / BAKING_MEASUREMENTS[unit]
+
                 # Convert weight to net unit if needed
                 if self.baking_weight_unit != self.net_unit:
-                    if (self.baking_weight_unit in WEIGHT_CONVERSIONS and 
+                    if (self.baking_weight_unit in WEIGHT_CONVERSIONS and
                         self.net_unit in WEIGHT_CONVERSIONS):
                         weight_for_requested_unit = convert_weight(
-                            weight_for_requested_unit, 
-                            self.baking_weight_unit, 
+                            weight_for_requested_unit,
+                            self.baking_weight_unit,
                             self.net_unit
                         )
-                
+
                 return base_cost_per_net_unit * weight_for_requested_unit
         
         # Handle weight conversions
