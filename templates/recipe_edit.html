@@ -60,9 +60,27 @@
                     <div id="selectedIngredients" class="mb-3">
                         <!-- Selected ingredients will appear here -->
                     </div>
-                    
+
                     <input type="hidden" name="ingredients_data" id="ingredientsData">
-                    
+
+                    <h6>Batch Portions:</h6>
+                    <div class="mb-3">
+                        <label for="batchSearch" class="form-label">Search & Select Batch</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="batchSearch"
+                                   placeholder="Type to search batches..." autocomplete="off">
+                            <div id="batchDropdown" class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto;">
+                                <!-- Batch options will appear here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="selectedBatches" class="mb-3">
+                        <!-- Selected batches will appear here -->
+                    </div>
+
+                    <input type="hidden" name="batch_portions_data" id="batchPortionsData">
+
                     <div class="d-flex justify-content-between">
                         <a href="/recipes/{{ recipe.id }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
@@ -77,8 +95,11 @@
 
 <script>
 let selectedIngredients = [];
+let selectedBatches = [];
 let allIngredients = [];
+let allBatches = [];
 let currentSelectedIngredient = null;
+let currentBatchData = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Load existing ingredients
@@ -91,39 +112,75 @@ document.addEventListener('DOMContentLoaded', function() {
         estimated_cost: {{ ri.cost or 0 }}
     });
     {% endfor %}
-    
+
+    // Load existing batch portions
+    {% for rbp in recipe_batch_portions %}
+    selectedBatches.push({
+        batch_id: {{ rbp.batch_id }},
+        recipe_name: "{{ rbp.batch.recipe.name }}",
+        unit: "{{ rbp.portion_unit or rbp.batch.yield_unit or '' }}",
+        portion_unit_name: "{{ rbp.portion_unit or rbp.batch.yield_unit or '' }}",
+        portion_size: {{ rbp.portion_size or 0 }},
+        estimated_cost: 0,
+        use_recipe_portion: {{ rbp.use_recipe_portion|lower }},
+        recipe_portion_percent: {{ rbp.recipe_portion_percent or 0 }}
+    });
+    {% endfor %}
+
     updateSelectedIngredientsDisplay();
-    
+    updateSelectedBatchesDisplay();
+
     // Load all ingredients for dropdown
     loadAllIngredients();
-    
+
+    // Load all batches for dropdown
+    loadAllBatches();
+
     const ingredientSearch = document.getElementById('ingredientSearch');
-    const dropdown = document.getElementById('ingredientDropdown');
-    
-    // Search functionality
+    const ingredientDropdown = document.getElementById('ingredientDropdown');
+    const batchSearch = document.getElementById('batchSearch');
+    const batchDropdown = document.getElementById('batchDropdown');
+
+    // Search functionality for ingredients
     ingredientSearch.addEventListener('input', function() {
         const query = this.value.toLowerCase().trim();
         filterIngredients(query);
     });
-    
+
     // Show all ingredients when focused
     ingredientSearch.addEventListener('focus', function() {
         if (allIngredients.length > 0) {
             filterIngredients('');
         }
-        dropdown.style.display = 'block';
+        ingredientDropdown.style.display = 'block';
     });
-    
+
+    // Search functionality for batches
+    batchSearch.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        filterBatches(query);
+    });
+
+    // Show all batches when focused
+    batchSearch.addEventListener('focus', function() {
+        filterBatches('');
+        batchDropdown.style.display = 'block';
+    });
+
     // Hide dropdown when clicking outside
     document.addEventListener('click', function(e) {
         if (!e.target.closest('#ingredientSearch') && !e.target.closest('#ingredientDropdown')) {
-            dropdown.style.display = 'none';
+            ingredientDropdown.style.display = 'none';
+        }
+        if (!e.target.closest('#batchSearch') && !e.target.closest('#batchDropdown')) {
+            batchDropdown.style.display = 'none';
         }
     });
-    
+
     // Form submission
     document.getElementById('recipeEditForm').addEventListener('submit', function(e) {
         document.getElementById('ingredientsData').value = JSON.stringify(selectedIngredients);
+        document.getElementById('batchPortionsData').value = JSON.stringify(selectedBatches);
     });
 });
 
@@ -371,14 +428,346 @@ function formatUnitDisplay(unit) {
     // Convert internal unit format to display format
     const unitDisplayMap = {
         '3_4_cup': '3/4 cup',
-        '2_3_cup': '2/3 cup', 
+        '2_3_cup': '2/3 cup',
         '1_2_cup': '1/2 cup',
         '1_3_cup': '1/3 cup',
         '1_4_cup': '1/4 cup',
         '1_8_cup': '1/8 cup'
     };
-    
+
     return unitDisplayMap[unit] || unit;
+}
+
+async function loadAllBatches() {
+    try {
+        const response = await fetch('/api/batches/all');
+        if (!response.ok) {
+            throw new Error('Failed to load batches');
+        }
+        allBatches = await response.json();
+        console.log('Loaded batches:', allBatches);
+        filterBatches('');
+    } catch (error) {
+        console.error('Error loading batches:', error);
+        document.getElementById('batchDropdown').innerHTML = '<div class="dropdown-item-text text-danger">Error loading batches</div>';
+    }
+}
+
+function filterBatches(query) {
+    const dropdown = document.getElementById('batchDropdown');
+
+    const filteredBatches = allBatches.filter(batch =>
+        batch.recipe_name.toLowerCase().includes(query) ||
+        (batch.category && batch.category.toLowerCase().includes(query))
+    );
+
+    dropdown.innerHTML = '';
+
+    if (filteredBatches.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No batches found</div>';
+    } else {
+        filteredBatches.forEach(batch => {
+            const item = document.createElement('a');
+            item.className = 'dropdown-item';
+            item.href = '#';
+            item.innerHTML = `
+                <strong>${batch.recipe_name}</strong><br>
+                <small>Yield: ${batch.yield_amount || 'Variable'} ${batch.yield_unit || ''} - $${batch.cost_per_unit.toFixed(4)}/unit</small>
+                ${batch.category ? `<br><small class="text-muted">${batch.category}</small>` : ''}
+            `;
+
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectBatch(batch);
+                document.getElementById('batchSearch').value = batch.recipe_name;
+                dropdown.style.display = 'none';
+            });
+
+            dropdown.appendChild(item);
+        });
+    }
+
+    if (query || document.getElementById('batchSearch') === document.activeElement) {
+        dropdown.style.display = 'block';
+    }
+}
+
+function selectBatch(batch) {
+    console.log('Selected batch:', batch);
+
+    if (selectedBatches.find(sb => sb.batch_id === batch.id)) {
+        alert('This batch is already added to the recipe.');
+        return;
+    }
+
+    currentBatchData = batch;
+    showPortionSizeSelection(batch);
+}
+
+function showPortionSizeSelection(batch) {
+    console.log('Loading portion units for batch:', batch.id);
+    fetch(`/api/batches/${batch.id}/portion_units`)
+        .then(response => response.json())
+        .then(units => {
+            console.log('Loaded units:', units);
+            showPortionModal(batch, units);
+        })
+        .catch(error => {
+            console.error('Error loading portion units:', error);
+            showPortionModal(batch, [{id: batch.yield_unit, name: batch.yield_unit}]);
+        });
+}
+
+function showPortionModal(batch, availableUnits) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'batchModal';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add ${batch.recipe_name}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Batch Details</label>
+                        <p class="text-muted">Yield: ${batch.yield_amount || 'Variable'} ${batch.yield_unit || ''}<br>
+                        Cost per ${batch.yield_unit || 'unit'}: $${batch.cost_per_unit.toFixed(4)}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Portion Size</label>
+                        <div class="row">
+                            <div class="col-8">
+                                <input type="number" class="form-control" id="portionSizeInput" step="0.01" min="0" required>
+                            </div>
+                            <div class="col-4">
+                                <select class="form-select" id="portionUnitSelect">
+                                    ${availableUnits.map(unit =>
+                                        `<option value="${unit.name}">${unit.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <small class="text-muted">Enter portion size and select unit</small>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="useRecipePortionInput" onchange="toggleRecipePortionFields()">
+                            <label class="form-check-label" for="useRecipePortionInput">
+                                Use recipe portion (for variable yield batches)
+                            </label>
+                        </div>
+                        <small class="text-muted">Use percentage of recipe cost instead of fixed portion size</small>
+                    </div>
+                    <div id="recipePortionFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="recipePortionPercentInput" class="form-label">Recipe Portion Percentage</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="recipePortionPercentInput"
+                                       step="1" min="1" max="100" placeholder="25">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <small class="text-muted">Enter whole number percentage (e.g., 25 = 25% of recipe)</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Estimated cost: $<span id="estimatedPortionCost">0.00</span></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="addBatchToRecipe()">Add Batch</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+
+    const portionSizeInput = modal.querySelector('#portionSizeInput');
+    const portionUnitSelect = modal.querySelector('#portionUnitSelect');
+    const estimatedCost = modal.querySelector('#estimatedPortionCost');
+
+    async function updatePortionCost() {
+        const portionSize = parseFloat(portionSizeInput.value) || 0;
+        const selectedUnit = portionUnitSelect.value;
+        const useRecipePortion = document.querySelector('#useRecipePortionInput').checked;
+        const recipePortionPercent = parseFloat(document.querySelector('#recipePortionPercentInput').value) || 0;
+
+        if (useRecipePortion && recipePortionPercent > 0) {
+            try {
+                const response = await fetch(`/api/batches/${batch.id}/recipe_cost`);
+                const data = await response.json();
+                const cost = data.total_recipe_cost * (recipePortionPercent / 100);
+                estimatedCost.textContent = cost.toFixed(2);
+            } catch (error) {
+                console.error('Error calculating recipe cost:', error);
+                estimatedCost.textContent = '0.00';
+            }
+        } else if (!useRecipePortion && portionSize > 0 && selectedUnit) {
+            try {
+                const response = await fetch(`/api/batches/${batch.id}/cost_per_unit/${encodeURIComponent(selectedUnit)}`);
+                const data = await response.json();
+                const cost = portionSize * data.expected_cost_per_unit;
+                estimatedCost.textContent = cost.toFixed(2);
+            } catch (error) {
+                console.error('Error calculating cost:', error);
+                estimatedCost.textContent = '0.00';
+            }
+        } else {
+            estimatedCost.textContent = '0.00';
+        }
+    }
+
+    portionSizeInput.addEventListener('input', updatePortionCost);
+    portionUnitSelect.addEventListener('change', updatePortionCost);
+
+    const useRecipePortionInput = modal.querySelector('#useRecipePortionInput');
+    const recipePortionPercentInput = modal.querySelector('#recipePortionPercentInput');
+
+    if (useRecipePortionInput) {
+        useRecipePortionInput.addEventListener('change', updatePortionCost);
+    }
+    if (recipePortionPercentInput) {
+        recipePortionPercentInput.addEventListener('input', updatePortionCost);
+    }
+
+    setTimeout(updatePortionCost, 100);
+
+    modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+    });
+}
+
+function addBatchToRecipe() {
+    const portionSizeInput = document.querySelector('#portionSizeInput');
+    const portionUnitSelect = document.querySelector('#portionUnitSelect');
+    const useRecipePortionInput = document.querySelector('#useRecipePortionInput');
+    const recipePortionPercentInput = document.querySelector('#recipePortionPercentInput');
+
+    const portionSize = parseFloat(portionSizeInput.value);
+    const portionUnit = portionUnitSelect.value;
+    const portionUnitName = portionUnitSelect.selectedOptions[0].text;
+    const useRecipePortion = useRecipePortionInput.checked;
+    const recipePortionPercent = parseFloat(recipePortionPercentInput.value);
+
+    if (useRecipePortion) {
+        if (!recipePortionPercent || recipePortionPercent <= 0 || recipePortionPercent > 100) {
+            alert('Please enter a valid recipe portion percentage (1 - 100%).');
+            return;
+        }
+    } else {
+        if (!portionSize || portionSize <= 0) {
+            alert('Please enter a valid portion size.');
+            return;
+        }
+
+        if (!portionUnit) {
+            alert('Please select a portion unit.');
+            return;
+        }
+    }
+
+    const estimatedCost = parseFloat(document.querySelector('#estimatedPortionCost').textContent);
+
+    const batchData = {
+        batch_id: currentBatchData.id,
+        recipe_name: currentBatchData.recipe_name,
+        estimated_cost: estimatedCost,
+        use_recipe_portion: useRecipePortion
+    };
+
+    if (useRecipePortion) {
+        batchData.recipe_portion_percent = recipePortionPercent / 100;
+        batchData.portion_size = null;
+        batchData.unit = null;
+        batchData.portion_unit_name = 'recipe %';
+    } else {
+        batchData.unit = portionUnit;
+        batchData.portion_unit_name = portionUnit;
+        batchData.portion_size = portionSize;
+        batchData.recipe_portion_percent = null;
+    }
+
+    selectedBatches.push(batchData);
+
+    updateSelectedBatchesDisplay();
+
+    document.getElementById('batchSearch').value = '';
+
+    const modal = document.querySelector('.modal.show');
+    if (modal) {
+        bootstrap.Modal.getInstance(modal).hide();
+    }
+}
+
+function updateSelectedBatchesDisplay() {
+    const container = document.getElementById('selectedBatches');
+
+    console.log('Updating display with batches:', selectedBatches);
+
+    if (selectedBatches.length === 0) {
+        container.innerHTML = '<p class="text-muted">No batches added yet.</p>';
+        return;
+    }
+
+    let html = '<h6>Selected Batches:</h6>';
+    let totalCost = 0;
+
+    selectedBatches.forEach((batch, index) => {
+        totalCost += batch.estimated_cost;
+        html += `
+            <div class="card mb-2">
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${batch.recipe_name}</strong><br>
+                            <small>
+                                ${batch.use_recipe_portion ?
+                                    `${(batch.recipe_portion_percent * 100).toFixed(1)}% of recipe` :
+                                    `${batch.portion_size} ${batch.portion_unit_name}`
+                                } - $${batch.estimated_cost.toFixed(2)}
+                            </small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="removeBatch(${index})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `<div class="alert alert-info"><strong>Estimated Total Cost: $${totalCost.toFixed(2)}</strong></div>`;
+    container.innerHTML = html;
+}
+
+function removeBatch(index) {
+    selectedBatches.splice(index, 1);
+    updateSelectedBatchesDisplay();
+}
+
+function toggleRecipePortionFields() {
+    const useRecipePortionInput = document.querySelector('#useRecipePortionInput');
+    const recipePortionFields = document.querySelector('#recipePortionFields');
+    const portionSizeInput = document.querySelector('#portionSizeInput');
+    const portionUnitSelect = document.querySelector('#portionUnitSelect');
+    const recipePortionPercentInput = document.querySelector('#recipePortionPercentInput');
+
+    if (useRecipePortionInput.checked) {
+        recipePortionFields.style.display = 'block';
+        portionSizeInput.required = false;
+        portionUnitSelect.required = false;
+        recipePortionPercentInput.required = true;
+    } else {
+        recipePortionFields.style.display = 'none';
+        portionSizeInput.required = true;
+        portionUnitSelect.required = true;
+        recipePortionPercentInput.required = false;
+    }
 }
 </script>
 {% endblock %}

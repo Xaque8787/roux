@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 import json
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
-from ..models import Recipe, Category, RecipeIngredient
+from ..models import Recipe, Category, RecipeIngredient, RecipeBatchPortion
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 templates = Jinja2Templates(directory="templates")
@@ -29,6 +29,7 @@ async def create_recipe(
     instructions: str = Form(""),
     category_id: int = Form(None),
     ingredients_data: str = Form(...),
+    batch_portions_data: str = Form("[]"),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
@@ -37,10 +38,10 @@ async def create_recipe(
         instructions=instructions if instructions else None,
         category_id=category_id if category_id else None
     )
-    
+
     db.add(recipe)
-    db.flush()  # Get the recipe ID
-    
+    db.flush()
+
     # Parse and add ingredients
     try:
         ingredients = json.loads(ingredients_data)
@@ -55,9 +56,26 @@ async def create_recipe(
     except (json.JSONDecodeError, KeyError) as e:
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid ingredients data")
-    
+
+    # Parse and add batch portions
+    try:
+        batch_portions = json.loads(batch_portions_data)
+        for batch_data in batch_portions:
+            recipe_batch_portion = RecipeBatchPortion(
+                recipe_id=recipe.id,
+                batch_id=batch_data['batch_id'],
+                portion_size=batch_data.get('portion_size'),
+                portion_unit=batch_data.get('unit'),
+                use_recipe_portion=batch_data.get('use_recipe_portion', False),
+                recipe_portion_percent=batch_data.get('recipe_portion_percent')
+            )
+            db.add(recipe_batch_portion)
+    except (json.JSONDecodeError, KeyError) as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid batch portions data")
+
     db.commit()
-    
+
     return RedirectResponse(url="/recipes", status_code=302)
 
 @router.get("/{recipe_id}", response_class=HTMLResponse)
@@ -65,16 +83,22 @@ async def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
-    total_cost = sum(ri.cost for ri in recipe_ingredients)
-    
+    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).all()
+
+    ingredients_cost = sum(ri.cost for ri in recipe_ingredients)
+    batch_portions_cost = sum(rbp.get_total_cost(db) for rbp in recipe_batch_portions)
+    total_cost = ingredients_cost + batch_portions_cost
+
     return templates.TemplateResponse("recipe_detail.html", {
         "request": request,
         "current_user": current_user,
         "recipe": recipe,
         "recipe_ingredients": recipe_ingredients,
-        "total_cost": total_cost
+        "recipe_batch_portions": recipe_batch_portions,
+        "total_cost": total_cost,
+        "db": db
     })
 
 @router.get("/{recipe_id}/edit", response_class=HTMLResponse)
@@ -82,16 +106,18 @@ async def recipe_edit_page(recipe_id: int, request: Request, db: Session = Depen
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     categories = db.query(Category).filter(Category.type == "recipe").all()
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
-    
+    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).all()
+
     return templates.TemplateResponse("recipe_edit.html", {
         "request": request,
         "current_user": current_user,
         "recipe": recipe,
         "categories": categories,
-        "recipe_ingredients": recipe_ingredients
+        "recipe_ingredients": recipe_ingredients,
+        "recipe_batch_portions": recipe_batch_portions
     })
 
 @router.post("/{recipe_id}/edit")
@@ -102,20 +128,21 @@ async def update_recipe(
     instructions: str = Form(""),
     category_id: int = Form(None),
     ingredients_data: str = Form(...),
+    batch_portions_data: str = Form("[]"),
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     recipe.name = name
     recipe.instructions = instructions if instructions else None
     recipe.category_id = category_id if category_id else None
-    
+
     # Remove existing ingredients
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
-    
+
     # Parse and add new ingredients
     try:
         ingredients = json.loads(ingredients_data)
@@ -130,9 +157,29 @@ async def update_recipe(
     except (json.JSONDecodeError, KeyError) as e:
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid ingredients data")
-    
+
+    # Remove existing batch portions
+    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).delete()
+
+    # Parse and add new batch portions
+    try:
+        batch_portions = json.loads(batch_portions_data)
+        for batch_data in batch_portions:
+            recipe_batch_portion = RecipeBatchPortion(
+                recipe_id=recipe.id,
+                batch_id=batch_data['batch_id'],
+                portion_size=batch_data.get('portion_size'),
+                portion_unit=batch_data.get('unit'),
+                use_recipe_portion=batch_data.get('use_recipe_portion', False),
+                recipe_portion_percent=batch_data.get('recipe_portion_percent')
+            )
+            db.add(recipe_batch_portion)
+    except (json.JSONDecodeError, KeyError) as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid batch portions data")
+
     db.commit()
-    
+
     return RedirectResponse(url=f"/recipes/{recipe_id}", status_code=302)
 
 @router.get("/{recipe_id}/delete")
@@ -140,11 +187,12 @@ async def delete_recipe(recipe_id: int, db: Session = Depends(get_db), current_u
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
-    # Delete recipe ingredients first
+
+    # Delete recipe ingredients and batch portions first
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
-    
+    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).delete()
+
     db.delete(recipe)
     db.commit()
-    
+
     return RedirectResponse(url="/recipes", status_code=302)

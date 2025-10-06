@@ -50,12 +50,6 @@
                             </tr>
                             {% endfor %}
                         </tbody>
-                        <tfoot>
-                            <tr class="table-info">
-                                <th colspan="4">Total Recipe Cost:</th>
-                                <th>${{ "%.2f"|format(total_cost) }}</th>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
                 {% else %}
@@ -63,6 +57,58 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if recipe_batch_portions %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="fas fa-layer-group"></i> Batch Portions</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Batch (Recipe)</th>
+                                <th>Portion</th>
+                                <th>Total Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rbp in recipe_batch_portions %}
+                            <tr>
+                                <td>
+                                    <strong>{{ rbp.batch.recipe.name }}</strong>
+                                    {% if rbp.batch.category %}
+                                    <br><small class="text-muted">{{ rbp.batch.category.name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if rbp.use_recipe_portion %}
+                                        {{ "%.1f"|format(rbp.recipe_portion_percent * 100) }}% of recipe
+                                    {% else %}
+                                        {{ rbp.portion_size }} {{ rbp.portion_unit }}
+                                    {% endif %}
+                                </td>
+                                <td>${{ "%.2f"|format(rbp.get_total_cost(db)) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if recipe_ingredients or recipe_batch_portions %}
+        <div class="card mt-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Total Recipe Cost:</h5>
+                    <h5 class="mb-0 text-success">${{ "%.2f"|format(total_cost) }}</h5>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     
     <div class="col-md-4">

@@ -293,23 +293,77 @@ class Recipe(Base):
 
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
     ingredient_id = Column(Integer, ForeignKey("ingredients.id"))
     unit = Column(String)
     quantity = Column(Float)
-    
+
     # Relationships
     recipe = relationship("Recipe")
     ingredient = relationship("Ingredient")
-    
+
     @property
     def cost(self):
         """Calculate cost for this recipe ingredient"""
         if self.ingredient:
             return self.ingredient.get_cost_per_unit(self.unit) * self.quantity
         return 0
+
+class RecipeBatchPortion(Base):
+    __tablename__ = "recipe_batch_portions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    batch_id = Column(Integer, ForeignKey("batches.id"))
+    portion_size = Column(Float)
+    portion_unit = Column(String)
+    use_recipe_portion = Column(Boolean, default=False)
+    recipe_portion_percent = Column(Float)
+
+    # Relationships
+    recipe = relationship("Recipe")
+    batch = relationship("Batch")
+
+    def get_recipe_cost(self, db: Session):
+        """Get recipe cost for this portion"""
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == self.batch.recipe_id).all()
+        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            return total_recipe_cost * self.recipe_portion_percent
+        else:
+            # Calculate based on portion size
+            if self.batch.variable_yield:
+                return 0
+
+            if self.batch.yield_amount and self.portion_size:
+                portion_ratio = self.portion_size / self.batch.yield_amount
+                return total_recipe_cost * portion_ratio
+
+        return 0
+
+    def get_labor_cost(self, db: Session):
+        """Get estimated labor cost for this portion"""
+        labor_cost = self.batch.estimated_labor_cost
+
+        if self.use_recipe_portion and self.recipe_portion_percent:
+            return labor_cost * self.recipe_portion_percent
+        else:
+            # Calculate based on portion size
+            if self.batch.variable_yield:
+                return 0
+
+            if self.batch.yield_amount and self.portion_size:
+                portion_ratio = self.portion_size / self.batch.yield_amount
+                return labor_cost * portion_ratio
+
+        return 0
+
+    def get_total_cost(self, db: Session):
+        """Get total cost (recipe + labor)"""
+        return self.get_recipe_cost(db) + self.get_labor_cost(db)
 
 class Batch(Base):
     __tablename__ = "batches"
