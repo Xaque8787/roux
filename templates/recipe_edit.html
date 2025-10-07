@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
         unit: "{{ rbp.portion_unit or rbp.batch.yield_unit or '' }}",
         portion_unit_name: "{{ rbp.portion_unit or rbp.batch.yield_unit or '' }}",
         portion_size: {{ rbp.portion_size or 0 }},
-        estimated_cost: 0,
+        estimated_cost: {{ rbp.get_total_cost(db) }},
         use_recipe_portion: {{ rbp.use_recipe_portion|lower }},
         recipe_portion_percent: {{ rbp.recipe_portion_percent or 0 }}
     });

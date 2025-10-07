@@ -1,28 +1,37 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
-from ..models import (Batch, RecipeIngredient, WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS, 
+from ..models import (Batch, RecipeIngredient, RecipeBatchPortion, WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS,
                      BAKING_MEASUREMENTS, convert_weight, convert_volume)
 
 router = APIRouter(prefix="/api/batches", tags=["batches-api"])
 
+def calculate_recipe_total_cost(recipe_id: int, db: Session) -> float:
+    """Calculate total cost of a recipe including ingredients and batch portions"""
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
+    ingredients_cost = sum(ri.cost for ri in recipe_ingredients)
+
+    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).all()
+    batch_portions_cost = sum(rbp.get_total_cost(db) for rbp in recipe_batch_portions)
+
+    return ingredients_cost + batch_portions_cost
+
 @router.get("/search")
 async def search_batches(q: str = "", db: Session = Depends(get_db)):
     query = db.query(Batch).options(joinedload(Batch.recipe))
-    
+
     if q:
         query = query.filter(Batch.recipe.has(name=q))
-    
+
     batches = query.all()
-    
+
     result = []
     for batch in batches:
         # Calculate cost per unit
-        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_recipe_cost = calculate_recipe_total_cost(batch.recipe_id, db)
         total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
         cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
-        
+
         batch_data = {
             "id": batch.id,
             "recipe_name": batch.recipe.name,
@@ -32,21 +41,20 @@ async def search_batches(q: str = "", db: Session = Depends(get_db)):
             "category": batch.recipe.category.name if batch.recipe.category else None
         }
         result.append(batch_data)
-    
+
     return result
 
 @router.get("/all")
 async def get_all_batches(db: Session = Depends(get_db)):
     batches = db.query(Batch).options(joinedload(Batch.recipe)).all()
-    
+
     result = []
     for batch in batches:
         # Calculate cost per unit
-        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        total_recipe_cost = calculate_recipe_total_cost(batch.recipe_id, db)
         total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
         cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
-        
+
         batch_data = {
             "id": batch.id,
             "recipe_name": batch.recipe.name,
@@ -56,7 +64,7 @@ async def get_all_batches(db: Session = Depends(get_db)):
             "category": batch.recipe.category.name if batch.recipe.category else None
         }
         result.append(batch_data)
-    
+
     return result
 
 @router.get("/{batch_id}/portion_units")
@@ -121,8 +129,7 @@ async def get_batch_cost_per_unit(batch_id: int, unit: str, db: Session = Depend
         }
     
     # Calculate base costs
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+    total_recipe_cost = calculate_recipe_total_cost(batch.recipe_id, db)
     
     # Expected cost (with estimated labor)
     expected_total_cost = total_recipe_cost + batch.estimated_labor_cost
@@ -216,11 +223,10 @@ async def get_batch_recipe_cost(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    
+
     # Calculate total recipe cost
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
-    total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    
+    total_recipe_cost = calculate_recipe_total_cost(batch.recipe_id, db)
+
     return {
         "batch_id": batch_id,
         "recipe_name": batch.recipe.name,

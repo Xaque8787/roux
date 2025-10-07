@@ -328,8 +328,15 @@ class RecipeBatchPortion(Base):
 
     def get_recipe_cost(self, db: Session):
         """Get recipe cost for this portion"""
+        # Calculate total recipe cost including ingredients and batch portions
         recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == self.batch.recipe_id).all()
-        total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
+        ingredients_cost = sum(ri.cost for ri in recipe_ingredients)
+
+        # Also include batch portions from the recipe
+        recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == self.batch.recipe_id).all()
+        batch_portions_cost = sum(rbp.get_total_cost(db) for rbp in recipe_batch_portions)
+
+        total_recipe_cost = ingredients_cost + batch_portions_cost
 
         if self.use_recipe_portion and self.recipe_portion_percent:
             return total_recipe_cost * self.recipe_portion_percent
@@ -338,9 +345,28 @@ class RecipeBatchPortion(Base):
             if self.batch.variable_yield:
                 return 0
 
-            if self.batch.yield_amount and self.portion_size:
-                portion_ratio = self.portion_size / self.batch.yield_amount
-                return total_recipe_cost * portion_ratio
+            if self.batch.yield_amount and self.portion_size and self.portion_unit:
+                # Check if unit conversion is needed
+                if self.portion_unit == self.batch.yield_unit:
+                    # Same unit, simple ratio
+                    portion_ratio = self.portion_size / self.batch.yield_amount
+                    return total_recipe_cost * portion_ratio
+                else:
+                    # Different units, need to convert
+                    # Try to convert portion_size to batch yield_unit
+                    try:
+                        if self.portion_unit in WEIGHT_CONVERSIONS and self.batch.yield_unit in WEIGHT_CONVERSIONS:
+                            converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                            portion_ratio = converted_portion / self.batch.yield_amount
+                            return total_recipe_cost * portion_ratio
+                        elif self.portion_unit in VOLUME_CONVERSIONS and self.batch.yield_unit in VOLUME_CONVERSIONS:
+                            converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                            portion_ratio = converted_portion / self.batch.yield_amount
+                            return total_recipe_cost * portion_ratio
+                    except (ValueError, KeyError):
+                        # Conversion failed, fall back to simple ratio
+                        portion_ratio = self.portion_size / self.batch.yield_amount
+                        return total_recipe_cost * portion_ratio
 
         return 0
 
@@ -355,9 +381,27 @@ class RecipeBatchPortion(Base):
             if self.batch.variable_yield:
                 return 0
 
-            if self.batch.yield_amount and self.portion_size:
-                portion_ratio = self.portion_size / self.batch.yield_amount
-                return labor_cost * portion_ratio
+            if self.batch.yield_amount and self.portion_size and self.portion_unit:
+                # Check if unit conversion is needed
+                if self.portion_unit == self.batch.yield_unit:
+                    # Same unit, simple ratio
+                    portion_ratio = self.portion_size / self.batch.yield_amount
+                    return labor_cost * portion_ratio
+                else:
+                    # Different units, need to convert
+                    try:
+                        if self.portion_unit in WEIGHT_CONVERSIONS and self.batch.yield_unit in WEIGHT_CONVERSIONS:
+                            converted_portion = convert_weight(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                            portion_ratio = converted_portion / self.batch.yield_amount
+                            return labor_cost * portion_ratio
+                        elif self.portion_unit in VOLUME_CONVERSIONS and self.batch.yield_unit in VOLUME_CONVERSIONS:
+                            converted_portion = convert_volume(self.portion_size, self.portion_unit, self.batch.yield_unit)
+                            portion_ratio = converted_portion / self.batch.yield_amount
+                            return labor_cost * portion_ratio
+                    except (ValueError, KeyError):
+                        # Conversion failed, fall back to simple ratio
+                        portion_ratio = self.portion_size / self.batch.yield_amount
+                        return labor_cost * portion_ratio
 
         return 0
 

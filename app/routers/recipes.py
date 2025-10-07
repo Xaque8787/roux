@@ -117,7 +117,8 @@ async def recipe_edit_page(recipe_id: int, request: Request, db: Session = Depen
         "recipe": recipe,
         "categories": categories,
         "recipe_ingredients": recipe_ingredients,
-        "recipe_batch_portions": recipe_batch_portions
+        "recipe_batch_portions": recipe_batch_portions,
+        "db": db
     })
 
 @router.post("/{recipe_id}/edit")
