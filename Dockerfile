@@ -27,18 +27,14 @@ RUN useradd --create-home --shell /bin/bash app
 # Copy Python dependencies from builder stage
 COPY --from=builder /root/.local /home/app/.local
 
-# Copy application code
-COPY app/ ./app/
-COPY templates/ ./templates/
-COPY static/ ./static/
-COPY data/ ./data/
+# Copy application code (as root before switching user)
+COPY --chown=app:app app/ ./app/
+COPY --chown=app:app templates/ ./templates/
+COPY --chown=app:app static/ ./static/
+COPY --chown=app:app data/ ./data/
 
 # Ensure data directory has proper permissions
-RUN chown -R app:app /app/data && chmod -R 755 /app/data
-
-# Switch to non-root user
-USER app
-
+RUN chown -R app:app /app && chmod -R 755 /app
 
 # Add local Python packages to PATH
 ENV PATH=/home/app/.local/bin:$PATH
@@ -46,6 +42,9 @@ ENV PATH=/home/app/.local/bin:$PATH
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV DATABASE_URL=sqlite:///app/data/food_cost.db
+
+# Switch to non-root user
+USER app
 
 # Expose port
 EXPOSE 8000
