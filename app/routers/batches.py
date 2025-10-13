@@ -35,6 +35,8 @@ async def create_batch(
     hourly_labor_rate: float = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
+    scale_triple: bool = Form(False),
+    scale_quadruple: bool = Form(False),
     scale_half: bool = Form(False),
     scale_quarter: bool = Form(False),
     scale_eighth: bool = Form(False),
@@ -52,6 +54,8 @@ async def create_batch(
         hourly_labor_rate=hourly_labor_rate,
         can_be_scaled=can_be_scaled,
         scale_double=scale_double if can_be_scaled else False,
+        scale_triple=scale_triple if can_be_scaled else False,
+        scale_quadruple=scale_quadruple if can_be_scaled else False,
         scale_half=scale_half if can_be_scaled else False,
         scale_quarter=scale_quarter if can_be_scaled else False,
         scale_eighth=scale_eighth if can_be_scaled else False,
@@ -114,6 +118,8 @@ async def update_batch(
     hourly_labor_rate: float = Form(...),
     can_be_scaled: bool = Form(False),
     scale_double: bool = Form(False),
+    scale_triple: bool = Form(False),
+    scale_quadruple: bool = Form(False),
     scale_half: bool = Form(False),
     scale_quarter: bool = Form(False),
     scale_eighth: bool = Form(False),
@@ -124,7 +130,7 @@ async def update_batch(
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    
+
     batch.recipe_id = recipe_id
     batch.category_id = category_id if category_id else None
     batch.variable_yield = variable_yield
@@ -134,6 +140,8 @@ async def update_batch(
     batch.hourly_labor_rate = hourly_labor_rate
     batch.can_be_scaled = can_be_scaled
     batch.scale_double = scale_double if can_be_scaled else False
+    batch.scale_triple = scale_triple if can_be_scaled else False
+    batch.scale_quadruple = scale_quadruple if can_be_scaled else False
     batch.scale_half = scale_half if can_be_scaled else False
     batch.scale_quarter = scale_quarter if can_be_scaled else False
     batch.scale_eighth = scale_eighth if can_be_scaled else False

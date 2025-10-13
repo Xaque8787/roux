@@ -74,6 +74,8 @@ class BatchCreate(BaseModel):
     can_be_broken_down: Optional[bool] = False
     can_be_scaled: Optional[bool] = False
     scale_double: Optional[bool] = False
+    scale_triple: Optional[bool] = False
+    scale_quadruple: Optional[bool] = False
     scale_half: Optional[bool] = False
     scale_quarter: Optional[bool] = False
     scale_eighth: Optional[bool] = False

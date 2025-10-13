@@ -530,6 +530,8 @@ async def start_task_with_scale(
     scale_factors = {
         'full': 1.0,
         'double': 2.0,
+        'triple': 3.0,
+        'quadruple': 4.0,
         'half': 0.5,
         'quarter': 0.25,
         'eighth': 0.125,

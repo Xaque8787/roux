@@ -95,25 +95,33 @@
                             <div class="col-md-6">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="scale_double" id="scale_double">
-                                    <label class="form-check-label" for="scale_double">Double Batch</label>
+                                    <label class="form-check-label" for="scale_double">Double Batch (2x)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_triple" id="scale_triple">
+                                    <label class="form-check-label" for="scale_triple">Triple Batch (3x)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="scale_quadruple" id="scale_quadruple">
+                                    <label class="form-check-label" for="scale_quadruple">Quadruple Batch (4x)</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="scale_half" id="scale_half">
-                                    <label class="form-check-label" for="scale_half">Half Batch</label>
+                                    <label class="form-check-label" for="scale_half">Half Batch (1/2)</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="scale_quarter" id="scale_quarter">
-                                    <label class="form-check-label" for="scale_quarter">Quarter Batch</label>
+                                    <label class="form-check-label" for="scale_quarter">Quarter Batch (1/4)</label>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="scale_eighth" id="scale_eighth">
-                                    <label class="form-check-label" for="scale_eighth">Eighth Batch</label>
+                                    <label class="form-check-label" for="scale_eighth">Eighth Batch (1/8)</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="scale_sixteenth" id="scale_sixteenth">
-                                    <label class="form-check-label" for="scale_sixteenth">Sixteenth Batch</label>
+                                    <label class="form-check-label" for="scale_sixteenth">Sixteenth Batch (1/16)</label>
                                 </div>
                             </div>
                         </div>
@@ -184,6 +192,8 @@
                                         <span class="badge bg-success">Scalable</span>
                                         <br>
                                         {% if batch.scale_double %}<span class="badge bg-info">2x</span>{% endif %}
+                                        {% if batch.scale_triple %}<span class="badge bg-info">3x</span>{% endif %}
+                                        {% if batch.scale_quadruple %}<span class="badge bg-info">4x</span>{% endif %}
                                         {% if batch.scale_half %}<span class="badge bg-info">1/2</span>{% endif %}
                                         {% if batch.scale_quarter %}<span class="badge bg-info">1/4</span>{% endif %}
                                         {% if batch.scale_eighth %}<span class="badge bg-info">1/8</span>{% endif %}

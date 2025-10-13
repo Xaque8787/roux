@@ -83,6 +83,32 @@
                         </div>
                     </div>
                     {% endif %}
+
+                    {% if batch.scale_triple %}
+                    <div class="col-md-4 mb-2">
+                        <div class="card bg-light">
+                            <div class="card-body p-2 text-center">
+                                <h6>Triple Batch (3x)</h6>
+                                <p class="mb-1">Yield: {{ batch.yield_amount * 3 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost * 3) }}</p>
+                                <small>Labor: {{ batch.estimated_labor_minutes * 3 }} min</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if batch.scale_quadruple %}
+                    <div class="col-md-4 mb-2">
+                        <div class="card bg-light">
+                            <div class="card-body p-2 text-center">
+                                <h6>Quadruple Batch (4x)</h6>
+                                <p class="mb-1">Yield: {{ batch.yield_amount * 4 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost * 4) }}</p>
+                                <small>Labor: {{ batch.estimated_labor_minutes * 4 }} min</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     
                     {% if batch.scale_half %}
                     <div class="col-md-4 mb-2">
@@ -158,6 +184,32 @@
                                 <p class="mb-1">Ingredients: 2x recipe amounts</p>
                                 <p class="mb-1">Est. Cost: ${{ "%.2f"|format(total_batch_cost * 2) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes * 2 }} min</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if batch.scale_triple %}
+                    <div class="col-md-4 mb-2">
+                        <div class="card bg-light">
+                            <div class="card-body p-2 text-center">
+                                <h6>Triple Recipe (3x)</h6>
+                                <p class="mb-1">Ingredients: 3x recipe amounts</p>
+                                <p class="mb-1">Est. Cost: ${{ "%.2f"|format(total_batch_cost * 3) }}</p>
+                                <small>Labor: {{ batch.estimated_labor_minutes * 3 }} min</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if batch.scale_quadruple %}
+                    <div class="col-md-4 mb-2">
+                        <div class="card bg-light">
+                            <div class="card-body p-2 text-center">
+                                <h6>Quadruple Recipe (4x)</h6>
+                                <p class="mb-1">Ingredients: 4x recipe amounts</p>
+                                <p class="mb-1">Est. Cost: ${{ "%.2f"|format(total_batch_cost * 4) }}</p>
+                                <small>Labor: {{ batch.estimated_labor_minutes * 4 }} min</small>
                             </div>
                         </div>
                     </div>

@@ -422,6 +422,8 @@ class Batch(Base):
     hourly_labor_rate = Column(Float, default=16.75)
     can_be_scaled = Column(Boolean, default=False)
     scale_double = Column(Boolean, default=False)
+    scale_triple = Column(Boolean, default=False)
+    scale_quadruple = Column(Boolean, default=False)
     scale_half = Column(Boolean, default=False)
     scale_quarter = Column(Boolean, default=False)
     scale_eighth = Column(Boolean, default=False)
@@ -440,10 +442,14 @@ class Batch(Base):
     def get_available_scales(self):
         """Get available scaling options for this batch"""
         scales = [('full', 1.0, 'Full Batch')]
-        
+
         if self.can_be_scaled:
             if self.scale_double:
                 scales.append(('double', 2.0, 'Double Batch (2x)'))
+            if self.scale_triple:
+                scales.append(('triple', 3.0, 'Triple Batch (3x)'))
+            if self.scale_quadruple:
+                scales.append(('quadruple', 4.0, 'Quadruple Batch (4x)'))
             if self.scale_half:
                 scales.append(('half', 0.5, 'Half Batch (1/2)'))
             if self.scale_quarter:
@@ -452,7 +458,7 @@ class Batch(Base):
                 scales.append(('eighth', 0.125, 'Eighth Batch (1/8)'))
             if self.scale_sixteenth:
                 scales.append(('sixteenth', 0.0625, 'Sixteenth Batch (1/16)'))
-        
+
         return scales
     
     def get_scaled_yield(self, scale_factor):
