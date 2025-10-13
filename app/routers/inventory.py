@@ -427,14 +427,26 @@ async def assign_task(
 async def assign_multiple_employees_to_task(
     day_id: int,
     task_id: int,
-    assigned_to_ids: list[int] = Form([]),
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    # Get form data to handle checkbox values
+    form_data = await request.form()
+    assigned_to_ids = []
+
+    # Extract employee IDs from form data
+    for key, value in form_data.items():
+        if key == 'assigned_to_ids':
+            try:
+                assigned_to_ids.append(int(value))
+            except ValueError:
+                continue
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if not assigned_to_ids:
         raise HTTPException(status_code=400, detail="At least one employee must be selected")
     

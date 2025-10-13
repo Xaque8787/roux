@@ -538,12 +538,24 @@
                     
                     <div class="mb-3">
                         <label class="form-label">Assign To (Optional)</label>
-                        {% for employee in employees %}
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_emp{{ employee.id }}">
-                            <label class="form-check-label" for="assign_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
-                        </div>
-                        {% endfor %}
+                        {% if inventory_day.employees_working %}
+                            {% set working_employee_ids = inventory_day.employees_working.split(',') %}
+                            {% for employee in employees %}
+                                {% if employee.id|string in working_employee_ids %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_emp{{ employee.id }}">
+                                    <label class="form-check-label" for="assign_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            {% for employee in employees %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_emp{{ employee.id }}">
+                                <label class="form-check-label" for="assign_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -567,12 +579,24 @@
                 <p><strong>Task:</strong> <span id="assignTaskDescription"></span></p>
                 <div class="mb-3">
                     <label class="form-label">Select Employee(s):</label>
-                    {% for employee in employees %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_modal_emp{{ employee.id }}">
-                        <label class="form-check-label" for="assign_modal_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
-                    </div>
-                    {% endfor %}
+                    {% if inventory_day.employees_working %}
+                        {% set working_employee_ids = inventory_day.employees_working.split(',') %}
+                        {% for employee in employees %}
+                            {% if employee.id|string in working_employee_ids %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_modal_emp{{ employee.id }}">
+                                <label class="form-check-label" for="assign_modal_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {% for employee in employees %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="assigned_to_ids" value="{{ employee.id }}" id="assign_modal_emp{{ employee.id }}">
+                            <label class="form-check-label" for="assign_modal_emp{{ employee.id }}">{{ employee.full_name or employee.username }}</label>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
                 </div>
             </div>
             <div class="modal-footer">
