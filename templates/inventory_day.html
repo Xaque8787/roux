@@ -59,6 +59,7 @@
                     <table class="table table-striped table-sm table-sortable">
                         <thead>
                             <tr>
+                                <th data-sortable data-sort-type="text">Category</th>
                                 <th data-sortable data-sort-type="text">Item</th>
                                 <th data-sortable data-sort-type="number">Quantity</th>
                                 <th data-sortable data-sort-type="number">Par</th>
@@ -76,10 +77,12 @@
                             <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}">
                                 <td>
                                     {% if day_item.inventory_item.category %}
-                                        {{ day_item.inventory_item.category.icon or '🔘' }}
+                                        {{ day_item.inventory_item.category.icon or '🔘' }} <small>{{ day_item.inventory_item.category.name }}</small>
                                     {% else %}
-                                        🔘
+                                        🔘 <small>Uncategorized</small>
                                     {% endif %}
+                                </td>
+                                <td>
                                     <strong>{{ day_item.inventory_item.name }}</strong>
                                     {% if day_item.inventory_item.batch %}
                                         <br><small class="text-muted">Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}</small>
