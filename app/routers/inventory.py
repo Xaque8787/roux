@@ -436,19 +436,12 @@ async def assign_multiple_employees_to_task(
     assigned_to_ids = []
 
     # Extract employee IDs from form data - use multi_items() for multiple values with same name
-    print(f"🔍 DEBUG: Form data items: {list(form_data.items())}")
-    print(f"🔍 DEBUG: Form data multi_items: {list(form_data.multi_items())}")
-
-    # Use multi_items() instead of items() to get all values with same name
     for key, value in form_data.multi_items():
-        print(f"🔍 DEBUG: key={key}, value={value}")
         if key == 'assigned_to_ids':
             try:
                 assigned_to_ids.append(int(value))
             except ValueError:
                 continue
-
-    print(f"🔍 DEBUG: Collected assigned_to_ids: {assigned_to_ids}")
 
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
