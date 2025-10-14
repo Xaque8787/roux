@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import case
 from datetime import date, timedelta
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
@@ -956,7 +957,30 @@ async def inventory_day_detail(day_id: int, request: Request, db: Session = Depe
     
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
     janitorial_day_items = db.query(JanitorialTaskDay).filter(JanitorialTaskDay.day_id == day_id).all()
-    tasks = db.query(Task).filter(Task.day_id == day_id).order_by(Task.id).all()
+
+    # Query tasks with category sorting
+    # Create aliases for categories from different sources
+    inventory_category = db.query(Category).join(InventoryItem).filter(
+        InventoryItem.id == Task.inventory_item_id
+    ).correlate(Task).scalar_subquery()
+
+    janitorial_category = db.query(Category).join(JanitorialTask).filter(
+        JanitorialTask.id == Task.janitorial_task_id
+    ).correlate(Task).scalar_subquery()
+
+    # Get tasks and sort by category name (prioritizing inventory item category, then janitorial category)
+    tasks = db.query(Task)\
+        .outerjoin(InventoryItem, Task.inventory_item_id == InventoryItem.id)\
+        .outerjoin(Category, InventoryItem.category_id == Category.id)\
+        .filter(Task.day_id == day_id)\
+        .order_by(
+            case(
+                (Category.name.isnot(None), Category.name),
+                else_=''
+            ),
+            Task.id
+        )\
+        .all()
     employees = db.query(User).filter(User.is_active == True).all()
     batches = db.query(Batch).all()  # Add batches for manual task creation
     categories = db.query(Category).filter(Category.type.in_(["batch", "inventory"])).all()
