@@ -243,11 +243,11 @@
                                     {% if task.assigned_employee_ids %}
                                         {% set employee_ids = task.assigned_employee_ids.split(',') %}
                                         {% if employee_ids|length > 1 %}
-                                            <span class="text-info">Team of {{ employee_ids|length }}</span>
+                                            <span class="text-info"><strong>Team of {{ employee_ids|length }}</strong></span>
                                             <br>
                                             {% for emp_id in employee_ids %}
                                                 {% for emp in employees %}
-                                                    {% if emp.id|string == emp_id %}
+                                                    {% if emp.id|string == emp_id.strip() %}
                                                         <span class="badge bg-secondary me-1">{{ emp.full_name or emp.username }}</span>
                                                     {% endif %}
                                                 {% endfor %}
@@ -255,7 +255,7 @@
                                         {% else %}
                                             {% for emp_id in employee_ids %}
                                                 {% for emp in employees %}
-                                                    {% if emp.id|string == emp_id %}
+                                                    {% if emp.id|string == emp_id.strip() %}
                                                         <small>{{ emp.full_name or emp.username }}</small>
                                                     {% endif %}
                                                 {% endfor %}
