@@ -834,33 +834,47 @@ async def inventory_report(
     })
 def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items, janitorial_day_items, force_regenerate: bool = False):
     """Generate tasks for items that are below par level"""
-    
+
     if force_regenerate:
         # Force regenerate: delete ALL tasks for this day
         db.query(Task).filter(Task.day_id == inventory_day.id).delete()
     else:
-        # Normal operation: only delete auto-generated tasks that haven't been started
-        db.query(Task).filter(
-            Task.day_id == inventory_day.id,
-            Task.auto_generated == True,
-            Task.started_at.is_(None)  # Only delete tasks that haven't been started
-        ).delete()
-    
+        # Normal operation: only delete auto-generated tasks that haven't been started AND have changed
+        pass  # We'll handle deletions on a per-task basis below
+
     for day_item in inventory_day_items:
         item = day_item.inventory_item
         is_below_par = day_item.quantity < item.par_level
-        
-        # Check if task already exists for this item (unless force regenerating)
-        if not force_regenerate:
-            existing_task = db.query(Task).filter(
-                Task.day_id == inventory_day.id,
-                Task.inventory_item_id == item.id
-            ).first()
-            
-            # Skip if task already exists and has been started
-            if existing_task and existing_task.started_at:
-                continue
-        
+
+        # Check if task already exists for this item
+        existing_task = db.query(Task).filter(
+            Task.day_id == inventory_day.id,
+            Task.inventory_item_id == item.id
+        ).first()
+
+        # CRITICAL: Never modify tasks that have been started or completed
+        if existing_task and existing_task.started_at:
+            continue
+
+        # Check if inventory values have changed since task was created
+        inventory_changed = False
+        if existing_task:
+            # If snapshot fields are None (old tasks), treat as changed to update them
+            if existing_task.snapshot_quantity is None:
+                inventory_changed = True
+            else:
+                # Compare current values with snapshot
+                inventory_changed = (
+                    existing_task.snapshot_quantity != day_item.quantity or
+                    existing_task.snapshot_par_level != item.par_level or
+                    existing_task.snapshot_override_create != day_item.override_create_task or
+                    existing_task.snapshot_override_no_task != day_item.override_no_task
+                )
+
+        # If task exists, inventory hasn't changed, and not force regenerating - skip it
+        if existing_task and not inventory_changed and not force_regenerate:
+            continue
+
         # Create task if:
         # 1. Item is below par and not overridden to skip
         # 2. Item is above par but overridden to create task
@@ -868,55 +882,64 @@ def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_d
             (is_below_par and not day_item.override_no_task) or
             (not is_below_par and day_item.override_create_task)
         )
-        
+
+        # If task exists but should no longer exist, delete it
+        if existing_task and not should_create_task:
+            db.delete(existing_task)
+            continue
+
+        # If task should exist but doesn't, or inventory changed, create/update it
         if should_create_task:
+            # If task exists and inventory changed, delete and recreate
+            if existing_task:
+                db.delete(existing_task)
+
             # Create task description
             if item.batch:
                 description = f"Make {item.name} - {item.batch.recipe.name}"
             else:
                 description = f"Restock {item.name}"
-            
+
             task = Task(
                 day_id=inventory_day.id,
                 inventory_item_id=item.id,
                 batch_id=item.batch_id if item.batch else None,
                 description=description,
-                auto_generated=True
+                auto_generated=True,
+                snapshot_quantity=day_item.quantity,
+                snapshot_par_level=item.par_level,
+                snapshot_override_create=day_item.override_create_task,
+                snapshot_override_no_task=day_item.override_no_task
             )
             db.add(task)
     
     # Generate janitorial tasks
     for janitorial_day_item in janitorial_day_items:
         janitorial_task = janitorial_day_item.janitorial_task
-        
+
         # Check if task already exists for this janitorial task
         existing_task = db.query(Task).filter(
             Task.day_id == inventory_day.id,
             Task.janitorial_task_id == janitorial_task.id
         ).first()
-        
-        # Handle existing janitorial tasks
-        if existing_task:
-            # If task exists but should not be included, delete it (unless it's been started)
-            should_include = (
-                janitorial_task.task_type == 'daily' or
-                (janitorial_task.task_type == 'manual' and janitorial_day_item.include_task)
-            )
-            
-            if not should_include and not existing_task.started_at:
-                # Remove unchecked janitorial task that hasn't been started
-                db.delete(existing_task)
+
+        # CRITICAL: Never modify tasks that have been started or completed
+        if existing_task and existing_task.started_at:
             continue
-        
-        # Create task if:
-        # 1. Daily task (always included)
-        # 2. Manual task that is checked to be included
-        should_create_task = (
+
+        # Determine if task should be included
+        should_include = (
             janitorial_task.task_type == 'daily' or
             (janitorial_task.task_type == 'manual' and janitorial_day_item.include_task)
         )
-        
-        if should_create_task:
+
+        # If task exists but should no longer exist, delete it
+        if existing_task and not should_include:
+            db.delete(existing_task)
+            continue
+
+        # If task should exist but doesn't, create it
+        if should_include and not existing_task:
             task = Task(
                 day_id=inventory_day.id,
                 janitorial_task_id=janitorial_task.id,

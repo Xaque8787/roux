@@ -797,6 +797,10 @@ class Task(Base):
     scale_factor = Column(Float, default=1.0)
     made_amount = Column(Float)
     made_unit = Column(String)
+    snapshot_quantity = Column(Float)  # Inventory quantity when task was created
+    snapshot_par_level = Column(Float)  # Par level when task was created
+    snapshot_override_create = Column(Boolean, default=False)  # Override state when task was created
+    snapshot_override_no_task = Column(Boolean, default=False)  # Override state when task was created
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
