@@ -174,7 +174,11 @@ async def create_inventory_day(
     # Convert string date to date object
     from datetime import date as date_class
     inventory_date_obj = date_class.fromisoformat(date)
-    
+
+    # Check if at least one employee is assigned
+    if not employees_working or len(employees_working) == 0:
+        raise HTTPException(status_code=400, detail="At least one employee must be assigned to create a new day")
+
     # Check if day already exists
     existing_day = db.query(InventoryDay).filter(InventoryDay.date == inventory_date_obj).first()
     if existing_day:

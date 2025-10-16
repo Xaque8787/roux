@@ -16,16 +16,19 @@
                 <h5><i class="fas fa-calendar-plus"></i> Start New Day</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/inventory/new_day">
+                <form method="post" action="/inventory/new_day" id="newDayForm" onsubmit="return validateNewDayForm()">
                     <div class="mb-3">
                         <label for="date" class="form-label">Date</label>
                         <input type="date" class="form-control" id="date" name="date" value="{{ today_date }}" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Employees Working:</label>
+                        <label class="form-label">Employees Working: <span class="text-danger">*</span></label>
+                        <div id="employeeValidationError" class="alert alert-danger" style="display: none; padding: 0.5rem;">
+                            <small>Please select at least one employee</small>
+                        </div>
                         {% for emp in employees %}
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="employees_working" value="{{ emp.id }}" id="emp{{ emp.id }}">
+                            <input class="form-check-input employee-checkbox" type="checkbox" name="employees_working" value="{{ emp.id }}" id="emp{{ emp.id }}">
                             <label class="form-check-label" for="emp{{ emp.id }}">
                                 {{ emp.full_name or emp.username }}
                             </label>
@@ -684,5 +687,20 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('par_unit_equals_amount').addEventListener('input', updateParUnitEqualsPreview);
     document.getElementById('par_unit_equals_unit').addEventListener('change', updateParUnitEqualsPreview);
 });
+
+function validateNewDayForm() {
+    const checkboxes = document.querySelectorAll('.employee-checkbox');
+    const errorDiv = document.getElementById('employeeValidationError');
+    const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+
+    if (!anyChecked) {
+        errorDiv.style.display = 'block';
+        errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return false;
+    }
+
+    errorDiv.style.display = 'none';
+    return true;
+}
 </script>
 {% endblock %}
