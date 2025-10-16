@@ -123,7 +123,7 @@
                                 {% if batch.variable_yield %}
                                     (Variable Yield)
                                 {% else %}
-                                    ({{ batch.yield_amount }} {{ batch.yield_unit }})
+                                    ({{ batch.yield_amount }} {{ batch.yield_unit|format_unit }})
                                 {% endif %}
                             </option>
                             {% endfor %}
