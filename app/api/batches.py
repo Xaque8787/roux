@@ -142,8 +142,11 @@ async def get_batch_cost_per_unit(batch_id: int, unit: str, db: Session = Depend
     # Convert to requested unit if different from yield unit
     expected_cost_per_unit = expected_cost_per_yield_unit
     actual_cost_per_unit = actual_cost_per_yield_unit
-    
+
     if unit != batch.yield_unit:
+        # Get recipe ingredients to determine usage type
+        recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
+
         # Determine usage type from ingredients
         usage_type = None
         for ri in recipe_ingredients:
