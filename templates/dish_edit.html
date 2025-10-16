@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
         unit: "{{ portion.portion_unit or portion.batch.yield_unit or '' }}",
         portion_unit_name: "{{ portion.portion_unit or portion.batch.yield_unit or '' }}",
         portion_size: {{ portion.portion_size or 0 }},
-        estimated_cost: 0, // Will be calculated
+        estimated_cost: {{ portion.get_expected_cost(db) }},
         use_recipe_portion: {{ portion.use_recipe_portion|lower }},
         recipe_portion_percent: {{ portion.recipe_portion_percent or 0 }}
     });
@@ -487,6 +487,7 @@ function updateSelectedBatchesDisplay() {
     
     selectedBatches.forEach((batch, index) => {
         totalCost += batch.estimated_cost;
+        const displayPercent = batch.recipe_portion_percent > 1 ? batch.recipe_portion_percent : (batch.recipe_portion_percent * 100);
         html += `
             <div class="card mb-2">
                 <div class="card-body p-2">
@@ -494,8 +495,8 @@ function updateSelectedBatchesDisplay() {
                         <div>
                             <strong>${batch.recipe_name}</strong><br>
                             <small>
-                                ${batch.use_recipe_portion ? 
-                                    `${(batch.recipe_portion_percent * 100).toFixed(1)}% of recipe` : 
+                                ${batch.use_recipe_portion ?
+                                    `${displayPercent.toFixed(1)}% of recipe` :
                                     `${batch.portion_size} ${batch.portion_unit_name}`
                                 } - $${batch.estimated_cost.toFixed(2)}
                             </small>
