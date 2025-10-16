@@ -2,7 +2,7 @@
 # Updated for GitHub integration - Enhanced task summary calculations
 
 # Builder stage
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 WORKDIR /app
 
@@ -59,7 +59,7 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 CMD ["gunicorn", "app.main:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--access-logfile", "-", "--error-logfile", "-"]
 
 # Development stage (optional)
-FROM production as development
+FROM production AS development
 
 USER root
 
