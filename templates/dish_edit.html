@@ -211,14 +211,14 @@ async function loadAllBatches() {
 
 function filterBatches(query) {
     const dropdown = document.getElementById('batchDropdown');
-    
-    const filteredBatches = allBatches.filter(batch => 
+
+    const filteredBatches = allBatches.filter(batch =>
         batch.recipe_name.toLowerCase().includes(query) ||
         (batch.category && batch.category.toLowerCase().includes(query))
     );
-    
+
     dropdown.innerHTML = '';
-    
+
     if (filteredBatches.length === 0) {
         dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No batches found</div>';
     } else {
@@ -231,21 +231,20 @@ function filterBatches(query) {
                 <small>Yield: ${batch.yield_amount || 'Variable'} ${batch.yield_unit || ''} - $${batch.cost_per_unit.toFixed(4)}/unit</small>
                 ${batch.category ? `<br><small class="text-muted">${batch.category}</small>` : ''}
             `;
-            
+
             item.addEventListener('click', function(e) {
                 e.preventDefault();
                 selectBatch(batch);
                 document.getElementById('batchSearch').value = batch.recipe_name;
                 dropdown.style.display = 'none';
             });
-            
+
             dropdown.appendChild(item);
         });
     }
-    
-    if (query || document.getElementById('batchSearch') === document.activeElement) {
-        dropdown.style.display = 'block';
-    }
+
+    // Always show dropdown when filtering (user is interacting with search)
+    dropdown.style.display = 'block';
 }
 
 function selectBatch(batch) {
