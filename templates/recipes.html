@@ -593,7 +593,7 @@ function showPortionModal(batch, availableUnits) {
                             <div class="col-4">
                                 <select class="form-select" id="portionUnitSelect">
                                     ${availableUnits.map(unit =>
-                                        `<option value="${unit.name}">${unit.name}</option>`
+                                        `<option value="${unit.name}">${formatUnitDisplay(unit.name)}</option>`
                                     ).join('')}
                                 </select>
                             </div>
