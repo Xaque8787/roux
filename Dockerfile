@@ -32,6 +32,7 @@ COPY app/ ./app/
 COPY templates/ ./templates/
 COPY static/ ./static/
 COPY data/ ./data/
+COPY migrations/ ./migrations/
 
 # Ensure data directory has proper permissions
 RUN chown -R app:app /app/data && chmod -R 755 /app/data
