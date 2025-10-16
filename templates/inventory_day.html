@@ -321,7 +321,7 @@
                                     {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
                                         {% if task.status == "completed" %}
                                             <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/reopen" style="display:inline;">
-                                                <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Reopen this task? The timer will resume from where it was when completed.')">
+                                                <button type="submit" class="btn btn-sm btn-warning">
                                                     <i class="fas fa-undo"></i>
                                                 </button>
                                             </form>
@@ -887,9 +887,7 @@ function startTaskWithScale(taskId) {
 // Check if task has assigned employees before starting
 function checkAssignmentAndStart(taskId, assignedToId, assignedEmployeeIds) {
     if (!assignedToId && !assignedEmployeeIds) {
-        if (confirm('This task has no assigned employees. Would you like to assign employees now?')) {
-            showAssignModal(taskId, 'Task');
-        }
+        showAssignModal(taskId, 'Task');
         return;
     }
 
@@ -905,9 +903,7 @@ function checkAssignmentAndStart(taskId, assignedToId, assignedEmployeeIds) {
 // Check assignment before showing scale selection
 function checkAssignmentAndShowScale(taskId, assignedToId, assignedEmployeeIds, recipeName) {
     if (!assignedToId && !assignedEmployeeIds) {
-        if (confirm('This task has no assigned employees. Would you like to assign employees now?')) {
-            showAssignModal(taskId, recipeName);
-        }
+        showAssignModal(taskId, recipeName);
         return;
     }
 
