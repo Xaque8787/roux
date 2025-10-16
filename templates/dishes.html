@@ -214,19 +214,19 @@ document.addEventListener('DOMContentLoaded', function() {
     batchSearch.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         const query = this.value.trim();
-        
+
         if (query.length === 0) {
             loadAllBatches();
             return;
         }
-        
+
         if (query.length < 2) {
             suggestions.style.display = 'none';
             return;
         }
-        
+
         searchTimeout = setTimeout(() => {
-            fetch(`/api/ingredients/${ingredientId}/cost_per_unit/${selectedUnit}`)
+            fetch(`/api/batches/search?q=${encodeURIComponent(query)}`)
                 .then(response => response.json())
                 .then(data => {
                     displayBatchSuggestions(data);

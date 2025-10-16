@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
-from ..models import (Batch, RecipeIngredient, RecipeBatchPortion, WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS,
+from ..models import (Batch, Recipe, RecipeIngredient, RecipeBatchPortion, WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS,
                      BAKING_MEASUREMENTS, convert_weight, convert_volume)
 
 router = APIRouter(prefix="/api/batches", tags=["batches-api"])
@@ -21,7 +21,7 @@ async def search_batches(q: str = "", db: Session = Depends(get_db)):
     query = db.query(Batch).options(joinedload(Batch.recipe))
 
     if q:
-        query = query.filter(Batch.recipe.has(name=q))
+        query = query.join(Recipe).filter(Recipe.name.ilike(f"%{q}%"))
 
     batches = query.all()
 
