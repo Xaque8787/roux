@@ -6,8 +6,9 @@ from ..database import get_db
 from ..dependencies import require_admin, get_current_user
 from ..models import UtilityCost
 
+from ..utils.template_helpers import setup_template_filters
 router = APIRouter(prefix="/utilities", tags=["utilities"])
-templates = Jinja2Templates(directory="templates")
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/", response_class=HTMLResponse)
 async def utilities_page(request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):

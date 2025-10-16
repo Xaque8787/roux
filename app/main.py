@@ -35,11 +35,8 @@ from .dependencies import get_current_user
 Base.metadata.create_all(bind=engine)
 
 # Initialize templates
-templates = Jinja2Templates(directory="templates")
-
-# Add custom Jinja2 filters
-from app.utils.template_helpers import format_unit_display
-templates.env.filters['format_unit'] = format_unit_display
+from app.utils.template_helpers import setup_template_filters
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")

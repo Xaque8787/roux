@@ -15,6 +15,11 @@ def format_unit_display(unit):
 
     return unit_display_map.get(unit, unit)
 
+def setup_template_filters(templates_instance):
+    """Setup custom filters for a Jinja2Templates instance"""
+    templates_instance.env.filters['format_unit'] = format_unit_display
+    return templates_instance
+
 def get_category_emoji(category):
     """Get emoji for a category, with fallback"""
     if category and hasattr(category, 'icon') and category.icon:

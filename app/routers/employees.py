@@ -7,8 +7,9 @@ from ..dependencies import require_admin, get_current_user, require_manager_or_a
 from ..models import User
 from ..auth import hash_password
 
+from ..utils.template_helpers import setup_template_filters
 router = APIRouter(prefix="/employees", tags=["employees"])
-templates = Jinja2Templates(directory="templates")
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/", response_class=HTMLResponse)
 async def employees_page(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):

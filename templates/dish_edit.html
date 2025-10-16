@@ -451,7 +451,7 @@ function addBatchToDish() {
         batchData.portion_unit_name = 'recipe %';
     } else {
         batchData.unit = portionUnit;
-        batchData.portion_unit_name = formatUnitDisplay(portionUnit);
+        batchData.portion_unit_name = portionUnit;
         batchData.portion_size = portionSize;
         batchData.recipe_portion_percent = null;
     }

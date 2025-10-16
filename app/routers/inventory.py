@@ -14,8 +14,9 @@ from datetime import datetime
 # Import SSE broadcasting functions
 from ..sse import broadcast_task_update, broadcast_inventory_update, broadcast_day_update
 
+from ..utils.template_helpers import setup_template_filters
 router = APIRouter(prefix="/inventory", tags=["inventory"])
-templates = Jinja2Templates(directory="templates")
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/", response_class=HTMLResponse)
 async def inventory_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):

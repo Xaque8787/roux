@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import Batch, Recipe, RecipeIngredient, Category
+from ..utils.template_helpers import setup_template_filters
 
 router = APIRouter(prefix="/batches", tags=["batches"])
-templates = Jinja2Templates(directory="templates")
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/", response_class=HTMLResponse)
 async def batches_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):

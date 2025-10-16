@@ -8,8 +8,9 @@ from ..models import User
 from ..auth import hash_password, verify_password, create_jwt, ACCESS_TOKEN_EXPIRE_MINUTES
 from ..utils.helpers import create_default_categories, create_default_vendor_units, create_default_vendors, create_default_par_unit_names
 
+from ..utils.template_helpers import setup_template_filters
 router = APIRouter(tags=["auth"])
-templates = Jinja2Templates(directory="templates")
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/setup", response_class=HTMLResponse)
 async def setup_page(request: Request, db: Session = Depends(get_db)):

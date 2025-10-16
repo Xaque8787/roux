@@ -6,9 +6,10 @@ from ..database import get_db
 from ..dependencies import require_admin, get_current_user, require_manager_or_admin
 from ..models import Ingredient, Category, Vendor, VendorUnit
 from ..utils.helpers import get_today_date
+from ..utils.template_helpers import setup_template_filters
 
 router = APIRouter(prefix="/ingredients", tags=["ingredients"])
-templates = Jinja2Templates(directory="templates")
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/", response_class=HTMLResponse)
 async def ingredients_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
