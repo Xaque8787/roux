@@ -319,17 +319,21 @@
                                     </a>
                                     
                                     {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
-                                        {% if task.status == "not_started" %}
+                                        {% if task.status == "completed" %}
+                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/reopen" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Reopen this task? The timer will resume from where it was when completed.')">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            </form>
+                                        {% elif task.status == "not_started" %}
                                             {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="showScaleSelection({{ task.id }}, '{{ task.batch.recipe.name }}')">
+                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndShowScale({{ task.id }}, {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}', '{{ task.batch.recipe.name }}')">
                                                 <i class="fas fa-play"></i>
                                             </button>
                                             {% else %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start" style="display:inline;">
-                                                <button type="submit" class="btn btn-sm btn-primary">
-                                                    <i class="fas fa-play"></i>
-                                                </button>
-                                            </form>
+                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndStart({{ task.id }}, {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}')">
+                                                <i class="fas fa-play"></i>
+                                            </button>
                                             {% endif %}
                                         {% elif task.status == "in_progress" %}
                                             <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
@@ -860,24 +864,55 @@ function showScaleSelection(taskId, recipeName) {
 function startTaskWithScale(taskId) {
     const scaleSelect = document.getElementById('scaleSelect');
     const selectedScale = scaleSelect.value;
-    
+
     if (!selectedScale) {
         alert('Please select a batch scale');
         return;
     }
-    
+
     const form = document.createElement('form');
     form.method = 'post';
     form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
     form.style.display = 'none';
-    
+
     const scaleInput = document.createElement('input');
     scaleInput.name = 'selected_scale';
     scaleInput.value = selectedScale;
-    
+
     form.appendChild(scaleInput);
     document.body.appendChild(form);
     form.submit();
+}
+
+// Check if task has assigned employees before starting
+function checkAssignmentAndStart(taskId, assignedToId, assignedEmployeeIds) {
+    if (!assignedToId && !assignedEmployeeIds) {
+        if (confirm('This task has no assigned employees. Would you like to assign employees now?')) {
+            showAssignModal(taskId, 'Task');
+        }
+        return;
+    }
+
+    // Task has assignments, proceed with start
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start`;
+    form.style.display = 'none';
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Check assignment before showing scale selection
+function checkAssignmentAndShowScale(taskId, assignedToId, assignedEmployeeIds, recipeName) {
+    if (!assignedToId && !assignedEmployeeIds) {
+        if (confirm('This task has no assigned employees. Would you like to assign employees now?')) {
+            showAssignModal(taskId, recipeName);
+        }
+        return;
+    }
+
+    // Task has assignments, proceed with scale selection
+    showScaleSelection(taskId, recipeName);
 }
 
 // Made Amount Input Modal

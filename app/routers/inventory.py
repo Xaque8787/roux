@@ -489,14 +489,18 @@ async def start_task(
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if task.status != "not_started":
         raise HTTPException(status_code=400, detail="Task already started")
-    
+
+    # Check if task has assigned employees
+    if not task.assigned_to_id and not task.assigned_employee_ids:
+        raise HTTPException(status_code=400, detail="Please assign employees before starting this task")
+
     task.started_at = datetime.utcnow()
     task.is_paused = False
     db.commit()
-    
+
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
@@ -507,7 +511,7 @@ async def start_task(
     except Exception as e:
         print(f"❌ Error broadcasting task start: {e}")
         pass
-    
+
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/start_with_scale")
@@ -521,13 +525,17 @@ async def start_task_with_scale(
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if task.status != "not_started":
         raise HTTPException(status_code=400, detail="Task already started")
-    
+
+    # Check if task has assigned employees
+    if not task.assigned_to_id and not task.assigned_employee_ids:
+        raise HTTPException(status_code=400, detail="Please assign employees before starting this task")
+
     # Set scale information
     task.selected_scale = selected_scale
-    
+
     # Calculate scale factor
     scale_factors = {
         'full': 1.0,
@@ -540,12 +548,12 @@ async def start_task_with_scale(
         'sixteenth': 0.0625
     }
     task.scale_factor = scale_factors.get(selected_scale, 1.0)
-    
+
     # Start the task
     task.started_at = datetime.utcnow()
     task.is_paused = False
     db.commit()
-    
+
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
@@ -557,7 +565,7 @@ async def start_task_with_scale(
     except Exception as e:
         print(f"❌ Error broadcasting task start: {e}")
         pass
-    
+
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/pause")
@@ -719,6 +727,44 @@ async def finish_task_with_amount(
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
     
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
+
+@router.post("/day/{day_id}/tasks/{task_id}/reopen")
+async def reopen_task(
+    day_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status != "completed":
+        raise HTTPException(status_code=400, detail="Only completed tasks can be reopened")
+
+    # Clear finish timestamp to reopen the task
+    # Keep the started_at, total_pause_time, and other timer data intact
+    task.finished_at = None
+    task.made_amount = None
+    task.made_unit = None
+
+    # Resume the task at the point where it was completed
+    task.is_paused = False
+
+    db.commit()
+
+    # Broadcast AFTER committing
+    try:
+        await broadcast_task_update(day_id, task_id, "task_reopened", {
+            "reopened_at": datetime.utcnow().isoformat(),
+            "reopened_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted task reopen for task {task_id}")
+    except Exception as e:
+        print(f"❌ Error broadcasting task reopen: {e}")
+        pass
+
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/notes")
