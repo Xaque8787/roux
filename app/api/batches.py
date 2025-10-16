@@ -85,32 +85,34 @@ async def get_batch_portion_units(batch_id: int, db: Session = Depends(get_db)):
     
     # Get available units based on usage type
     available_units = []
-    
+
     if usage_type == 'weight':
         available_units.extend(list(WEIGHT_CONVERSIONS.keys()))
     elif usage_type == 'volume':
         available_units.extend(list(VOLUME_CONVERSIONS.keys()))
+        # Add baking measurements for volume batches (cross-system conversion supported)
+        available_units.extend(list(BAKING_MEASUREMENTS.keys()))
     else:
         # Default to both if we can't determine
         available_units.extend(list(WEIGHT_CONVERSIONS.keys()))
         available_units.extend(list(VOLUME_CONVERSIONS.keys()))
-    
-    # Add baking measurements if any ingredient supports them
-    for ri in recipe_ingredients:
-        if ri.ingredient and ri.ingredient.has_baking_conversion:
-            available_units.extend(list(BAKING_MEASUREMENTS.keys()))
-            break
-    
+
+    # Also add baking measurements if batch yield unit is already a baking measurement
+    if batch.yield_unit in BAKING_MEASUREMENTS:
+        available_units.extend(list(BAKING_MEASUREMENTS.keys()))
+        # And allow conversion to standard volume units
+        available_units.extend(list(VOLUME_CONVERSIONS.keys()))
+
     # Remove duplicates and format response
     available_units = list(set(available_units))
-    
+
     result = []
     for unit in available_units:
         result.append({
             "id": unit,
             "name": unit
         })
-    
+
     return result
 
 @router.get("/{batch_id}/cost_per_unit/{unit}")
@@ -153,25 +155,35 @@ async def get_batch_cost_per_unit(batch_id: int, unit: str, db: Session = Depend
             if ri.ingredient and ri.ingredient.usage_type:
                 usage_type = ri.ingredient.usage_type
                 break
-        
+
         try:
-            if usage_type == 'weight' and batch.yield_unit in WEIGHT_CONVERSIONS and unit in WEIGHT_CONVERSIONS:
+            conversion_factor = None
+
+            # Check if both units are in the same system
+            if batch.yield_unit in WEIGHT_CONVERSIONS and unit in WEIGHT_CONVERSIONS:
                 conversion_factor = convert_weight(1, batch.yield_unit, unit)
-                expected_cost_per_unit = expected_cost_per_yield_unit / conversion_factor
-                actual_cost_per_unit = actual_cost_per_yield_unit / conversion_factor
-            elif usage_type == 'volume' and batch.yield_unit in VOLUME_CONVERSIONS and unit in VOLUME_CONVERSIONS:
-                conversion_factor = convert_volume(1, batch.yield_unit, unit)
-                expected_cost_per_unit = expected_cost_per_yield_unit / conversion_factor
-                actual_cost_per_unit = actual_cost_per_yield_unit / conversion_factor
-            elif batch.yield_unit in WEIGHT_CONVERSIONS and unit in WEIGHT_CONVERSIONS:
-                conversion_factor = convert_weight(1, batch.yield_unit, unit)
-                expected_cost_per_unit = expected_cost_per_yield_unit / conversion_factor
-                actual_cost_per_unit = actual_cost_per_yield_unit / conversion_factor
             elif batch.yield_unit in VOLUME_CONVERSIONS and unit in VOLUME_CONVERSIONS:
                 conversion_factor = convert_volume(1, batch.yield_unit, unit)
+            elif batch.yield_unit in BAKING_MEASUREMENTS and unit in BAKING_MEASUREMENTS:
+                # Both are baking measurements, convert via cups
+                cups_from_yield = 1 / BAKING_MEASUREMENTS[batch.yield_unit]
+                conversion_factor = cups_from_yield * BAKING_MEASUREMENTS[unit]
+            # Handle cross-system conversions: VOLUME <-> BAKING
+            elif batch.yield_unit in VOLUME_CONVERSIONS and unit in BAKING_MEASUREMENTS:
+                # Convert from volume unit to cups, then to baking measurement
+                cups_from_volume = convert_volume(1, batch.yield_unit, 'cup')
+                # Now convert cups to the baking measurement
+                conversion_factor = cups_from_volume * BAKING_MEASUREMENTS[unit]
+            elif batch.yield_unit in BAKING_MEASUREMENTS and unit in VOLUME_CONVERSIONS:
+                # Convert from baking measurement to cups, then to volume unit
+                cups_from_baking = 1 / BAKING_MEASUREMENTS[batch.yield_unit]
+                # Now convert cups to the volume unit
+                conversion_factor = convert_volume(cups_from_baking, 'cup', unit)
+
+            if conversion_factor is not None:
                 expected_cost_per_unit = expected_cost_per_yield_unit / conversion_factor
                 actual_cost_per_unit = actual_cost_per_yield_unit / conversion_factor
-        except ValueError:
+        except (ValueError, ZeroDivisionError):
             # Conversion failed, use original values
             pass
     
@@ -200,25 +212,27 @@ async def get_batch_available_units(batch_id: int, db: Session = Depends(get_db)
     
     # Get available units based on usage type
     available_units = []
-    
+
     if usage_type == 'weight':
         available_units.extend(list(WEIGHT_CONVERSIONS.keys()))
     elif usage_type == 'volume':
         available_units.extend(list(VOLUME_CONVERSIONS.keys()))
+        # Add baking measurements for volume batches (cross-system conversion supported)
+        available_units.extend(list(BAKING_MEASUREMENTS.keys()))
     else:
         # Default to both if we can't determine
         available_units.extend(list(WEIGHT_CONVERSIONS.keys()))
         available_units.extend(list(VOLUME_CONVERSIONS.keys()))
-    
-    # Add baking measurements if any ingredient supports them
-    for ri in recipe_ingredients:
-        if ri.ingredient and ri.ingredient.has_baking_conversion:
-            available_units.extend(list(BAKING_MEASUREMENTS.keys()))
-            break
-    
+
+    # Also add baking measurements if batch yield unit is already a baking measurement
+    if batch.yield_unit in BAKING_MEASUREMENTS:
+        available_units.extend(list(BAKING_MEASUREMENTS.keys()))
+        # And allow conversion to standard volume units
+        available_units.extend(list(VOLUME_CONVERSIONS.keys()))
+
     # Remove duplicates
     available_units = list(set(available_units))
-    
+
     return available_units
 
 @router.get("/{batch_id}/recipe_cost")
