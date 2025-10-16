@@ -1,3 +1,20 @@
+def format_unit_display(unit):
+    """Format unit for display, converting underscores to slashes for fractions"""
+    if not unit:
+        return unit
+
+    # Convert internal unit format to display format
+    unit_display_map = {
+        '3_4_cup': '3/4 cup',
+        '2_3_cup': '2/3 cup',
+        '1_2_cup': '1/2 cup',
+        '1_3_cup': '1/3 cup',
+        '1_4_cup': '1/4 cup',
+        '1_8_cup': '1/8 cup'
+    }
+
+    return unit_display_map.get(unit, unit)
+
 def get_category_emoji(category):
     """Get emoji for a category, with fallback"""
     if category and hasattr(category, 'icon') and category.icon:

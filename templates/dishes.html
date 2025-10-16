@@ -313,7 +313,7 @@ function displayBatchSuggestions(batches) {
         item.href = '#';
         item.innerHTML = `
             <strong>${batch.recipe_name}</strong><br>
-            <small>Yield: ${batch.yield_amount} ${batch.yield_unit} - $${batch.cost_per_unit.toFixed(4)}/unit</small>
+            <small>Yield: ${batch.yield_amount} ${formatUnitDisplay(batch.yield_unit)} - $${batch.cost_per_unit.toFixed(4)}/unit</small>
             ${batch.category ? `<br><small class="text-muted">${batch.category}</small>` : ''}
         `;
         
@@ -372,8 +372,8 @@ function showPortionModal(batch, availableUnits) {
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Batch Details</label>
-                        <p class="text-muted">Yield: ${batch.yield_amount} ${batch.yield_unit}<br>
-                        Cost per ${batch.yield_unit}: $${batch.cost_per_unit.toFixed(4)}</p>
+                        <p class="text-muted">Yield: ${batch.yield_amount} ${formatUnitDisplay(batch.yield_unit)}<br>
+                        Cost per ${formatUnitDisplay(batch.yield_unit)}: $${batch.cost_per_unit.toFixed(4)}</p>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Portion Size</label>
@@ -532,7 +532,7 @@ function addBatchToDish() {
         batchData.portion_unit_name = 'recipe %';
     } else {
         batchData.unit = portionUnit;
-        batchData.portion_unit_name = portionUnit;
+        batchData.portion_unit_name = formatUnitDisplay(portionUnit);
         batchData.portion_size = portionSize;
         batchData.recipe_portion_percent = null;
     }
@@ -574,7 +574,7 @@ function updateSelectedBatchesDisplay() {
                             <small>
                                 ${batch.use_recipe_portion ? 
                                     `${(batch.recipe_portion_percent * 100).toFixed(1)}% of recipe` : 
-                                    `${batch.portion_size} ${batch.portion_unit_name}`
+                                    `${batch.portion_size} ${formatUnitDisplay(batch.portion_unit_name)}`
                                 } - $${batch.estimated_cost.toFixed(2)}
                             </small>
                         </div>

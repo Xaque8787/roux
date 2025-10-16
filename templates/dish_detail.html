@@ -45,7 +45,7 @@
                                     {% if portion.use_recipe_portion %}
                                         {{ (portion.recipe_portion_percent * 100)|round(1) }}% of recipe
                                     {% else %}
-                                        {{ portion.portion_unit or portion.batch.yield_unit or '-' }}
+                                        {{ (portion.portion_unit or portion.batch.yield_unit or '-')|format_unit }}
                                     {% endif %}
                                 </td>
                                 <td>

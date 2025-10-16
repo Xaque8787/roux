@@ -76,7 +76,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Double Batch (2x)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount * 2 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount * 2 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost * 2) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes * 2 }} min</small>
                             </div>
@@ -89,7 +89,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Triple Batch (3x)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount * 3 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount * 3 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost * 3) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes * 3 }} min</small>
                             </div>
@@ -102,7 +102,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Quadruple Batch (4x)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount * 4 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount * 4 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost * 4) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes * 4 }} min</small>
                             </div>
@@ -115,7 +115,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Half Batch (1/2)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount / 2 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount / 2 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 2) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes / 2 }} min</small>
                             </div>
@@ -128,7 +128,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Quarter Batch (1/4)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount / 4 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount / 4 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 4) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes / 4 }} min</small>
                             </div>
@@ -141,7 +141,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Eighth Batch (1/8)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount / 8 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount / 8 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 8) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes / 8 }} min</small>
                             </div>
@@ -154,7 +154,7 @@
                         <div class="card bg-light">
                             <div class="card-body p-2 text-center">
                                 <h6>Sixteenth Batch (1/16)</h6>
-                                <p class="mb-1">Yield: {{ batch.yield_amount / 16 }} {{ batch.yield_unit }}</p>
+                                <p class="mb-1">Yield: {{ batch.yield_amount / 16 }} {{ batch.yield_unit|format_unit }}</p>
                                 <p class="mb-1">Cost: ${{ "%.2f"|format(total_batch_cost / 16) }}</p>
                                 <small>Labor: {{ batch.estimated_labor_minutes / 16 }} min</small>
                             </div>
@@ -290,7 +290,7 @@
                         <span class="badge bg-info">Variable Yield</span>
                         <br><small class="text-muted">Yield amount determined during production</small>
                     {% else %}
-                        {{ batch.yield_amount }} {{ batch.yield_unit }}
+                        {{ batch.yield_amount }} {{ batch.yield_unit|format_unit }}
                     {% endif %}
                 </p>
                 <p><strong>Est. Labor Time:</strong> {{ batch.estimated_labor_minutes }} minutes</p>
@@ -305,7 +305,7 @@
                 <hr>
                 
                 {% if not batch.variable_yield %}
-                <p><strong>Cost per {{ batch.yield_unit }}:</strong> 
+                <p><strong>Cost per {{ batch.yield_unit|format_unit }}:</strong> 
                    <span class="text-info">${{ "%.4f"|format(cost_per_yield_unit) }}</span></p>
                 {% else %}
                 <p><strong>Cost per Unit:</strong> 

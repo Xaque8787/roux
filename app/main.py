@@ -37,6 +37,10 @@ Base.metadata.create_all(bind=engine)
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
 
+# Add custom Jinja2 filters
+from app.utils.template_helpers import format_unit_display
+templates.env.filters['format_unit'] = format_unit_display
+
 # Initialize FastAPI app
 app = FastAPI(title="Food Cost Management System", version="1.0.0")
 
