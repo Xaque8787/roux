@@ -71,42 +71,69 @@ cp data/food_cost.db data/food_cost.db.backup_$(date +%Y%m%d_%H%M%S)
 Edit your `.env` file to set your timezone:
 
 ```bash
-# For Eastern Time
-TZ=America/New_York
-
-# For Central Time
-TZ=America/Chicago
+# For Pacific Time (default)
+TZ=America/Los_Angeles
 
 # For Mountain Time
 TZ=America/Denver
 
-# For Pacific Time
-TZ=America/Los_Angeles
+# For Central Time
+TZ=America/Chicago
+
+# For Eastern Time
+TZ=America/New_York
 ```
 
 Full list of timezones: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 
+**Default:** The project is now configured for `America/Los_Angeles` (Pacific Time).
+
 ### Step 3: Run the Migration Script
 
 The migration script will:
-1. Add the new `started_at` and `finalized_at` columns
-2. Populate `started_at` with existing `created_at` values
-3. Convert all UTC timestamps to your local timezone
+1. Automatically detect if you're running locally (PyCharm) or in Docker
+2. Find your database file in the appropriate location
+3. Add the new `started_at` and `finalized_at` columns
+4. Populate `started_at` with existing `created_at` values
+5. Convert all UTC timestamps to your local timezone
 
+**For Local Development (PyCharm):**
 ```bash
 # Make sure TZ is set in your environment
-export TZ=America/New_York
+export TZ=America/Los_Angeles
+
+# Run from your project root directory
+cd /path/to/your/project
 
 # Run the migration
 python migrations/add_day_timestamps_and_timezone.py
 ```
 
-The script will show a confirmation prompt. Review carefully and type `yes` to proceed.
+The script will:
+- Detect that you're running locally (not in Docker)
+- Search for `./data/food_cost.db` in your project directory
+- Show you which database it found
+- List all tables in the database
+- Prompt for confirmation before making changes
+
+**For Docker Deployment:**
+```bash
+# The migration is run the same way, but it will detect the Docker environment
+docker exec -it food-cost-app python migrations/add_day_timestamps_and_timezone.py
+```
+
+The script will automatically detect the Docker container paths (`/app/data/food_cost.db`).
 
 ### Step 4: Restart the Application
 
 After migration completes successfully:
 
+**Local Development:**
+- Stop your PyCharm debugger/run configuration
+- Start the application again
+- The new timezone settings will be active
+
+**Docker Deployment:**
 ```bash
 # If using Docker Compose
 docker-compose down

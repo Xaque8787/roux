@@ -1,113 +1,197 @@
-# Database Migration Guide
+# Migration Guide: Updated for Local Development & Docker
 
-## Problem Fixed
-This migration adds snapshot columns to the `tasks` table to prevent assigned employees from being removed when clicking "Update and Generate Tasks" without changing inventory values.
+## Quick Start
 
-## What This Migration Does
-Adds four new columns to the `tasks` table:
-- `snapshot_quantity` (REAL) - stores inventory quantity when task was created
-- `snapshot_par_level` (REAL) - stores par level when task was created
-- `snapshot_override_create` (BOOLEAN) - stores override_create_task state
-- `snapshot_override_no_task` (BOOLEAN) - stores override_no_task state
-
-## How to Run the Migration
-
-### Option 1: Using SQL Directly (Simplest)
-If you have sqlite3 command-line tool installed:
+### For Local Development (PyCharm)
 
 ```bash
-sqlite3 data/food_cost.db < manual_migration.sql
+# 1. Navigate to your project directory
+cd /home/spiros-zach/Projects/food_cost
+
+# 2. Set your timezone (already in .env)
+export TZ=America/Los_Angeles
+
+# 3. Backup your database
+cp data/food_cost.db data/food_cost.db.backup
+
+# 4. Run the migration
+python migrations/add_day_timestamps_and_timezone.py
+
+# 5. Restart your application in PyCharm
 ```
 
-Or run the SQL commands directly:
+### For Docker Deployment
+
 ```bash
-sqlite3 data/food_cost.db
+# 1. Backup your database first
+docker exec food-cost-app cp /app/data/food_cost.db /app/data/food_cost.db.backup
+
+# 2. Run migration inside container
+docker exec -it food-cost-app python migrations/add_day_timestamps_and_timezone.py
+
+# 3. Restart container
+docker-compose restart food-cost-app
 ```
 
-Then paste these commands:
-```sql
-ALTER TABLE tasks ADD COLUMN snapshot_quantity REAL;
-ALTER TABLE tasks ADD COLUMN snapshot_par_level REAL;
-ALTER TABLE tasks ADD COLUMN snapshot_override_create BOOLEAN DEFAULT 0;
-ALTER TABLE tasks ADD COLUMN snapshot_override_no_task BOOLEAN DEFAULT 0;
-.quit
-```
+## What Changed
 
-### Option 2: Using Python Script - Automatic Detection
-```bash
-python3 migrate_add_snapshot_columns.py
-```
+### Environment Detection
+The migration script now **automatically detects** whether you're running:
+- 💻 **Local Development** (PyCharm/bare metal)
+- 🐳 **Docker Container**
 
-This will try to find your database automatically at `./data/food_cost.db`.
+And searches for the database in the appropriate locations for each environment.
 
-### Option 3: Using Python Script - Specify Database Path
-```bash
-python3 migrate_add_snapshot_columns.py /path/to/your/database.db
-```
+### Database Paths
 
-For example:
-```bash
-python3 migrate_add_snapshot_columns.py ~/Projects/food_cost/data/food_cost.db
-```
+**Local Development:**
+- `./data/food_cost.db` (default)
+- `./data/database.db` (fallback)
+- `../data/food_cost.db` (if running from subdirectory)
 
-### Option 4: Run from Your Project Directory
-If you're in the project root where `data/` exists:
-```bash
-python3 migrate_add_snapshot_columns.py ./data/food_cost.db
-```
+**Docker:**
+- `/app/data/food_cost.db` (default)
+- `/home/app/data/food_cost.db` (fallback)
+
+### Timezone Configuration
+
+**Default timezone changed to:** `America/Los_Angeles` (Pacific Time)
+
+This is configured in:
+- `.env` - for local development
+- `docker-compose.yml` - for Docker deployment
+
+You can change this to any IANA timezone:
+- `America/Los_Angeles` - Pacific Time
+- `America/Denver` - Mountain Time  
+- `America/Chicago` - Central Time
+- `America/New_York` - Eastern Time
+
+## What the Migration Does
+
+1. ✅ Detects your environment (local vs Docker)
+2. ✅ Finds your database file
+3. ✅ Shows all tables in the database
+4. ✅ Adds `started_at` column to `inventory_days`
+5. ✅ Adds `finalized_at` column to `inventory_days`
+6. ✅ Converts all UTC timestamps to Pacific Time
+7. ✅ Updates timestamps in tables:
+   - `users`
+   - `ingredients`
+   - `recipes`
+   - `batches`
+   - `dishes`
+   - `inventory_items`
+   - `inventory_days`
+   - `janitorial_tasks`
+   - `tasks`
+   - `inventory_snapshots`
 
 ## Expected Output
-```
-📦 Connecting to database: ./data/food_cost.db
-➕ Adding column: snapshot_quantity
-✅ Added column: snapshot_quantity
-➕ Adding column: snapshot_par_level
-✅ Added column: snapshot_par_level
-➕ Adding column: snapshot_override_create
-✅ Added column: snapshot_override_create
-➕ Adding column: snapshot_override_no_task
-✅ Added column: snapshot_override_no_task
-✅ Migration complete!
-```
 
-If you run it again, you'll see:
-```
-📦 Connecting to database: ./data/food_cost.db
-⏭️  Column already exists: snapshot_quantity
-⏭️  Column already exists: snapshot_par_level
-⏭️  Column already exists: snapshot_override_create
-⏭️  Column already exists: snapshot_override_no_task
-✅ Migration complete!
-```
+When you run the migration, you'll see:
 
-## Safety
-- ✅ The migration checks if columns already exist before adding them
-- ✅ Safe to run multiple times
-- ✅ Does not delete or modify existing data
-- ✅ Only adds new columns with default values
+```
+======================================================================
+DATABASE MIGRATION: Add Day Timestamps and Timezone Conversion
+======================================================================
+
+This migration will:
+  1. Add started_at and finalized_at columns to inventory_days
+  2. Convert all UTC timestamps to local timezone
+
+Target timezone: America/Los_Angeles
+Database path: /home/spiros-zach/Projects/food_cost/data/food_cost.db
+
+💻 Detected local development environment
+✓ Found database at: /home/spiros-zach/Projects/food_cost/data/food_cost.db
+
+⚠️  IMPORTANT: Backup your database before proceeding!
+  Backup command: cp /home/spiros-zach/Projects/food_cost/data/food_cost.db ...
+
+Do you want to continue? (yes/no): yes
+
+Starting migration...
+Database: /home/spiros-zach/Projects/food_cost/data/food_cost.db
+Target Timezone: America/Los_Angeles
+UTC Offset: -7.0 hours
+
+Existing tables in database: users, categories, vendors, ingredients, ...
+
+1. Adding started_at and finalized_at columns to inventory_days...
+   ✓ Added started_at column
+   ✓ Added finalized_at column
+
+2. Populating started_at for existing inventory days...
+   ✓ Updated 15 records
+
+3. Converting timestamps from UTC to America/Los_Angeles...
+   ✓ Converted 25 records in users.created_at
+   ✓ Converted 150 records in tasks.started_at
+   ✓ Converted 120 records in tasks.finished_at
+   ...
+
+✅ Migration completed successfully!
+```
 
 ## Troubleshooting
 
-### "Database not found" Error
-Make sure you:
-1. Are in the correct directory
-2. The database file exists
-3. Provide the correct path to the database
+### Database Not Found
 
-### Permission Denied
-Make sure you have write permissions to the database file:
-```bash
-ls -l data/food_cost.db
+If you see "Database file not found", the script will show you which paths it checked:
+
+```
+❌ Database file not found!
+
+Searched locations:
+  ✗ ./data/food_cost.db
+  ✗ ./data/database.db
+  ✗ ../data/food_cost.db
 ```
 
-### Database is Locked
-If you get a "database is locked" error:
-1. Stop the application (kill uvicorn/FastAPI process)
-2. Run the migration
-3. Restart the application
+**Solution:** Specify the path manually:
+```bash
+python migrations/add_day_timestamps_and_timezone.py /path/to/your/database.db
+```
 
-## After Migration
-Once the migration completes successfully:
-1. Restart your application
-2. The task assignment persistence issue will be fixed
-3. Existing tasks without snapshots will be updated on the next "Update and Generate Tasks" click
+### Table Not Found
+
+If you see "no such table: inventory_days", your database hasn't been initialized.
+
+**Solution:** Run your application first to create the tables, then run the migration.
+
+### Wrong Timezone Offset
+
+The script shows the UTC offset it will use. For Pacific Time, you should see:
+- `-8.0 hours` (during Standard Time - Nov to Mar)
+- `-7.0 hours` (during Daylight Time - Mar to Nov)
+
+If it shows `+0.0 hours`, your TZ environment variable isn't set.
+
+**Solution:**
+```bash
+export TZ=America/Los_Angeles
+python migrations/add_day_timestamps_and_timezone.py
+```
+
+## Verification
+
+After migration:
+
+1. **Check timestamps** - Create a new task and verify the timestamp is in Pacific Time
+2. **Check reports** - View an old inventory report and verify times are now correct
+3. **Check shift metrics** - Finalize a new inventory day and verify shift duration appears
+
+## Rollback
+
+If something goes wrong:
+
+```bash
+# Restore from backup
+cp data/food_cost.db.backup data/food_cost.db
+
+# Or in Docker
+docker exec food-cost-app cp /app/data/food_cost.db.backup /app/data/food_cost.db
+```
+
+Then restart the application.

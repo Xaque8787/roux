@@ -70,12 +70,27 @@ You should see tables like:
 
 If you don't see `inventory_days`, your database hasn't been initialized yet. Run your application first to create the tables.
 
-## Still Having Issues?
+## Environment Detection
 
 The updated migration script now:
-1. ✅ Auto-detects common database locations
-2. ✅ Shows which tables exist in your database
-3. ✅ Accepts manual database path as argument
-4. ✅ Provides helpful error messages
+1. ✅ **Auto-detects** if you're running locally (PyCharm) or in Docker
+2. ✅ **Searches** appropriate paths based on environment:
+   - **Local:** `./data/food_cost.db`, `./data/database.db`
+   - **Docker:** `/app/data/food_cost.db`, `/home/app/data/food_cost.db`
+3. ✅ **Shows** which database it found
+4. ✅ **Lists** all tables in your database before migrating
+5. ✅ **Accepts** manual database path as command-line argument
+6. ✅ **Provides** helpful error messages with exact paths checked
 
-Try running it again - it will now tell you exactly what's wrong and where it's looking for the database.
+## What You'll See
+
+When you run the script, it will output:
+
+```
+💻 Detected local development environment
+✓ Found database at: /home/spiros-zach/Projects/food_cost/data/food_cost.db
+
+Existing tables in database: users, categories, vendors, ingredients, recipes, batches, inventory_items, inventory_days, tasks
+```
+
+This way you know exactly what environment it detected and which database it's using.

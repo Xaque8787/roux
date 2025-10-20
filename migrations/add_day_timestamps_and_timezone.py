@@ -31,22 +31,42 @@ def get_database_path():
         if os.path.exists(db_path):
             return db_path
 
-    # Try common database locations
-    possible_paths = [
-        "./data/food_cost.db",
-        "./data/database.db",
-        "../data/food_cost.db",
-        "../data/database.db",
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "food_cost.db"),
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "database.db"),
-    ]
+    # Detect if we're in a Docker container
+    is_docker = os.path.exists('/.dockerenv') or os.path.exists('/app')
+
+    if is_docker:
+        # Docker container paths
+        possible_paths = [
+            "/app/data/food_cost.db",
+            "/home/app/data/food_cost.db",
+        ]
+        print("🐳 Detected Docker environment")
+    else:
+        # Local development paths (PyCharm/local testing)
+        possible_paths = [
+            "./data/food_cost.db",
+            "./data/database.db",
+            "../data/food_cost.db",
+            "../data/database.db",
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "food_cost.db"),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "database.db"),
+        ]
+        print("💻 Detected local development environment")
 
     for path in possible_paths:
         if os.path.exists(path):
-            return os.path.abspath(path)
+            abs_path = os.path.abspath(path)
+            print(f"✓ Found database at: {abs_path}")
+            return abs_path
 
-    # If no existing database found, use default
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "food_cost.db")
+    # If no existing database found, use default based on environment
+    if is_docker:
+        default_path = "/app/data/food_cost.db"
+    else:
+        default_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "food_cost.db")
+
+    print(f"⚠️  No existing database found, will use: {default_path}")
+    return default_path
 
 DB_PATH = get_database_path()
 
