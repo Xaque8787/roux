@@ -4,6 +4,7 @@ from typing import Dict, Set, Any
 from datetime import datetime
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from app.utils.datetime_utils import get_naive_local_time
 import logging
 
 # Configure logging
@@ -41,7 +42,7 @@ class SSEManager:
             return
         
         message = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": get_naive_local_time().isoformat(),
             **data
         }
         

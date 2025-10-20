@@ -7,6 +7,7 @@ from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from .database import get_db
 from .models import User
+from .utils.datetime_utils import get_naive_local_time
 import os
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -25,9 +26,9 @@ def hash_password(password):
 def create_jwt(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = get_naive_local_time() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = get_naive_local_time() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

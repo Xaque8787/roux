@@ -13,6 +13,7 @@ import json
 from .database import engine
 from .dependencies import get_db
 from .models import Base, Task, Batch, InventoryItem
+from .utils.datetime_utils import get_naive_local_time
 
 # Import routers
 from .routers import (
@@ -107,7 +108,7 @@ async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
     
     # Calculate statistics
     most_recent = completed_tasks[0]
-    now = datetime.utcnow()
+    now = get_naive_local_time()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     

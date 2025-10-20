@@ -10,6 +10,7 @@ from ..models import (InventoryItem, Category, Batch, ParUnitName, InventoryDay,
                      InventoryDayItem, Task, User, JanitorialTask, JanitorialTaskDay)
 from ..utils.helpers import get_today_date
 from datetime import datetime
+from ..utils.datetime_utils import get_naive_local_time
 
 # Import SSE broadcasting functions
 from ..sse import broadcast_task_update, broadcast_inventory_update, broadcast_day_update
@@ -188,7 +189,8 @@ async def create_inventory_day(
     inventory_day = InventoryDay(
         date=inventory_date_obj,
         employees_working=','.join(map(str, employees_working)) if employees_working else '',
-        global_notes=global_notes if global_notes else None
+        global_notes=global_notes if global_notes else None,
+        started_at=get_naive_local_time()
     )
     
     db.add(inventory_day)
@@ -501,14 +503,14 @@ async def start_task(
     if not task.assigned_to_id and not task.assigned_employee_ids:
         raise HTTPException(status_code=400, detail="Please assign employees before starting this task")
 
-    task.started_at = datetime.utcnow()
+    task.started_at = get_naive_local_time()
     task.is_paused = False
     db.commit()
 
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": get_naive_local_time().isoformat(),
             "started_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task start for task {task_id}")
@@ -554,14 +556,14 @@ async def start_task_with_scale(
     task.scale_factor = scale_factors.get(selected_scale, 1.0)
 
     # Start the task
-    task.started_at = datetime.utcnow()
+    task.started_at = get_naive_local_time()
     task.is_paused = False
     db.commit()
 
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": get_naive_local_time().isoformat(),
             "started_by": current_user.full_name or current_user.username,
             "scale": selected_scale
         })
@@ -586,14 +588,14 @@ async def pause_task(
     if task.status != "in_progress":
         raise HTTPException(status_code=400, detail="Task is not in progress")
     
-    task.paused_at = datetime.utcnow()
+    task.paused_at = get_naive_local_time()
     task.is_paused = True
     db.commit()
     
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_paused", {
-            "paused_at": datetime.utcnow().isoformat(),
+            "paused_at": get_naive_local_time().isoformat(),
             "paused_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
@@ -619,7 +621,7 @@ async def resume_task(
     
     # Add pause time to total
     if task.paused_at:
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        pause_duration = (get_naive_local_time() - task.paused_at).total_seconds()
         task.total_pause_time += int(pause_duration)
     
     task.paused_at = None
@@ -629,7 +631,7 @@ async def resume_task(
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_resumed", {
-            "resumed_at": datetime.utcnow().isoformat(),
+            "resumed_at": get_naive_local_time().isoformat(),
             "resumed_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
@@ -655,10 +657,10 @@ async def finish_task(
     
     # Handle paused task
     if task.is_paused and task.paused_at:
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        pause_duration = (get_naive_local_time() - task.paused_at).total_seconds()
         task.total_pause_time += int(pause_duration)
     
-    task.finished_at = datetime.utcnow()
+    task.finished_at = get_naive_local_time()
     task.is_paused = False
     task.paused_at = None
     
@@ -672,7 +674,7 @@ async def finish_task(
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
-            "finished_at": datetime.utcnow().isoformat(),
+            "finished_at": get_naive_local_time().isoformat(),
             "total_time": task.total_time_minutes,
             "labor_cost": task.labor_cost,
             "completed_by": current_user.full_name or current_user.username,
@@ -707,11 +709,11 @@ async def finish_task_with_amount(
     
     # Handle paused task
     if task.is_paused and task.paused_at:
-        pause_duration = (datetime.utcnow() - task.paused_at).total_seconds()
+        pause_duration = (get_naive_local_time() - task.paused_at).total_seconds()
         task.total_pause_time += int(pause_duration)
     
     # Finish the task
-    task.finished_at = datetime.utcnow()
+    task.finished_at = get_naive_local_time()
     task.is_paused = False
     task.paused_at = None
     
@@ -720,7 +722,7 @@ async def finish_task_with_amount(
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
-            "finished_at": datetime.utcnow().isoformat(),
+            "finished_at": get_naive_local_time().isoformat(),
             "total_time": task.total_time_minutes,
             "made_amount": task.made_amount,
             "made_unit": task.made_unit,
@@ -761,7 +763,7 @@ async def reopen_task(
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_reopened", {
-            "reopened_at": datetime.utcnow().isoformat(),
+            "reopened_at": get_naive_local_time().isoformat(),
             "reopened_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task reopen for task {task_id}")
@@ -834,14 +836,15 @@ async def finalize_inventory_day(
     
     if inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Day is already finalized")
-    
+
     inventory_day.finalized = True
+    inventory_day.finalized_at = get_naive_local_time()
     db.commit()
     
     # Broadcast day finalization
     try:
         await broadcast_day_update(day_id, "day_finalized", {
-            "finalized_at": datetime.utcnow().isoformat()
+            "finalized_at": get_naive_local_time().isoformat()
         })
         print(f"✅ Broadcasted day finalization for day {day_id}")
     except Exception as e:
@@ -872,7 +875,20 @@ async def inventory_report(
     total_tasks = len(tasks)
     completed_tasks = len([t for t in tasks if t.status == "completed"])
     below_par_items = len([item for item in inventory_day_items if item.quantity <= item.inventory_item.par_level])
-    
+
+    # Calculate time metrics
+    total_task_time = sum(t.total_time_minutes for t in tasks if t.total_time_minutes)
+    total_shift_duration = None
+    off_task_time = None
+    shift_efficiency = None
+
+    if inventory_day.started_at and inventory_day.finalized_at:
+        shift_duration_seconds = (inventory_day.finalized_at - inventory_day.started_at).total_seconds()
+        total_shift_duration = shift_duration_seconds / 60  # Convert to minutes
+        off_task_time = total_shift_duration - total_task_time
+        if total_shift_duration > 0:
+            shift_efficiency = (total_task_time / total_shift_duration) * 100
+
     return templates.TemplateResponse("inventory_report.html", {
         "request": request,
         "current_user": current_user,
@@ -882,7 +898,10 @@ async def inventory_report(
         "employees": employees,
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
-        "below_par_items": below_par_items
+        "below_par_items": below_par_items,
+        "total_shift_duration": total_shift_duration,
+        "off_task_time": off_task_time,
+        "shift_efficiency": shift_efficiency
     })
 def generate_tasks_for_day(db: Session, inventory_day: InventoryDay, inventory_day_items, janitorial_day_items, force_regenerate: bool = False):
     """Generate tasks for items that are below par level"""

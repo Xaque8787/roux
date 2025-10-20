@@ -239,24 +239,55 @@
             <div class="card-body">
                 {% set total_time = tasks|sum(attribute='total_time_minutes') %}
                 {% set completed_time = tasks|selectattr('finished_at')|sum(attribute='total_time_minutes') %}
-                
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h4>{{ total_time }} min</h4>
-                            <p class="text-muted">Total Time Logged</p>
+
+                {% if total_shift_duration %}
+                <div class="alert alert-info">
+                    <h6 class="mb-3"><i class="fas fa-business-time"></i> Shift Summary</h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5>{{ "%.1f"|format(total_shift_duration / 60) }} hrs</h5>
+                                <small class="text-muted">Total Shift Duration</small>
+                                <div class="text-muted" style="font-size: 0.85rem;">({{ "%.0f"|format(total_shift_duration) }} min)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5>{{ "%.1f"|format(total_time / 60) }} hrs</h5>
+                                <small class="text-muted">Active Task Time</small>
+                                <div class="text-muted" style="font-size: 0.85rem;">({{ total_time }} min)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5>{{ "%.1f"|format(off_task_time / 60) }} hrs</h5>
+                                <small class="text-muted">Off-Task Time</small>
+                                <div class="text-muted" style="font-size: 0.85rem;">({{ "%.0f"|format(off_task_time) }} min)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5>{{ "%.0f"|format(shift_efficiency) }}%</h5>
+                                <small class="text-muted">Shift Efficiency</small>
+                                <div class="text-muted" style="font-size: 0.85rem;">(Task Time / Total Time)</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                </div>
+                {% endif %}
+
+                <h6 class="mt-3">Task Time Breakdown:</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="text-center">
+                            <h4>{{ total_time }} min</h4>
+                            <p class="text-muted">Total Task Time</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
                         <div class="text-center">
                             <h4>{{ completed_time }} min</h4>
                             <p class="text-muted">Completed Task Time</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h4>{{ "%.1f"|format(total_time / 60) }} hrs</h4>
-                            <p class="text-muted">Total Hours</p>
                         </div>
                     </div>
                 </div>

@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship, Session
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, date
 import enum
+from app.utils.datetime_utils import get_naive_local_time
 
 Base = declarative_base()
 
@@ -82,7 +83,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_user = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
 
 class Category(Base):
     __tablename__ = "categories"
@@ -148,7 +149,7 @@ class Ingredient(Base):
     baking_weight_amount = Column(Float)  # Amount in weight
     baking_weight_unit = Column(String)  # oz, g, lb
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     category = relationship("Category")
@@ -286,7 +287,7 @@ class Recipe(Base):
     name = Column(String, index=True)
     instructions = Column(Text)
     category_id = Column(Integer, ForeignKey("categories.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     category = relationship("Category")
@@ -428,7 +429,7 @@ class Batch(Base):
     scale_quarter = Column(Boolean, default=False)
     scale_eighth = Column(Boolean, default=False)
     scale_sixteenth = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     recipe = relationship("Recipe")
@@ -496,7 +497,7 @@ class Dish(Base):
     category_id = Column(Integer, ForeignKey("categories.id"))
     sale_price = Column(Float)
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     category = relationship("Category")
@@ -619,7 +620,7 @@ class DishBatchPortion(Base):
         from datetime import timedelta
         from sqlalchemy import or_, and_
         
-        week_ago = datetime.utcnow() - timedelta(days=7)
+        week_ago = get_naive_local_time() - timedelta(days=7)
         
         week_tasks = db.query(Task).filter(
             or_(
@@ -643,7 +644,7 @@ class DishBatchPortion(Base):
         from datetime import timedelta
         from sqlalchemy import or_, and_
         
-        month_ago = datetime.utcnow() - timedelta(days=30)
+        month_ago = get_naive_local_time() - timedelta(days=30)
         
         month_tasks = db.query(Task).filter(
             or_(
@@ -714,7 +715,7 @@ class InventoryItem(Base):
     par_unit_equals_amount = Column(Float)
     par_unit_equals_unit = Column(String)
     category_id = Column(Integer, ForeignKey("categories.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     par_unit_name = relationship("ParUnitName")
@@ -763,13 +764,15 @@ class InventoryItem(Base):
 
 class InventoryDay(Base):
     __tablename__ = "inventory_days"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, unique=True, index=True)
     employees_working = Column(String)  # Comma-separated employee IDs
     global_notes = Column(Text)
     finalized = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime)  # When day was created/started
+    finalized_at = Column(DateTime)  # When day was finalized
+    created_at = Column(DateTime, default=get_naive_local_time)
 
 class InventoryDayItem(Base):
     __tablename__ = "inventory_day_items"
@@ -793,7 +796,7 @@ class JanitorialTask(Base):
     instructions = Column(Text)
     task_type = Column(String)  # daily, manual
     category_id = Column(Integer, ForeignKey("categories.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     category = relationship("Category")
@@ -837,7 +840,7 @@ class Task(Base):
     snapshot_par_level = Column(Float)  # Par level when task was created
     snapshot_override_create = Column(Boolean, default=False)  # Override state when task was created
     snapshot_override_no_task = Column(Boolean, default=False)  # Override state when task was created
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_naive_local_time)
     
     # Relationships
     day = relationship("InventoryDay")
@@ -865,7 +868,7 @@ class Task(Base):
         if not self.started_at:
             return 0
         
-        end_time = self.finished_at or datetime.utcnow()
+        end_time = self.finished_at or get_naive_local_time()
         if self.is_paused and self.paused_at:
             end_time = self.paused_at
         
@@ -926,7 +929,7 @@ class UtilityCost(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     monthly_cost = Column(Float)
-    last_updated = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=get_naive_local_time)
     
     @property
     def daily_cost(self):
