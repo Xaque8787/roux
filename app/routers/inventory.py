@@ -863,14 +863,17 @@ async def inventory_report(
     inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
     if not inventory_day:
         raise HTTPException(status_code=404, detail="Inventory day not found")
-    
+
     if not inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Day must be finalized to view report")
-    
+
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
     tasks = db.query(Task).filter(Task.day_id == day_id).all()
     employees = db.query(User).filter(User.is_active == True).all()
-    
+
+    # Filter out inventory day items where inventory item was deleted
+    inventory_day_items = [item for item in inventory_day_items if item.inventory_item is not None]
+
     # Calculate statistics
     total_tasks = len(tasks)
     completed_tasks = len([t for t in tasks if t.status == "completed"])

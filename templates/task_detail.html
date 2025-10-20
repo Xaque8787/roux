@@ -222,6 +222,8 @@
                 <p>
                     {% if task.janitorial_task_id %}
                         🧹 Janitorial Task
+                    {% elif task.inventory_item_id and not task.inventory_item %}
+                        <span class="text-muted">Item Removed</span>
                     {% elif task.inventory_item and task.inventory_item.category %}
                         {{ task.inventory_item.category.icon or '🔘' }} {{ task.inventory_item.category.name }}
                     {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
@@ -326,6 +328,8 @@
                 <p><strong>Task Category:</strong>
                     {% if task.janitorial_task_id %}
                         🧹 Janitorial
+                    {% elif task.inventory_item_id and not task.inventory_item %}
+                        <span class="text-muted">Item Removed</span>
                     {% elif task.inventory_item and task.inventory_item.category %}
                         {{ task.inventory_item.category.icon or '🔘' }} {{ task.inventory_item.category.name }}
                     {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
