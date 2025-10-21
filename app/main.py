@@ -8,6 +8,18 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_
 from datetime import datetime, timedelta
 import json
+import os
+from pathlib import Path
+
+# Load .env file if it exists (for local development)
+env_file = Path(__file__).parent.parent / '.env'
+if env_file.exists():
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ.setdefault(key, value)
 
 # Import database and models
 from .database import engine
