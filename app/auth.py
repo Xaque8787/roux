@@ -44,6 +44,8 @@ def verify_jwt(token: str):
         # Handle expired tokens specifically
         if "expired" in str(e).lower():
             raise HTTPException(status_code=401, detail="Session expired")
+        else:
+            raise HTTPException(status_code=401, detail="Invalid token")
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
