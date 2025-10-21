@@ -643,6 +643,17 @@ function updateTimers() {
             const now = new Date();
             let elapsedMs;
 
+            console.log(`Task ${taskId} parsing:`, {
+                startedAt,
+                startTime: startTime.toString(),
+                startTimeMs: startTime.getTime(),
+                now: now.toString(),
+                nowMs: now.getTime(),
+                isRunning,
+                isPaused,
+                totalPauseTimeSeconds
+            });
+
             if (isPaused && pausedAt) {
                 // If task is paused, calculate time up to pause point
                 const pausedAtTime = new Date(pausedAt);
@@ -652,7 +663,6 @@ function updateTimers() {
                 // Task is running, calculate current elapsed time
                 elapsedMs = now.getTime() - startTime.getTime();
                 console.log(`Running task ${taskId}: elapsed from ${startTime} to ${now} = ${elapsedMs}ms`);
-                console.log(`Start time: ${startTime.toISOString()}, Current time: ${now.toISOString()}`);
             } else {
                 // Task is not running or paused, use 0
                 elapsedMs = 0;
