@@ -145,6 +145,12 @@ else
     echo "📁 Data directory already exists"
 fi
 
+# Load .env file if it exists
+if [ -f .env ]; then
+    echo "📄 Loading .env file..."
+    export $(grep -v '^#' .env | grep -v '^$' | xargs)
+fi
+
 # Set environment variables for local development
 export SECRET_KEY="local-dev-secret-key-change-in-production"
 export DATABASE_URL="sqlite:///./data/food_cost.db"
@@ -152,6 +158,7 @@ export DATABASE_URL="sqlite:///./data/food_cost.db"
 echo "🌟 Environment variables set:"
 echo "   SECRET_KEY: $SECRET_KEY"
 echo "   DATABASE_URL: $DATABASE_URL"
+echo "   TZ: ${TZ:-not set}"
 echo ""
 echo "📂 Database will be stored in: ./data/food_cost.db"
 echo "🔗 This matches the Docker volume mount for consistency"
