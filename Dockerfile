@@ -21,6 +21,9 @@ FROM python:3.11-slim AS production
 
 WORKDIR /app
 
+# Install tzdata for timezone support
+RUN apt-get update && apt-get install -y tzdata && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash app
 
@@ -47,6 +50,7 @@ ENV PATH=/home/app/.local/bin:$PATH
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV DATABASE_URL=sqlite:///app/data/food_cost.db
+ENV TZ=America/Los_Angeles
 
 # Expose port
 EXPOSE 8000

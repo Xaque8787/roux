@@ -637,21 +637,22 @@ function updateTimers() {
         console.log(`Timer for task ${taskId}: started=${startedAt}, paused=${isPaused}, running=${isRunning}`);
         
         if (startedAt) {
-            // Handle timezone properly - assume server time is UTC
-            const startTime = new Date(startedAt + (startedAt.includes('Z') ? '' : 'Z'));
+            // Server sends naive ISO timestamps in the configured timezone (TZ env var)
+            // Since these represent actual wall-clock time, parse without timezone to match local browser time
+            const startTime = new Date(startedAt);
             const now = new Date();
             let elapsedMs;
-            
+
             if (isPaused && pausedAt) {
                 // If task is paused, calculate time up to pause point
-                const pauseTime = new Date(pausedAt + (pausedAt.includes('Z') ? '' : 'Z'));
+                const pauseTime = new Date(pausedAt);
                 elapsedMs = pauseTime.getTime() - startTime.getTime();
                 console.log(`Paused task ${taskId}: elapsed from ${startTime} to ${pauseTime} = ${elapsedMs}ms`);
             } else if (isRunning) {
                 // Task is running, calculate current elapsed time
                 elapsedMs = now.getTime() - startTime.getTime();
                 console.log(`Running task ${taskId}: elapsed from ${startTime} to ${now} = ${elapsedMs}ms`);
-                console.log(`Start time UTC: ${startTime.toISOString()}, Current time UTC: ${now.toISOString()}`);
+                console.log(`Start time: ${startTime.toISOString()}, Current time: ${now.toISOString()}`);
             } else {
                 // Task is not running or paused, use 0
                 elapsedMs = 0;
