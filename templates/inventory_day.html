@@ -622,9 +622,7 @@ let currentAssignTaskId = null;
 
 // Timer functionality
 function updateTimers() {
-    console.log('Updating timers...');
     const timers = document.querySelectorAll('.timer');
-    console.log('Found timers:', timers.length);
     
     timers.forEach(timer => {
         const taskId = timer.dataset.taskId;
@@ -633,8 +631,6 @@ function updateTimers() {
         const pausedAt = timer.dataset.pausedAt;
         const isPaused = timer.classList.contains('paused');
         const isRunning = timer.classList.contains('running');
-
-        console.log(`Timer for task ${taskId}: started=${startedAt}, paused=${isPaused}, running=${isRunning}`);
 
         if (startedAt) {
             // Server sends naive ISO timestamps in the configured timezone (TZ env var)
@@ -651,17 +647,6 @@ function updateTimers() {
             const now = new Date();
             let elapsedMs;
 
-            console.log(`Task ${taskId} parsing:`, {
-                startedAt,
-                startTime: startTime.toString(),
-                startTimeMs: startTime.getTime(),
-                now: now.toString(),
-                nowMs: now.getTime(),
-                isRunning,
-                isPaused,
-                totalPauseTimeSeconds
-            });
-
             if (isPaused && pausedAt) {
                 // If task is paused, calculate time up to pause point
                 const pausedParts = pausedAt.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
@@ -674,20 +659,16 @@ function updateTimers() {
                     parseInt(pausedParts[6])
                 );
                 elapsedMs = pausedAtTime.getTime() - startTime.getTime();
-                console.log(`Paused task ${taskId}: elapsed from ${startTime} to ${pausedAtTime} = ${elapsedMs}ms`);
             } else if (isRunning) {
                 // Task is running, calculate current elapsed time
                 elapsedMs = now.getTime() - startTime.getTime();
-                console.log(`Running task ${taskId}: elapsed from ${startTime} to ${now} = ${elapsedMs}ms`);
             } else {
                 // Task is not running or paused, use 0
                 elapsedMs = 0;
-                console.log(`Task ${taskId}: not running or paused, using 0`);
             }
 
             // Ensure we have a positive elapsed time
             if (elapsedMs < 0) {
-                console.warn(`Task ${taskId}: Negative elapsed time detected (${elapsedMs}ms), setting to 0`);
                 elapsedMs = 0;
             }
 
@@ -696,8 +677,6 @@ function updateTimers() {
             const elapsedMinutes = Math.floor(elapsedSeconds / 60);
             const remainingSeconds = elapsedSeconds % 60;
 
-            console.log(`Task ${taskId}: elapsedMs=${elapsedMs}, totalPauseTimeSeconds=${totalPauseTimeSeconds}s, elapsedSeconds=${elapsedSeconds}, elapsedMinutes=${elapsedMinutes}`);
-            
             // Format as MM:SS or HH:MM:SS
             let timeText;
             if (elapsedMinutes >= 60) {
@@ -707,12 +686,10 @@ function updateTimers() {
             } else {
                 timeText = `${elapsedMinutes}:${remainingSeconds.toString().padStart(2, '0')}`;
             }
-            
+
             timer.textContent = timeText;
-            console.log(`Updated timer for task ${taskId}: ${timeText} (running: ${isRunning}, paused: ${isPaused})`);
         } else {
             timer.textContent = '0:00';
-            console.log(`Task ${taskId}: no start time, showing 0:00`);
         }
     });
 }
