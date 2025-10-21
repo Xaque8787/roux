@@ -629,13 +629,13 @@ function updateTimers() {
     timers.forEach(timer => {
         const taskId = timer.dataset.taskId;
         const startedAt = timer.dataset.startedAt;
-        const pauseTime = parseInt(timer.dataset.pauseTime) || 0;
+        const totalPauseTimeSeconds = parseInt(timer.dataset.pauseTime) || 0;
         const pausedAt = timer.dataset.pausedAt;
         const isPaused = timer.classList.contains('paused');
         const isRunning = timer.classList.contains('running');
-        
+
         console.log(`Timer for task ${taskId}: started=${startedAt}, paused=${isPaused}, running=${isRunning}`);
-        
+
         if (startedAt) {
             // Server sends naive ISO timestamps in the configured timezone (TZ env var)
             // Since these represent actual wall-clock time, parse without timezone to match local browser time
@@ -645,9 +645,9 @@ function updateTimers() {
 
             if (isPaused && pausedAt) {
                 // If task is paused, calculate time up to pause point
-                const pauseTime = new Date(pausedAt);
-                elapsedMs = pauseTime.getTime() - startTime.getTime();
-                console.log(`Paused task ${taskId}: elapsed from ${startTime} to ${pauseTime} = ${elapsedMs}ms`);
+                const pausedAtTime = new Date(pausedAt);
+                elapsedMs = pausedAtTime.getTime() - startTime.getTime();
+                console.log(`Paused task ${taskId}: elapsed from ${startTime} to ${pausedAtTime} = ${elapsedMs}ms`);
             } else if (isRunning) {
                 // Task is running, calculate current elapsed time
                 elapsedMs = now.getTime() - startTime.getTime();
@@ -658,19 +658,19 @@ function updateTimers() {
                 elapsedMs = 0;
                 console.log(`Task ${taskId}: not running or paused, using 0`);
             }
-            
+
             // Ensure we have a positive elapsed time
             if (elapsedMs < 0) {
                 console.warn(`Task ${taskId}: Negative elapsed time detected (${elapsedMs}ms), setting to 0`);
                 elapsedMs = 0;
             }
-            
-            // Subtract total pause time (in seconds, convert to ms)  
-            const elapsedSeconds = Math.max(0, Math.floor((elapsedMs - (pauseTime * 1000)) / 1000));
+
+            // Subtract total pause time (in seconds, convert to ms)
+            const elapsedSeconds = Math.max(0, Math.floor((elapsedMs - (totalPauseTimeSeconds * 1000)) / 1000));
             const elapsedMinutes = Math.floor(elapsedSeconds / 60);
             const remainingSeconds = elapsedSeconds % 60;
-            
-            console.log(`Task ${taskId}: elapsedMs=${elapsedMs}, pauseTime=${pauseTime}s, elapsedSeconds=${elapsedSeconds}, elapsedMinutes=${elapsedMinutes}`);
+
+            console.log(`Task ${taskId}: elapsedMs=${elapsedMs}, totalPauseTimeSeconds=${totalPauseTimeSeconds}s, elapsedSeconds=${elapsedSeconds}, elapsedMinutes=${elapsedMinutes}`);
             
             // Format as MM:SS or HH:MM:SS
             let timeText;
