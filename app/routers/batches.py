@@ -73,20 +73,32 @@ async def batch_detail(batch_id: int, request: Request, db: Session = Depends(ge
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    
+
     recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == batch.recipe_id).all()
     total_recipe_cost = sum(ri.cost for ri in recipe_ingredients)
-    total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
-    cost_per_yield_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
-    
+
+    # Get actual labor cost (falls back to estimated if no completed tasks)
+    actual_labor_cost = batch.get_actual_labor_cost(db)
+
+    # Calculate costs with estimated labor
+    estimated_total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+    estimated_cost_per_yield_unit = estimated_total_batch_cost / batch.yield_amount if batch.yield_amount else 0
+
+    # Calculate costs with actual labor
+    actual_total_batch_cost = total_recipe_cost + actual_labor_cost
+    actual_cost_per_yield_unit = actual_total_batch_cost / batch.yield_amount if batch.yield_amount else 0
+
     return templates.TemplateResponse("batch_detail.html", {
         "request": request,
         "current_user": current_user,
         "batch": batch,
         "recipe_ingredients": recipe_ingredients,
         "total_recipe_cost": total_recipe_cost,
-        "total_batch_cost": total_batch_cost,
-        "cost_per_yield_unit": cost_per_yield_unit
+        "actual_labor_cost": actual_labor_cost,
+        "actual_total_batch_cost": actual_total_batch_cost,
+        "actual_cost_per_yield_unit": actual_cost_per_yield_unit,
+        "estimated_total_batch_cost": estimated_total_batch_cost,
+        "estimated_cost_per_yield_unit": estimated_cost_per_yield_unit
     })
 
 @router.get("/{batch_id}/edit", response_class=HTMLResponse)
