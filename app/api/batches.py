@@ -50,9 +50,10 @@ async def get_all_batches(db: Session = Depends(get_db)):
 
     result = []
     for batch in batches:
-        # Calculate cost per unit
+        # Calculate cost per unit using actual labor cost (falls back to estimated if no completed tasks)
         total_recipe_cost = calculate_recipe_total_cost(batch.recipe_id, db)
-        total_batch_cost = total_recipe_cost + batch.estimated_labor_cost
+        actual_labor_cost = batch.get_actual_labor_cost(db)
+        total_batch_cost = total_recipe_cost + actual_labor_cost
         cost_per_unit = total_batch_cost / batch.yield_amount if batch.yield_amount else 0
 
         batch_data = {
