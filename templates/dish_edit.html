@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
         unit: "{{ portion.portion_unit or portion.batch.yield_unit or '' }}",
         portion_unit_name: "{{ portion.portion_unit or portion.batch.yield_unit or '' }}",
         portion_size: {{ portion.portion_size or 0 }},
-        estimated_cost: {{ portion.get_expected_cost(db) }},
+        estimated_cost: {{ portion.get_actual_cost(db) }},
         use_recipe_portion: {{ portion.use_recipe_portion|lower }},
         recipe_portion_percent: {{ portion.recipe_portion_percent or 0 }}
     });
