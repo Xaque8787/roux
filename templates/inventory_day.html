@@ -90,10 +90,10 @@
                                 </td>
                                 <td>
                                     {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
-                                    <input type="number" class="form-control form-control-sm" 
-                                           name="item_{{ day_item.inventory_item.id }}" 
-                                           value="{{ day_item.quantity }}" 
-                                           step="0.1" min="0" 
+                                    <input type="number" class="form-control form-control-sm"
+                                           name="item_{{ day_item.inventory_item.id }}"
+                                           value="{{ day_item.quantity }}"
+                                           step="1" min="0"
                                            form="inventoryForm"
                                            style="width: 80px;">
                                     {% else %}
