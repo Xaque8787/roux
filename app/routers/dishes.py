@@ -179,7 +179,8 @@ async def dish_edit_page(dish_id: int, request: Request, db: Session = Depends(g
         "dish": dish,
         "categories": categories,
         "dish_batch_portions": dish_batch_portions,
-        "dish_ingredient_portions": dish_ingredient_portions
+        "dish_ingredient_portions": dish_ingredient_portions,
+        "db": db
     })
 
 @router.post("/{dish_id}/edit")
