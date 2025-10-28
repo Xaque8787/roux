@@ -9,6 +9,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       - DATABASE_URL=sqlite:///home/app/data/food_cost.db
       - TZ=${TZ:-America/Los_Angeles}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -30,6 +32,8 @@ services:
       - SECRET_KEY=dev-secret-key
       - DATABASE_URL=sqlite:///home/app/data/food_cost_dev.db
       - TZ=${TZ:-America/Los_Angeles}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
     volumes:
       - .:/app
       - ./data:/home/app/data
