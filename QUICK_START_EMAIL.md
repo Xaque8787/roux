@@ -21,10 +21,14 @@ Add to your `.env` file:
 
 ```bash
 RESEND_API_KEY=re_your_actual_api_key_here
-RESEND_FROM_EMAIL=onboarding@resend.dev
+RESEND_FROM_EMAIL=reports@yourdomain.com
 ```
 
-**Note**: Use `onboarding@resend.dev` for testing, or verify your own domain.
+**IMPORTANT**:
+- `RESEND_FROM_EMAIL` must be a FULL email address (e.g., `reports@yourdomain.com`)
+- NOT just a domain (e.g., NOT `reports.yourdomain.com`)
+- For testing: Use `onboarding@resend.dev`
+- For production: Use an email with your verified domain (e.g., `reports@pospiros.pizza`)
 
 ## Step 4: Install Dependencies & Restart
 
@@ -61,6 +65,11 @@ Your email reporting system is now live and ready to use.
 
 ## Troubleshooting
 
+**Error: "Invalid `from` field"**
+- Your `RESEND_FROM_EMAIL` is not in the correct format
+- Must be: `reports@yourdomain.com` (with `@` symbol)
+- NOT: `reports.yourdomain.com` (without `@`)
+
 **Error: "RESEND_API_KEY is not configured"**
 - Solution: Add the key to `.env` and restart
 
@@ -74,4 +83,5 @@ Your email reporting system is now live and ready to use.
 
 ## Support
 
-See `EMAIL_INTEGRATION_README.md` for detailed documentation.
+See `EMAIL_TROUBLESHOOTING.md` for detailed troubleshooting.
+See `EMAIL_INTEGRATION_README.md` for complete documentation.

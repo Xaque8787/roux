@@ -31,7 +31,11 @@ async def send_email(
     if not from_email:
         from_email = os.getenv("RESEND_FROM_EMAIL")
         if not from_email:
-            raise Exception("RESEND_FROM_EMAIL is not configured in environment variables")
+            raise Exception("RESEND_FROM_EMAIL is not configured in environment variables. Add it to your .env file (e.g., RESEND_FROM_EMAIL=reports@yourdomain.com)")
+
+    # Validate from_email format
+    if '@' not in from_email:
+        raise Exception(f"RESEND_FROM_EMAIL must be a full email address (e.g., reports@yourdomain.com), not a domain. Current value: {from_email}")
 
     if not to_emails or len(to_emails) == 0:
         raise Exception("At least one recipient email address is required")
