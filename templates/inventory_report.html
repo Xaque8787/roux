@@ -5,10 +5,17 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h1><i class="fas fa-chart-bar"></i> Inventory Report: {{ inventory_day.date }}</h1>
-        <a href="/inventory" class="btn btn-secondary mb-3">
-            <i class="fas fa-arrow-left"></i> Back to Inventory
-        </a>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-chart-bar"></i> Inventory Report: {{ inventory_day.date }}</h1>
+            <div>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#emailReportModal">
+                    <i class="fas fa-envelope"></i> Email Report
+                </button>
+                <a href="/inventory" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Inventory
+                </a>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -366,4 +373,113 @@
         </div>
     </div>
 </div>
+
+<!-- Email Report Modal -->
+<div class="modal fade" id="emailReportModal" tabindex="-1" aria-labelledby="emailReportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="emailReportModalLabel">
+                    <i class="fas fa-envelope"></i> Email Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="emailReportForm" action="/api/inventory/{{ inventory_day.id }}/email-report" method="post">
+                <div class="modal-body">
+                    <p class="text-muted">Select recipients for this daily report:</p>
+
+                    {% set managers_admins = employees | selectattr('role', 'in', ['manager', 'admin']) | selectattr('is_active', 'equalto', true) | list %}
+                    {% set recipients_with_email = managers_admins | selectattr('email') | list %}
+
+                    {% if recipients_with_email %}
+                        <div class="list-group">
+                            {% for employee in recipients_with_email %}
+                            <label class="list-group-item d-flex align-items-center">
+                                <input class="form-check-input me-2" type="checkbox" name="recipient_ids" value="{{ employee.id }}">
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">{{ employee.full_name or employee.username }}</div>
+                                    <small class="text-muted">{{ employee.email }}</small>
+                                    <span class="badge {{ 'bg-danger' if employee.role == 'admin' else 'bg-warning' }} ms-2">
+                                        {{ employee.role.title() }}
+                                    </span>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllRecipients(true)">
+                                Select All
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllRecipients(false)">
+                                Deselect All
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            No managers or admins have email addresses configured. Please add email addresses to employee profiles to enable email reports.
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    {% if recipients_with_email %}
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> Send Report
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAllRecipients(selectAll) {
+    const checkboxes = document.querySelectorAll('input[name="recipient_ids"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+    });
+}
+
+document.getElementById('emailReportForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const checkedRecipients = formData.getAll('recipient_ids');
+
+    if (checkedRecipients.length === 0) {
+        alert('Please select at least one recipient');
+        return;
+    }
+
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalText = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('Report sent successfully to ' + result.recipients_count + ' recipient(s)!');
+            bootstrap.Modal.getInstance(document.getElementById('emailReportModal')).hide();
+        } else {
+            alert('Error sending report: ' + (result.detail || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error sending report: ' + error.message);
+    } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
+    }
+});
+</script>
 {% endblock %}

@@ -26,6 +26,7 @@ async def create_employee(
     full_name: str = Form(...),
     username: str = Form(...),
     password: str = Form(...),
+    email: str = Form(""),
     hourly_wage: float = Form(...),
     work_schedule: str = Form(""),
     role: str = Form(...),
@@ -48,6 +49,7 @@ async def create_employee(
         username=username,
         hashed_password=hashed_password,
         full_name=full_name,
+        email=email if email else None,
         hourly_wage=hourly_wage,
         work_schedule=work_schedule,
         role=role,
@@ -91,6 +93,7 @@ async def update_employee(
     full_name: str = Form(...),
     username: str = Form(...),
     password: str = Form(""),
+    email: str = Form(""),
     hourly_wage: float = Form(...),
     work_schedule: str = Form(""),
     role: str = Form(...),
@@ -114,6 +117,7 @@ async def update_employee(
     
     employee.full_name = full_name
     employee.username = username
+    employee.email = email if email else None
     employee.hourly_wage = hourly_wage
     employee.work_schedule = work_schedule
     employee.role = role

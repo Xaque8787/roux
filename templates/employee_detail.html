@@ -23,8 +23,15 @@
                     <div class="col-md-6">
                         <p><strong>Full Name:</strong> {{ employee.full_name }}</p>
                         <p><strong>Username:</strong> {{ employee.username }}</p>
-                        <p><strong>Role:</strong> 
-                            <span class="badge 
+                        <p><strong>Email:</strong>
+                            {% if employee.email %}
+                                <a href="mailto:{{ employee.email }}">{{ employee.email }}</a>
+                            {% else %}
+                                <span class="text-muted">Not provided</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Role:</strong>
+                            <span class="badge
                                 {% if employee.role == 'admin' %}bg-danger
                                 {% elif employee.role == 'manager' %}bg-warning
                                 {% else %}bg-primary{% endif %}">

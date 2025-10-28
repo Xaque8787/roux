@@ -72,11 +72,12 @@ def convert_baking_measurement(amount, from_unit, to_unit, weight_per_cup, weigh
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String)
+    email = Column(String, index=True)
     hourly_wage = Column(Float, default=15.0)
     work_schedule = Column(String)  # Comma-separated days
     role = Column(String, default="user")  # admin, manager, user

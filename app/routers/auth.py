@@ -27,13 +27,14 @@ async def create_admin_user(
     username: str = Form(...),
     password: str = Form(...),
     full_name: str = Form(""),
+    email: str = Form(""),
     db: Session = Depends(get_db)
 ):
     # Check if any admin users exist
     admin_exists = db.query(User).filter(User.role == "admin").first()
     if admin_exists:
         return RedirectResponse(url="/login", status_code=302)
-    
+
     # Check if username already exists
     existing_user = db.query(User).filter(User.username == username).first()
     if existing_user:
@@ -41,17 +42,18 @@ async def create_admin_user(
             "request": request,
             "error": "Username already exists"
         })
-    
+
     # Use username as full_name if not provided
     if not full_name.strip():
         full_name = username
-    
+
     # Create admin user
     hashed_password = hash_password(password)
     admin_user = User(
         username=username,
         hashed_password=hashed_password,
         full_name=full_name,
+        email=email if email else None,
         role="admin",
         is_admin=True,
         is_user=True,
