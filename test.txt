@@ -1,1 +1,84 @@
-test file
+## Email Delivery Issue - Diagnosis
+
+Current setup:
+- Verified domain in Resend: reports.pospiros.pizza
+- Email sending from: reports@reports.pospiros.pizza
+- Recipient: zacharyfive@gmail.com
+- Status: API returns success, but email not received
+
+## The Problem
+
+When you verified `reports.pospiros.pizza` in Resend, you can ONLY send emails from addresses like:
+- anything@reports.pospiros.pizza ✓
+- noreply@reports.pospiros.pizza ✓
+- kitchen@reports.pospiros.pizza ✓
+
+But you're trying to send from:
+- reports@reports.pospiros.pizza ✗ (subdomain OF subdomain)
+
+This doesn't match your verified domain!
+
+## Why It Shows "Success"
+
+1. Resend API accepts the request (returns 200 OK)
+2. But email providers (Gmail) reject it during delivery
+3. DNS records don't match, so it's flagged as potential spam/spoofing
+4. The email is silently dropped or bounced
+
+## Solutions (Pick One)
+
+### Option 1: Fix the email address to match verified domain (QUICKEST)
+
+Change your `.env` to:
+```bash
+RESEND_FROM_EMAIL=noreply@reports.pospiros.pizza
+```
+
+or
+
+```bash
+RESEND_FROM_EMAIL=kitchen@reports.pospiros.pizza
+```
+
+The key is: Use `@reports.pospiros.pizza` (what you verified)
+NOT: `@reports.reports.pospiros.pizza`
+
+### Option 2: Verify the base domain instead (RECOMMENDED)
+
+This is cleaner and more professional:
+
+1. Go to https://resend.com/domains
+2. Click "Add Domain"
+3. Enter: `pospiros.pizza` (your base domain)
+4. Copy the DNS records
+5. Add them to Cloudflare
+6. Wait for verification (usually minutes)
+7. Update `.env`:
+```bash
+RESEND_FROM_EMAIL=reports@pospiros.pizza
+```
+
+This way you can use any email like:
+- reports@pospiros.pizza
+- kitchen@pospiros.pizza
+- noreply@pospiros.pizza
+
+## Check Delivery Status
+
+1. Go to https://resend.com/emails
+2. Find the email you just sent
+3. Look at the status column
+4. Click on it to see why it failed
+
+You'll likely see:
+- "Bounced"
+- "Rejected"
+- Or stuck in "Queued"
+
+## After Making Changes
+
+1. Update `.env` file
+2. Restart your application
+3. Try sending a test report
+4. Check your Gmail inbox AND spam folder
+5. Check Resend dashboard for delivery status

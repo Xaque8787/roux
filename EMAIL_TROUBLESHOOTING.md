@@ -138,25 +138,57 @@ The selected employees don't have email addresses configured.
 
 ### Issue: Email sent but not received
 
-**Possible causes:**
+**Success message shown but email never arrives**
 
-1. **Check spam/junk folder** - Most common issue!
+**Most Common Cause: Domain Mismatch**
+
+If you see "Report sent successfully" but the email never arrives, check if your `RESEND_FROM_EMAIL` matches your verified domain.
+
+**Example of the problem:**
+- Verified domain in Resend: `reports.pospiros.pizza`
+- Your `.env` has: `RESEND_FROM_EMAIL=reports@reports.pospiros.pizza` ❌
+
+This creates a subdomain of a subdomain (`reports.reports.pospiros.pizza`) which doesn't match what you verified!
+
+**Solution:**
+
+If you verified `reports.pospiros.pizza`, use:
+```bash
+RESEND_FROM_EMAIL=noreply@reports.pospiros.pizza  ✅
+```
+
+If you verified `pospiros.pizza` (base domain), use:
+```bash
+RESEND_FROM_EMAIL=reports@pospiros.pizza  ✅
+```
+
+**Rule:** The domain after `@` must EXACTLY match what's verified in Resend.
+
+**Other possible causes:**
+
+1. **Check spam/junk folder** - Most common for new senders!
 
 2. **Verify email address is correct**
    - Go to `/employees`
    - Check recipient's email address for typos
 
-3. **Check Resend delivery logs**
+3. **Check Resend delivery logs** (IMPORTANT!)
    - Go to https://resend.com/emails
-   - Look for your sent email
+   - Find your sent email
    - Check delivery status
    - Look for bounce or rejection reasons
+   - This will tell you exactly why it failed
 
 4. **Domain reputation** (for new domains)
    - New domains may have delivery issues initially
+   - Gmail may silently drop emails from brand new domains
    - Send a few test emails first
    - Consider warming up your domain
-   - Gmail/Outlook may delay emails from new domains
+
+5. **DNS propagation incomplete**
+   - Wait 15-30 minutes after adding DNS records
+   - Check DNS propagation at https://dnschecker.org
+   - Ensure SPF, DKIM, and DMARC records are all verified
 
 ---
 
