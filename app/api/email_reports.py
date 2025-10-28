@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Form, HTTPException, Depends
+from fastapi import APIRouter, Form, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from ..database import get_db
 from ..dependencies import require_manager_or_admin
 from ..models import InventoryDay, InventoryDayItem, Task, User, InventoryItem
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/inventory", tags=["email_reports"])
 @router.post("/{day_id}/email-report")
 async def send_inventory_report_email(
     day_id: int,
-    recipient_ids: List[int] = Form(...),
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_manager_or_admin)
 ):
@@ -21,9 +21,30 @@ async def send_inventory_report_email(
     Send inventory report via email to selected recipients
     """
     try:
+        # Parse form data
+        form_data = await request.form()
+        recipient_ids_raw = form_data.getlist('recipient_ids')
+
+        # Convert to integers
+        try:
+            recipient_ids = [int(id) for id in recipient_ids_raw]
+        except (ValueError, TypeError):
+            return JSONResponse(
+                content={"success": False, "detail": "Invalid recipient IDs"},
+                status_code=400
+            )
+
+        if not recipient_ids:
+            return JSONResponse(
+                content={"success": False, "detail": "Please select at least one recipient"},
+                status_code=400
+            )
         inventory_day = db.query(InventoryDay).filter(InventoryDay.id == day_id).first()
         if not inventory_day:
-            raise HTTPException(status_code=404, detail="Inventory day not found")
+            return JSONResponse(
+                content={"success": False, "detail": "Inventory day not found"},
+                status_code=404
+            )
 
         recipients = db.query(User).filter(
             User.id.in_(recipient_ids),
@@ -32,7 +53,10 @@ async def send_inventory_report_email(
         ).all()
 
         if not recipients:
-            raise HTTPException(status_code=400, detail="No valid recipients found with email addresses")
+            return JSONResponse(
+                content={"success": False, "detail": "No valid recipients found with email addresses"},
+                status_code=400
+            )
 
         recipient_emails = [r.email for r in recipients]
 
@@ -128,7 +152,8 @@ async def send_inventory_report_email(
             status_code=200
         )
 
-    except HTTPException as he:
-        raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+        return JSONResponse(
+            content={"success": False, "detail": f"Failed to send email: {str(e)}"},
+            status_code=500
+        )
