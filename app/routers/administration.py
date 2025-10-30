@@ -24,7 +24,7 @@ async def administration_page(
 
     return templates.TemplateResponse("administration.html", {
         "request": request,
-        "user": current_user,
+        "current_user": current_user,
         "backups": backups
     })
 
