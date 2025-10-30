@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_admin, get_current_user
-from ..schemas import User
+from ..schemas import UserOut
 from ..utils.backup import create_backup, cleanup_old_backups, list_backups, get_backup_dir
 from pathlib import Path
 import logging
@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory="templates")
 async def administration_page(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: UserOut = Depends(require_admin)
 ):
     backups = list_backups()
 
@@ -31,7 +31,7 @@ async def administration_page(
 @router.post("/administration/backup")
 async def create_database_backup(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: UserOut = Depends(require_admin)
 ):
     result = create_backup()
 
@@ -51,7 +51,7 @@ async def create_database_backup(
 @router.get("/administration/backups")
 async def get_backups_list(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: UserOut = Depends(require_admin)
 ):
     backups = list_backups()
     return JSONResponse({"backups": backups})
@@ -60,7 +60,7 @@ async def get_backups_list(
 async def download_backup(
     filename: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: UserOut = Depends(require_admin)
 ):
     if not filename.startswith("backup_") or not filename.endswith(".db"):
         raise HTTPException(status_code=400, detail="Invalid backup filename")
