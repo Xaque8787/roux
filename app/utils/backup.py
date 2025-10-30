@@ -18,9 +18,9 @@ def get_backup_dir() -> str:
 
 def get_database_path() -> str:
     if os.getenv("DOCKER_ENV"):
-        return "/app/data/restaurant.db"
+        return "/app/data/food_cost.db"
     else:
-        return "./data/restaurant.db"
+        return "./data/food_cost.db"
 
 def create_backup() -> Dict[str, str]:
     try:
