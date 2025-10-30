@@ -59,7 +59,8 @@ def generate_report_email_html(
     day_summary: dict,
     task_report: dict,
     inventory_status: dict,
-    time_analysis: dict
+    time_analysis: dict,
+    notes_data: dict = None
 ) -> str:
     """
     Generate HTML email content for daily report
@@ -70,6 +71,7 @@ def generate_report_email_html(
         task_report: Task completion data
         inventory_status: Current inventory status
         time_analysis: Time tracking and analysis data
+        notes_data: Optional notes data including daily_note and task_notes
 
     Returns:
         str: HTML content for the email
@@ -204,6 +206,29 @@ def generate_report_email_html(
             background-color: #d4edda;
             color: #155724;
         }}
+        .note-item {{
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+        }}
+        .note-item.daily-note {{
+            border-left-color: #667eea;
+        }}
+        .note-item.task-note {{
+            border-left-color: #dc3545;
+        }}
+        .note-item strong {{
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+        }}
+        .note-item p {{
+            margin: 0;
+            color: #666;
+            line-height: 1.5;
+        }}
         .footer {{
             background-color: #f8f9fa;
             padding: 20px 30px;
@@ -247,6 +272,37 @@ def generate_report_email_html(
                 </div>
             </div>
 
+            <!-- Notes Section -->
+"""
+
+    if notes_data and (notes_data.get('daily_note') or notes_data.get('task_notes')):
+        html += """
+            <div class="section">
+                <h2>📝 Notes</h2>
+"""
+
+        if notes_data.get('daily_note'):
+            html += f"""
+                <div class="note-item daily-note">
+                    <strong>Daily Note:</strong>
+                    <p>{notes_data.get('daily_note')}</p>
+                </div>
+"""
+
+        for task_note in notes_data.get('task_notes', []):
+            assigned_to_text = f" - {task_note.get('assigned_to')}" if task_note.get('assigned_to') else ""
+            html += f"""
+                <div class="note-item task-note">
+                    <strong>{task_note.get('description', 'Task')}{assigned_to_text}</strong>
+                    <p>{task_note.get('note', '')}</p>
+                </div>
+"""
+
+        html += """
+            </div>
+"""
+
+    html += """
             <!-- Task Report Section -->
             <div class="section">
                 <h2>✅ Task Report</h2>

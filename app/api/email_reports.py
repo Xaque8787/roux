@@ -63,6 +63,8 @@ async def send_inventory_report_email(
         tasks = db.query(Task).filter(Task.day_id == day_id).all()
         completed_tasks = [t for t in tasks if t.finished_at is not None]
 
+        all_employees = db.query(User).filter(User.is_active == True).all()
+
         day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == day_id).all()
 
         day_summary = {
@@ -127,12 +129,42 @@ async def send_inventory_report_email(
 
         day_date = inventory_day.date.strftime('%B %d, %Y')
 
+        notes_data = {
+            'daily_note': inventory_day.global_notes,
+            'task_notes': []
+        }
+
+        sorted_tasks = sorted(
+            [t for t in tasks if t.notes],
+            key=lambda x: x.started_at if x.started_at else datetime.max
+        )
+
+        for task in sorted_tasks:
+            assigned_to_name = None
+            if task.assigned_employee_ids:
+                emp_ids = [int(id.strip()) for id in task.assigned_employee_ids.split(',')]
+                if len(emp_ids) > 1:
+                    assigned_to_name = f"Team of {len(emp_ids)}"
+                else:
+                    emp = next((e for e in all_employees if e.id == emp_ids[0]), None)
+                    if emp:
+                        assigned_to_name = emp.full_name or emp.username
+            elif task.assigned_to:
+                assigned_to_name = task.assigned_to.full_name or task.assigned_to.username
+
+            notes_data['task_notes'].append({
+                'description': task.description,
+                'assigned_to': assigned_to_name,
+                'note': task.notes
+            })
+
         html_body = generate_report_email_html(
             day_date=day_date,
             day_summary=day_summary,
             task_report=task_report,
             inventory_status=inventory_status,
-            time_analysis=time_analysis
+            time_analysis=time_analysis,
+            notes_data=notes_data
         )
 
         subject = f"Daily Operations Report - {day_date}"
