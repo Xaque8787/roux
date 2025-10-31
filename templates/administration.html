@@ -79,7 +79,7 @@
                         • Backups are complete 1:1 copies of the entire database including all users, data, and settings<br>
                         • The system automatically keeps the 7 most recent backups. Older backups are automatically deleted<br>
                         • When restoring, a safety backup of your current database is created automatically<br>
-                        • After restoring, the page will automatically refresh to load the restored data
+                        • After restoring, <strong>restart the application</strong> for best results (or refresh the page if restart isn't possible)
                     </small>
                 </div>
             </div>
@@ -163,16 +163,22 @@ document.addEventListener('click', async function(e) {
 
             if (response.ok) {
                 messageDiv.className = 'alert alert-success';
-                messageDiv.textContent = `✓ ${data.message}. Please refresh the page to see changes.`;
-                if (data.safety_backup) {
-                    messageDiv.textContent += ` Safety backup created: ${data.safety_backup}`;
-                }
+                messageDiv.innerHTML = `
+                    <strong>✓ Restore Successful!</strong><br>
+                    ${data.message}<br>
+                    ${data.safety_backup ? `Safety backup created: ${data.safety_backup}<br>` : ''}
+                    <br>
+                    <strong>⚠️ Important:</strong> For best results, please restart the application container/server.<br>
+                    If you can't restart, refresh this page and verify your data is correct.
+                `;
                 messageDiv.classList.remove('d-none');
 
-                // Auto-refresh after 3 seconds
+                // Auto-refresh after 5 seconds to give user time to read
                 setTimeout(() => {
-                    location.reload();
-                }, 3000);
+                    if (confirm('The page will now refresh. If data looks incorrect after refresh, please restart the application.')) {
+                        location.reload();
+                    }
+                }, 5000);
             } else {
                 messageDiv.className = 'alert alert-danger';
                 messageDiv.textContent = `Error: ${data.detail || 'Restore failed'}`;

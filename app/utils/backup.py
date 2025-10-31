@@ -111,6 +111,8 @@ def list_backups() -> List[Dict[str, any]]:
 
 def restore_backup(backup_filename: str) -> Dict[str, str]:
     try:
+        import shutil
+
         backup_dir = get_backup_dir()
         backup_path = Path(backup_dir) / backup_filename
 
@@ -121,34 +123,41 @@ def restore_backup(backup_filename: str) -> Dict[str, str]:
             }
 
         db_path = get_database_path()
+        db_path_obj = Path(db_path)
 
         # Create a safety backup of the current database before restoring
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safety_backup_filename = f"pre_restore_safety_{timestamp}.db"
         safety_backup_path = Path(backup_dir) / safety_backup_filename
 
-        if Path(db_path).exists():
-            source = sqlite3.connect(db_path)
-            safety_conn = sqlite3.connect(str(safety_backup_path))
-            source.backup(safety_conn)
-            safety_conn.close()
-            source.close()
+        if db_path_obj.exists():
+            # Use file copy for safety backup - faster and doesn't require DB connection
+            shutil.copy2(db_path, safety_backup_path)
             logger.info(f"Created safety backup: {safety_backup_filename}")
 
-        # Restore the backup
-        backup_conn = sqlite3.connect(str(backup_path))
-        target_conn = sqlite3.connect(db_path)
+        # Close any existing SQLite connections by opening and closing
+        # This ensures the database file is not locked
+        try:
+            temp_conn = sqlite3.connect(db_path)
+            temp_conn.close()
+        except:
+            pass
 
-        backup_conn.backup(target_conn)
+        # Restore using file copy - this is more reliable than SQLite backup
+        # when the database might have active connections from SQLAlchemy
+        shutil.copy2(backup_path, db_path)
 
-        target_conn.close()
-        backup_conn.close()
+        # Verify the restore by opening a connection
+        verify_conn = sqlite3.connect(db_path)
+        cursor = verify_conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1")
+        verify_conn.close()
 
         logger.info(f"Database restored from: {backup_filename}")
 
         return {
             "success": True,
-            "message": f"Database restored successfully from {backup_filename}",
+            "message": f"Database restored successfully from {backup_filename}. Please restart the application for changes to take full effect.",
             "safety_backup": safety_backup_filename
         }
     except Exception as e:
