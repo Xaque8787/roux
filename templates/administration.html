@@ -56,6 +56,9 @@
                                        download>
                                         <i class="fas fa-download"></i> Download
                                     </a>
+                                    <button class="btn btn-sm btn-warning restore-btn" data-filename="{{ backup.filename }}">
+                                        <i class="fas fa-undo"></i> Restore
+                                    </button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -72,7 +75,11 @@
                 <div class="mt-3">
                     <small class="text-muted">
                         <i class="fas fa-info-circle"></i>
-                        The system automatically keeps the 7 most recent backups. Older backups are automatically deleted.
+                        <strong>Backup Information:</strong><br>
+                        • Backups are complete 1:1 copies of the entire database including all users, data, and settings<br>
+                        • The system automatically keeps the 7 most recent backups. Older backups are automatically deleted<br>
+                        • When restoring, a safety backup of your current database is created automatically<br>
+                        • After restoring, the page will automatically refresh to load the restored data
                     </small>
                 </div>
             </div>
@@ -126,6 +133,61 @@ document.getElementById('createBackupBtn').addEventListener('click', async funct
 
 document.getElementById('refreshBackupsBtn').addEventListener('click', refreshBackupsList);
 
+// Add event listeners for restore buttons
+document.addEventListener('click', async function(e) {
+    if (e.target.closest('.restore-btn')) {
+        const btn = e.target.closest('.restore-btn');
+        const filename = btn.dataset.filename;
+
+        const confirmed = confirm(
+            `⚠️ WARNING: This will restore the database from backup "${filename}".\n\n` +
+            `Current data will be replaced with the backup data.\n` +
+            `A safety backup of your current database will be created automatically.\n\n` +
+            `Are you sure you want to continue?`
+        );
+
+        if (!confirmed) return;
+
+        const messageDiv = document.getElementById('backupMessage');
+        btn.disabled = true;
+
+        try {
+            const response = await fetch(`/administration/backup/restore/${filename}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                messageDiv.className = 'alert alert-success';
+                messageDiv.textContent = `✓ ${data.message}. Please refresh the page to see changes.`;
+                if (data.safety_backup) {
+                    messageDiv.textContent += ` Safety backup created: ${data.safety_backup}`;
+                }
+                messageDiv.classList.remove('d-none');
+
+                // Auto-refresh after 3 seconds
+                setTimeout(() => {
+                    location.reload();
+                }, 3000);
+            } else {
+                messageDiv.className = 'alert alert-danger';
+                messageDiv.textContent = `Error: ${data.detail || 'Restore failed'}`;
+                messageDiv.classList.remove('d-none');
+            }
+        } catch (error) {
+            messageDiv.className = 'alert alert-danger';
+            messageDiv.textContent = `Error: ${error.message}`;
+            messageDiv.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+});
+
 async function refreshBackupsList() {
     try {
         const response = await fetch('/administration/backups');
@@ -149,6 +211,9 @@ async function refreshBackupsList() {
                            download>
                             <i class="fas fa-download"></i> Download
                         </a>
+                        <button class="btn btn-sm btn-warning restore-btn" data-filename="${backup.filename}">
+                            <i class="fas fa-undo"></i> Restore
+                        </button>
                     </td>
                 `;
                 tbody.appendChild(row);

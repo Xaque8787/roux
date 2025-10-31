@@ -108,3 +108,52 @@ def list_backups() -> List[Dict[str, any]]:
     except Exception as e:
         logger.error(f"Failed to list backups: {str(e)}")
         return []
+
+def restore_backup(backup_filename: str) -> Dict[str, str]:
+    try:
+        backup_dir = get_backup_dir()
+        backup_path = Path(backup_dir) / backup_filename
+
+        if not backup_path.exists():
+            return {
+                "success": False,
+                "error": "Backup file not found"
+            }
+
+        db_path = get_database_path()
+
+        # Create a safety backup of the current database before restoring
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safety_backup_filename = f"pre_restore_safety_{timestamp}.db"
+        safety_backup_path = Path(backup_dir) / safety_backup_filename
+
+        if Path(db_path).exists():
+            source = sqlite3.connect(db_path)
+            safety_conn = sqlite3.connect(str(safety_backup_path))
+            source.backup(safety_conn)
+            safety_conn.close()
+            source.close()
+            logger.info(f"Created safety backup: {safety_backup_filename}")
+
+        # Restore the backup
+        backup_conn = sqlite3.connect(str(backup_path))
+        target_conn = sqlite3.connect(db_path)
+
+        backup_conn.backup(target_conn)
+
+        target_conn.close()
+        backup_conn.close()
+
+        logger.info(f"Database restored from: {backup_filename}")
+
+        return {
+            "success": True,
+            "message": f"Database restored successfully from {backup_filename}",
+            "safety_backup": safety_backup_filename
+        }
+    except Exception as e:
+        logger.error(f"Restore failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }

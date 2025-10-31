@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_admin, get_current_user
 from ..schemas import UserOut
-from ..utils.backup import create_backup, cleanup_old_backups, list_backups, get_backup_dir
+from ..utils.backup import create_backup, cleanup_old_backups, list_backups, get_backup_dir, restore_backup
 from pathlib import Path
 import logging
 
@@ -76,3 +76,23 @@ async def download_backup(
         filename=filename,
         media_type="application/octet-stream"
     )
+
+@router.post("/administration/backup/restore/{filename}")
+async def restore_database_backup(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(require_admin)
+):
+    if not filename.startswith("backup_") or not filename.endswith(".db"):
+        raise HTTPException(status_code=400, detail="Invalid backup filename")
+
+    result = restore_backup(filename)
+
+    if result["success"]:
+        return JSONResponse({
+            "success": True,
+            "message": result["message"],
+            "safety_backup": result.get("safety_backup", "")
+        })
+    else:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {result['error']}")
