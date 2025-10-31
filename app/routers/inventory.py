@@ -1200,8 +1200,25 @@ async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), cur
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
-    
+
     db.delete(item)
     db.commit()
-    
+
     return RedirectResponse(url="/inventory", status_code=302)
+
+@router.get("/all_completed_days")
+async def get_all_completed_days(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    finalized_days = db.query(InventoryDay).filter(
+        InventoryDay.finalized == True
+    ).order_by(InventoryDay.date.desc()).all()
+
+    return {
+        "days": [
+            {
+                "id": day.id,
+                "date": day.date.strftime('%Y-%m-%d'),
+                "day_name": day.date.strftime('%A')
+            }
+            for day in finalized_days
+        ]
+    }

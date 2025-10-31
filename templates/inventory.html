@@ -402,35 +402,45 @@
 <div class="row mt-3">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-history"></i> Recent Completed Days</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-history"></i> Recent Completed Days</h5>
+                <button id="showAllDaysBtn" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-list"></i> Show All
+                </button>
             </div>
             <div class="card-body">
-                {% if finalized_days %}
-                <div class="row">
-                    {% for day in finalized_days %}
-                    <div class="col-md-3 mb-2">
-                        <div class="card">
-                            <div class="card-body p-2">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>{{ day.date.strftime('%Y-%m-%d') }}</strong>
-                                        <br><small class="text-muted">{{ day.date.strftime('%A') }}</small>
-                                    </div>
-                                    <div>
-                                        <a href="/inventory/reports/{{ day.id }}" class="btn btn-sm btn-outline-info">
-                                            <i class="fas fa-chart-bar"></i> Report
-                                        </a>
+                <div id="completedDaysContainer">
+                    {% if finalized_days %}
+                    <div class="row" id="daysGrid">
+                        {% for day in finalized_days %}
+                        <div class="col-md-3 mb-2">
+                            <div class="card">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ day.date.strftime('%Y-%m-%d') }}</strong>
+                                            <br><small class="text-muted">{{ day.date.strftime('%A') }}</small>
+                                        </div>
+                                        <div>
+                                            <a href="/inventory/reports/{{ day.id }}" class="btn btn-sm btn-outline-info">
+                                                <i class="fas fa-chart-bar"></i> Report
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted">No completed days in the last 30 days.</p>
+                    {% endif %}
                 </div>
-                {% else %}
-                <p class="text-muted">No completed days in the last 30 days.</p>
-                {% endif %}
+                <div id="loadingSpinner" class="text-center d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -702,5 +712,68 @@ function validateNewDayForm() {
     errorDiv.style.display = 'none';
     return true;
 }
+
+// Show All Completed Days functionality
+document.getElementById('showAllDaysBtn').addEventListener('click', async function() {
+    const btn = this;
+    const container = document.getElementById('completedDaysContainer');
+    const spinner = document.getElementById('loadingSpinner');
+
+    // Show loading spinner
+    container.classList.add('d-none');
+    spinner.classList.remove('d-none');
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/inventory/all_completed_days');
+        const data = await response.json();
+
+        // Build the grid HTML
+        let html = '<div class="row" id="daysGrid">';
+
+        if (data.days.length === 0) {
+            html = '<p class="text-muted">No completed days found.</p>';
+        } else {
+            data.days.forEach(day => {
+                html += `
+                    <div class="col-md-3 mb-2">
+                        <div class="card">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${day.date}</strong>
+                                        <br><small class="text-muted">${day.day_name}</small>
+                                    </div>
+                                    <div>
+                                        <a href="/inventory/reports/${day.id}" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-chart-bar"></i> Report
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+
+        container.innerHTML = html;
+
+        // Change button to "Show Recent"
+        btn.innerHTML = '<i class="fas fa-clock"></i> Show Recent';
+        btn.onclick = function() {
+            location.reload();
+        };
+
+    } catch (error) {
+        console.error('Error loading all completed days:', error);
+        container.innerHTML = '<p class="text-danger">Error loading completed days. Please try again.</p>';
+    } finally {
+        container.classList.remove('d-none');
+        spinner.classList.add('d-none');
+        btn.disabled = false;
+    }
+});
 </script>
 {% endblock %}
