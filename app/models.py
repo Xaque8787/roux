@@ -926,13 +926,21 @@ class Task(Base):
 
 class UtilityCost(Base):
     __tablename__ = "utility_costs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     monthly_cost = Column(Float)
     last_updated = Column(DateTime, default=get_naive_local_time)
-    
+
     @property
     def daily_cost(self):
         """Calculate daily cost (monthly / 30)"""
         return self.monthly_cost / 30
+
+class MigrationsApplied(Base):
+    __tablename__ = "migrations_applied"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String, unique=True, index=True)
+    checksum = Column(String)
+    applied_at = Column(DateTime, default=get_naive_local_time)

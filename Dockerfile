@@ -36,13 +36,15 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 COPY data/ ./data/
 COPY migrations/ ./migrations/
+COPY run_migrations.py .
+COPY docker-entrypoint.sh .
 
-# Ensure data directory has proper permissions
-RUN chown -R app:app /app/data && chmod -R 755 /app/data
+# Ensure data directory has proper permissions and make entrypoint executable
+RUN chown -R app:app /app/data && chmod -R 755 /app/data && \
+    chmod +x /app/docker-entrypoint.sh
 
 # Switch to non-root user
 USER app
-
 
 # Add local Python packages to PATH
 ENV PATH=/home/app/.local/bin:$PATH
@@ -58,6 +60,9 @@ EXPOSE 8000
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/login')" || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Run the application
 CMD ["gunicorn", "app.main:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--access-logfile", "-", "--error-logfile", "-"]
