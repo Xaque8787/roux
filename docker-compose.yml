@@ -20,22 +20,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Development service (optional)
-  food-cost-dev:
-    build:
-      context: .
-      target: development
-    ports:
-      - "8001:8000"
-    environment:
-      - SECRET_KEY=dev-secret-key
-      - DATABASE_URL=sqlite:///home/app/data/food_cost_dev.db
-      - TZ=${TZ:-America/Los_Angeles}
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
-    volumes:
-      - .:/app
-      - ./data:/home/app/data
-    profiles:
-      - dev

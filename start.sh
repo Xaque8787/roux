@@ -151,14 +151,27 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | grep -v '^$' | xargs)
 fi
 
-# Set environment variables for local development
-export SECRET_KEY="local-dev-secret-key-change-in-production"
-export DATABASE_URL="sqlite:///./data/food_cost.db"
+# Set environment variables for local development (if not already set)
+export SECRET_KEY="${SECRET_KEY:-local-dev-secret-key-change-in-production}"
+export DATABASE_URL="${DATABASE_URL:-sqlite:///./data/food_cost.db}"
+export TZ="${TZ:-America/Los_Angeles}"
+
+# Export email configuration if present in .env
+if [ ! -z "$RESEND_API_KEY" ]; then
+    export RESEND_API_KEY
+fi
+if [ ! -z "$RESEND_FROM_EMAIL" ]; then
+    export RESEND_FROM_EMAIL
+fi
 
 echo "🌟 Environment variables set:"
 echo "   SECRET_KEY: $SECRET_KEY"
 echo "   DATABASE_URL: $DATABASE_URL"
-echo "   TZ: ${TZ:-not set}"
+echo "   TZ: $TZ"
+if [ ! -z "$RESEND_API_KEY" ]; then
+    echo "   RESEND_API_KEY: [configured]"
+    echo "   RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-not set}"
+fi
 echo ""
 echo "📂 Database will be stored in: ./data/food_cost.db"
 echo "🔗 This matches the Docker volume mount for consistency"

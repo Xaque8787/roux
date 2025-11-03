@@ -61,16 +61,3 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 
 # Run the application
 CMD ["gunicorn", "app.main:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--access-logfile", "-", "--error-logfile", "-"]
-
-# Development stage (optional)
-FROM production AS development
-
-USER root
-
-# Install development dependencies
-RUN pip install --no-cache-dir pytest pytest-asyncio httpx
-
-USER app
-
-# Override CMD for development
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
