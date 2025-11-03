@@ -91,27 +91,68 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 3. Create the first admin user
 4. Default categories will be created automatically
 
-### Managing Ingredients
+### Core Features
+
+For detailed documentation on each feature, see the [docs](./docs) folder:
+
+#### [Managing Ingredients](./docs/ingredients.md)
+Complete guide to setting up and managing ingredients, including:
+- Purchase configurations (single items, cases, breakable units)
+- Unit conversions and baking measurements
+- Vendor management and pricing methods
+- Cost calculations and tracking
+
+#### [Creating Recipes](./docs/recipes.md)
+Detailed instructions for building recipes:
+- Adding ingredients with quantities and units
+- Using batch portions in recipes
+- Cost calculations and recipe organization
+- Multi-stage production workflows
+
+#### [Production Batches](./docs/batches.md)
+Comprehensive guide to production batches:
+- Yield configuration (fixed and variable)
+- Labor tracking and cost estimation
+- Batch scaling options
+- Historical performance analysis
+
+#### [Menu Items (Dishes)](./docs/dishes.md)
+Everything about creating and costing dishes:
+- Building dishes from batch portions
+- Direct ingredient additions
+- Multiple cost calculation methods
+- Profit margin and food cost percentage analysis
+
+#### [Daily Inventory](./docs/inventory.md)
+Complete inventory management system:
+- Inventory item setup and par levels
+- Daily counting and task creation
+- Task assignment and time tracking
+- Reports and performance analysis
+
+### Quick Reference
+
+#### Managing Ingredients
 1. Go to **Ingredients** section
 2. Add ingredients with their units and costs
 3. Assign categories for better organization
 
-### Creating Recipes
+#### Creating Recipes
 1. Go to **Recipes** section
 2. Create recipes by selecting ingredients and quantities
 3. View recipe details including total cost
 
-### Production Batches
+#### Production Batches
 1. Go to **Batches** section
 2. Select a recipe and enter yield amount and labor time
 3. Optionally enable portion breakdowns
 
-### Menu Items (Dishes)
+#### Menu Items (Dishes)
 1. Go to **Dishes** section
 2. Create dishes using portions from batches
 3. Set sale prices to calculate profit margins
 
-### Daily Inventory
+#### Daily Inventory
 1. Go to **Inventory** section
 2. Add inventory items with par levels
 3. Start a new day and assign employees
@@ -119,7 +160,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 5. Create and track tasks
 6. Finalize the day when complete
 
-### Utility Costs (Admin Only)
+#### Utility Costs (Admin Only)
 1. Go to **Utilities** section
 2. Add monthly costs for utilities
 3. View daily prorated costs
