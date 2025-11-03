@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import markdown
-from app.dependencies import get_current_user
+from ..dependencies import get_current_user
+from ..utils.template_helpers import setup_template_filters
 
 router = APIRouter(prefix="/guides", tags=["guides"])
+templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 DOCS_DIR = Path(__file__).parent.parent.parent / "docs"
 
@@ -39,11 +42,11 @@ DOC_FILES = {
 @router.get("", response_class=HTMLResponse)
 async def docs_index(request: Request, current_user: dict = Depends(get_current_user)):
     """Documentation index page listing all available guides"""
-    return request.app.state.templates.TemplateResponse(
+    return templates.TemplateResponse(
         "docs_index.html",
         {
             "request": request,
-            "user": current_user,
+            "current_user": current_user,
             "doc_files": DOC_FILES
         }
     )
@@ -72,11 +75,11 @@ async def view_doc(
         extensions=['tables', 'fenced_code', 'codehilite', 'toc']
     )
 
-    return request.app.state.templates.TemplateResponse(
+    return templates.TemplateResponse(
         "docs_view.html",
         {
             "request": request,
-            "user": current_user,
+            "current_user": current_user,
             "title": doc_info["title"],
             "content": html_content,
             "doc_name": doc_name,
