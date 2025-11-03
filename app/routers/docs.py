@@ -4,7 +4,7 @@ from pathlib import Path
 import markdown
 from app.dependencies import get_current_user
 
-router = APIRouter(prefix="/docs", tags=["docs"])
+router = APIRouter(prefix="/guides", tags=["guides"])
 
 DOCS_DIR = Path(__file__).parent.parent.parent / "docs"
 

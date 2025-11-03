@@ -137,7 +137,7 @@
                 </h6>
                 <div class="list-group">
                     {% for key, doc in doc_files.items() %}
-                    <a href="/docs/{{ key }}"
+                    <a href="/guides/{{ key }}"
                        class="list-group-item list-group-item-action {% if key == doc_name %}active{% endif %}">
                         {{ doc.title }}
                     </a>
@@ -149,7 +149,7 @@
         <div class="col-lg-9">
             <div class="btn-toolbar mb-3 d-print-none" role="toolbar">
                 <div class="btn-group me-2" role="group">
-                    <a href="/docs" class="btn btn-outline-secondary">
+                    <a href="/guides" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left"></i> All Guides
                     </a>
                 </div>
@@ -167,7 +167,7 @@
             <hr class="my-5">
 
             <div class="d-flex justify-content-between mb-5 d-print-none">
-                <a href="/docs" class="btn btn-outline-primary">
+                <a href="/guides" class="btn btn-outline-primary">
                     <i class="fas fa-arrow-left"></i> Back to All Guides
                 </a>
                 <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="btn btn-outline-secondary">
