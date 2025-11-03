@@ -65,23 +65,19 @@ docker-compose up -d
 
 5. Complete the initial setup by creating an admin user
 
-### Development Setup
+### Local Development (Bare Metal)
 
-1. Install Python 3.11+ and dependencies:
+Use the included startup script for local development:
+
 ```bash
-pip install -r requirements.txt
+./start.sh
 ```
 
-2. Set environment variables:
-```bash
-export SECRET_KEY="your-secret-key"
-export DATABASE_URL="sqlite:///./food_cost.db"
-```
-
-3. Run the development server:
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+The script will:
+- Create and activate a virtual environment
+- Install all dependencies
+- Run database migrations if needed
+- Start the development server on http://localhost:8000
 
 ## Usage Guide
 

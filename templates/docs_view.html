@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - How To Guides{% endblock %}
+
+{% block content %}
+<style>
+    .doc-content {
+        max-width: 900px;
+        margin: 0 auto;
+        line-height: 1.7;
+    }
+    .doc-content h1 {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #dee2e6;
+        color: #2c5aa0;
+    }
+    .doc-content h2 {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.3rem;
+        border-bottom: 1px solid #dee2e6;
+        color: #2c5aa0;
+    }
+    .doc-content h3 {
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        color: #495057;
+    }
+    .doc-content h4 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.5rem;
+        color: #495057;
+        font-weight: 600;
+    }
+    .doc-content h5 {
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        color: #6c757d;
+        font-weight: 600;
+    }
+    .doc-content h6 {
+        margin-top: 0.75rem;
+        margin-bottom: 0.5rem;
+        color: #6c757d;
+        font-weight: 600;
+        font-style: italic;
+    }
+    .doc-content p {
+        margin-bottom: 1rem;
+    }
+    .doc-content ul, .doc-content ol {
+        margin-bottom: 1rem;
+        padding-left: 2rem;
+    }
+    .doc-content li {
+        margin-bottom: 0.5rem;
+    }
+    .doc-content code {
+        background-color: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.9em;
+        color: #d63384;
+    }
+    .doc-content pre {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 5px;
+        border-left: 3px solid #2c5aa0;
+        overflow-x: auto;
+    }
+    .doc-content pre code {
+        background-color: transparent;
+        padding: 0;
+        color: inherit;
+    }
+    .doc-content blockquote {
+        border-left: 4px solid #dee2e6;
+        padding-left: 1rem;
+        margin-left: 0;
+        color: #6c757d;
+        font-style: italic;
+    }
+    .doc-content table {
+        width: 100%;
+        margin-bottom: 1rem;
+        border-collapse: collapse;
+    }
+    .doc-content table th,
+    .doc-content table td {
+        padding: 0.75rem;
+        border: 1px solid #dee2e6;
+    }
+    .doc-content table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+    .doc-content table tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    .doc-content hr {
+        margin: 2rem 0;
+        border-top: 2px solid #dee2e6;
+    }
+    .doc-content strong {
+        color: #212529;
+        font-weight: 600;
+    }
+    .doc-nav {
+        position: sticky;
+        top: 20px;
+    }
+    .doc-nav .list-group-item {
+        border: none;
+        padding: 0.5rem 1rem;
+    }
+    .doc-nav .list-group-item.active {
+        background-color: #e7f1ff;
+        color: #2c5aa0;
+        border-left: 3px solid #2c5aa0;
+    }
+    @media print {
+        .doc-nav, .btn-toolbar {
+            display: none;
+        }
+    }
+</style>
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-lg-3 d-none d-lg-block">
+            <div class="doc-nav">
+                <h6 class="text-muted mb-3">
+                    <i class="fas fa-book"></i> All Guides
+                </h6>
+                <div class="list-group">
+                    {% for key, doc in doc_files.items() %}
+                    <a href="/docs/{{ key }}"
+                       class="list-group-item list-group-item-action {% if key == doc_name %}active{% endif %}">
+                        {{ doc.title }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-9">
+            <div class="btn-toolbar mb-3 d-print-none" role="toolbar">
+                <div class="btn-group me-2" role="group">
+                    <a href="/docs" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> All Guides
+                    </a>
+                </div>
+                <div class="btn-group" role="group">
+                    <button onclick="window.print()" class="btn btn-outline-secondary">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                </div>
+            </div>
+
+            <div class="doc-content">
+                {{ content | safe }}
+            </div>
+
+            <hr class="my-5">
+
+            <div class="d-flex justify-content-between mb-5 d-print-none">
+                <a href="/docs" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left"></i> Back to All Guides
+                </a>
+                <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-up"></i> Back to Top
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

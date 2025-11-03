@@ -36,6 +36,7 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 COPY data/ ./data/
 COPY migrations/ ./migrations/
+COPY docs/ ./docs/
 COPY run_migrations.py .
 COPY docker-entrypoint.sh .
 

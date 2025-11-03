@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}How To Guides - Food Cost Management{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-book-open"></i> How To Guides
+            </h1>
+            <p class="lead">
+                Comprehensive documentation for using the Food Cost Management System
+            </p>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        {% for key, doc in doc_files.items() %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-file-alt text-primary"></i> {{ doc.title }}
+                    </h5>
+                    <p class="card-text text-muted">
+                        {{ doc.description }}
+                    </p>
+                    <a href="/docs/{{ key }}" class="btn btn-primary">
+                        <i class="fas fa-arrow-right"></i> Read Guide
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <h5 class="alert-heading">
+                    <i class="fas fa-info-circle"></i> About These Guides
+                </h5>
+                <p>
+                    These comprehensive guides provide detailed explanations of every feature, form field,
+                    and how different parts of the system work together. Each guide includes:
+                </p>
+                <ul class="mb-0">
+                    <li><strong>Detailed Field Explanations:</strong> What each input does and why it matters</li>
+                    <li><strong>Common Scenarios:</strong> Real-world examples with step-by-step walkthroughs</li>
+                    <li><strong>Best Practices:</strong> Industry-standard guidance and optimization tips</li>
+                    <li><strong>Troubleshooting:</strong> Solutions to common issues</li>
+                    <li><strong>Advanced Topics:</strong> Deep dives for power users</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

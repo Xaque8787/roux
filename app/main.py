@@ -30,7 +30,7 @@ from .utils.datetime_utils import get_naive_local_time
 # Import routers
 from .routers import (
     auth, home, employees, ingredients, recipes, batches,
-    dishes, inventory, utilities, categories, vendors, par_unit_names, administration
+    dishes, inventory, utilities, categories, vendors, par_unit_names, administration, docs
 )
 
 # Import API routers
@@ -80,6 +80,7 @@ app.include_router(categories.router)
 app.include_router(vendors.router)
 app.include_router(par_unit_names.router)
 app.include_router(administration.router)
+app.include_router(docs.router)
 
 # Include API routers
 app.include_router(api_ingredients.router)
