@@ -177,6 +177,17 @@ echo "📂 Database will be stored in: ./data/food_cost.db"
 echo "🔗 This matches the Docker volume mount for consistency"
 echo ""
 
+# Run migrations if database exists
+if [ -f "./data/food_cost.db" ]; then
+    echo "📊 Existing database detected - checking for migrations..."
+    python run_migrations.py
+    echo ""
+else
+    echo "ℹ️  No existing database - will be created on first access"
+    echo "ℹ️  Skipping migrations (not needed for fresh database)"
+    echo ""
+fi
+
 # Start the application
 echo "🚀 Starting application on http://localhost:8000"
 echo "📝 Press Ctrl+C to stop the server"
