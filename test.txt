@@ -1,5 +1,7 @@
 ## Email Delivery Issue - Diagnosis
 
+TESTING GITHUB SYNC - This line added to trigger sync
+
 Current setup:
 - Verified domain in Resend: reports.pospiros.pizza
 - Email sending from: reports@reports.pospiros.pizza
