@@ -1,1 +1,0 @@
-Anytime an update to the project codes that would require a database migration, create a python script that would add the appropriate tables or columns to an existing database and place them in the migrations folder in the root directory.

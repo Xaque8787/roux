@@ -3,3 +3,4 @@ node_modules/
 /food_cost.db
 __pycache__/
 *.pyc
+.bolt/
