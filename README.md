@@ -46,8 +46,8 @@ A comprehensive web application for managing restaurant food costs, ingredients,
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd food-cost-management
+git clone https://github.com/Xaque8787/roux
+cd roux
 ```
 
 2. Create environment file:
@@ -64,6 +64,8 @@ docker-compose up -d
 4. Access the application at `http://localhost:8000`
 
 5. Complete the initial setup by creating an admin user
+
+Note: The `docker-compose.yml` file uses pre-built images from GitHub Container Registry. For local development with builds, use `docker-compose.local.yml` instead.
 
 ### Local Development (Bare Metal)
 

@@ -1,7 +1,9 @@
-# Production compose file - uses pre-built images from GHCR
+# Local development compose file - builds from source
 services:
   food-cost-app:
-    image: ghcr.io/xaque8787/roux:latest
+    build:
+      context: .
+      target: production
     ports:
       - "8000:8000"
     environment:
