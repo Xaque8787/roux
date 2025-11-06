@@ -39,6 +39,7 @@ COPY migrations/ ./migrations/
 COPY docs/ ./docs/
 COPY run_migrations.py .
 COPY docker-entrypoint.sh .
+COPY .dockerversion .
 
 # Ensure data directory has proper permissions and make entrypoint executable
 RUN chown -R app:app /app/data && chmod -R 755 /app/data && \

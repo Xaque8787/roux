@@ -10,6 +10,15 @@
     </div>
 </div>
 
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1000;">
+    <small class="text-muted" id="version-info">
+        <span id="version-number">v{{ app_version }}</span>
+        <span id="update-indicator" class="badge bg-success ms-2" style="display: none;">
+            <i class="fas fa-arrow-up"></i> Update Available
+        </span>
+    </small>
+</div>
+
 <div class="row mt-4 g-3">
     {% if current_user.role == "admin" %}
     <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
@@ -123,4 +132,23 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+// Check for updates on page load
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const response = await fetch('/api/version/check');
+        const data = await response.json();
+
+        if (data.update_available) {
+            const indicator = document.getElementById('update-indicator');
+            indicator.style.display = 'inline-block';
+            indicator.style.cursor = 'pointer';
+            indicator.title = `New version ${data.github_version} available`;
+        }
+    } catch (error) {
+        console.log('Could not check for updates:', error);
+    }
+});
+</script>
 {% endblock %}
