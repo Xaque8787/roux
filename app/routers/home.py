@@ -14,13 +14,20 @@ templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 def get_app_version():
     """Read the application version from .dockerversion file"""
-    version_file = "/app/.dockerversion"
-    try:
-        if os.path.exists(version_file):
-            with open(version_file, "r") as f:
-                return f.read().strip()
-    except Exception:
-        pass
+    version_paths = [
+        "/app/.dockerversion",
+        ".dockerversion",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".dockerversion")
+    ]
+
+    for version_file in version_paths:
+        try:
+            if os.path.exists(version_file):
+                with open(version_file, "r") as f:
+                    return f.read().strip()
+        except Exception:
+            continue
+
     return "unknown"
 
 @router.get("/", response_class=HTMLResponse)
