@@ -1,3 +1,4 @@
+![roux](logo.png)
 # Food Cost Management System
 
 A comprehensive web application for managing restaurant food costs, ingredients, recipes, batches, dishes, inventory, and utilities.
