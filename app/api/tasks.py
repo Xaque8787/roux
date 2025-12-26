@@ -13,6 +13,9 @@ class EditTimeRequest(BaseModel):
     total_minutes: int
     finished_at: str
 
+class EditAssignedEmployeesRequest(BaseModel):
+    employee_ids: list[int]
+
 @router.get("/{task_id}/scale_options")
 async def get_task_scale_options(task_id: int, db: Session = Depends(get_db)):
     task = db.query(Task).options(joinedload(Task.batch)).filter(Task.id == task_id).first()
@@ -160,5 +163,50 @@ async def edit_task_time(
             "finished_at": task.finished_at.isoformat(),
             "total_time_minutes": task.total_time_minutes,
             "labor_cost": task.labor_cost
+        }
+    }
+
+@router.put("/{task_id}/edit_assigned_employees")
+async def edit_assigned_employees(
+    task_id: int,
+    request: EditAssignedEmployeesRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Only admins and managers can edit task assignments")
+
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status != "completed":
+        raise HTTPException(status_code=400, detail="Can only edit completed tasks")
+
+    if not request.employee_ids:
+        raise HTTPException(status_code=400, detail="At least one employee must be assigned")
+
+    employee_ids = request.employee_ids
+    employees = db.query(User).filter(User.id.in_(employee_ids)).all()
+
+    if len(employees) != len(employee_ids):
+        raise HTTPException(status_code=404, detail="One or more employees not found")
+
+    if len(employee_ids) == 1:
+        task.assigned_to_id = employee_ids[0]
+        task.assigned_employee_ids = None
+    else:
+        task.assigned_to_id = employee_ids[0]
+        task.assigned_employee_ids = ",".join(str(emp_id) for emp_id in employee_ids)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Task assignments updated successfully",
+        "task": {
+            "id": task.id,
+            "assigned_to_id": task.assigned_to_id,
+            "assigned_employee_ids": task.assigned_employee_ids
         }
     }

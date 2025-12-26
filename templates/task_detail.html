@@ -301,6 +301,9 @@
                     <button type="button" class="btn btn-warning w-100 mt-2" onclick="showEditTimeModal({{ task.id }})">
                         <i class="fas fa-clock"></i> Edit Time
                     </button>
+                    <button type="button" class="btn btn-info w-100 mt-2" onclick="showEditEmployeesModal({{ task.id }})">
+                        <i class="fas fa-users"></i> Edit Assigned Employees
+                    </button>
                     {% endif %}
                     {% endif %}
                 </div>
@@ -655,6 +658,102 @@ function saveEditedTime(taskId) {
     .catch(error => {
         console.error('Error updating task time:', error);
         alert(error.detail || 'Error updating task time');
+    });
+}
+
+function showEditEmployeesModal(taskId) {
+    fetch(`/api/tasks/${taskId}`)
+        .then(response => response.json())
+        .then(task => {
+            const employees = {{ employees | tojson }};
+            const assignedEmployeeIds = "{{ task.assigned_employee_ids or '' }}".split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+            if (assignedEmployeeIds.length === 0 && {{ task.assigned_to_id or 'null' }}) {
+                assignedEmployeeIds.push({{ task.assigned_to_id }});
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+
+            const employeeCheckboxes = employees.map(emp => {
+                const isChecked = assignedEmployeeIds.includes(emp.id);
+                return `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="${emp.id}"
+                               id="employee${emp.id}" ${isChecked ? 'checked' : ''}>
+                        <label class="form-check-label" for="employee${emp.id}">
+                            ${emp.full_name || emp.username}
+                        </label>
+                    </div>
+                `;
+            }).join('');
+
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Edit Assigned Employees</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info">
+                                <small>Select one or more employees to assign to this task</small>
+                            </div>
+                            <div id="employeeCheckboxes">
+                                ${employeeCheckboxes}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="saveEditedEmployees(${taskId})">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading task:', error);
+            alert('Error loading task details');
+        });
+}
+
+function saveEditedEmployees(taskId) {
+    const checkboxes = document.querySelectorAll('#employeeCheckboxes input[type="checkbox"]:checked');
+    const employeeIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (employeeIds.length === 0) {
+        alert('Please select at least one employee');
+        return;
+    }
+
+    fetch(`/api/tasks/${taskId}/edit_assigned_employees`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            employee_ids: employeeIds
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error updating task assignments:', error);
+        alert(error.detail || 'Error updating task assignments');
     });
 }
 </script>
