@@ -870,18 +870,29 @@ async def task_detail(
         raise HTTPException(status_code=404, detail="Task not found")
     
     employees = db.query(User).filter(User.is_active == True).all()
-    
+
+    # Convert employees to serializable format for JavaScript
+    employees_data = [
+        {
+            "id": emp.id,
+            "username": emp.username,
+            "full_name": emp.full_name
+        }
+        for emp in employees
+    ]
+
     # Calculate task summary if completed and linked to inventory item
     task_summary = None
     if task.status == "completed" and task.inventory_item:
         task_summary = calculate_task_summary(task, db)
-    
+
     return templates.TemplateResponse("task_detail.html", {
         "request": request,
         "current_user": current_user,
         "inventory_day": inventory_day,
         "task": task,
         "employees": employees,
+        "employees_data": employees_data,
         "task_summary": task_summary
     })
 

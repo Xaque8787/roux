@@ -665,7 +665,7 @@ function showEditEmployeesModal(taskId) {
     fetch(`/api/tasks/${taskId}`)
         .then(response => response.json())
         .then(task => {
-            const employees = {{ employees | tojson }};
+            const employees = {{ employees_data | tojson }};
             const assignedEmployeeIds = "{{ task.assigned_employee_ids or '' }}".split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
             if (assignedEmployeeIds.length === 0 && {{ task.assigned_to_id or 'null' }}) {
                 assignedEmployeeIds.push({{ task.assigned_to_id }});
