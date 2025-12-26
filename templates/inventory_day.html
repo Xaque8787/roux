@@ -206,9 +206,14 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-tasks"></i> Tasks</h5>
                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
-                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#manualTaskModal">
-                    <i class="fas fa-plus"></i> Add Manual Task
-                </button>
+                <div>
+                    <button type="button" class="btn btn-info btn-sm me-2" onclick="showBulkAssignModal()">
+                        <i class="fas fa-users"></i> Bulk Assign
+                    </button>
+                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#manualTaskModal">
+                        <i class="fas fa-plus"></i> Add Manual Task
+                    </button>
+                </div>
                 {% endif %}
             </div>
             <div class="card-body">
@@ -617,6 +622,89 @@
     </div>
 </div>
 
+<!-- Bulk Assign Modal -->
+<div class="modal fade" id="bulkAssignModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-users"></i> Bulk Assign Tasks</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/bulk_assign" id="bulkAssignForm">
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
+                    {% set working_employees = [] %}
+                    {% for employee in employees %}
+                        {% if not inventory_day.employees_working or employee.id|string in working_employee_ids %}
+                            {% set _ = working_employees.append(employee) %}
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if working_employees|length == 0 %}
+                        <div class="alert alert-warning">No employees are scheduled to work today.</div>
+                    {% else %}
+                        {% for task in tasks %}
+                            {% if task.status != 'completed' %}
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-start">
+                                        <div class="me-3">
+                                            {% if task.janitorial_task_id %}
+                                                🧹
+                                            {% elif task.inventory_item and task.inventory_item.category %}
+                                                {{ task.inventory_item.category.icon or '🔘' }}
+                                            {% elif task.batch and task.batch.category %}
+                                                {{ task.batch.category.icon or '🔘' }}
+                                            {% elif task.category %}
+                                                {{ task.category.icon or '🔘' }}
+                                            {% else %}
+                                                🔘
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-2">{{ task.description }}</h6>
+                                            <div class="ms-3">
+                                                {% for employee in working_employees %}
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox"
+                                                           name="task_{{ task.id }}_emp_{{ employee.id }}"
+                                                           id="bulk_task_{{ task.id }}_emp_{{ employee.id }}"
+                                                           {% if task.assigned_employee_ids %}
+                                                               {% set assigned_ids = task.assigned_employee_ids.split(',') %}
+                                                               {% if employee.id|string in assigned_ids %}checked{% endif %}
+                                                           {% elif task.assigned_to_id and task.assigned_to_id == employee.id %}
+                                                               checked
+                                                           {% endif %}>
+                                                    <label class="form-check-label" for="bulk_task_{{ task.id }}_emp_{{ employee.id }}">
+                                                        {{ employee.full_name or employee.username }}
+                                                    </label>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                            <div class="mt-2">
+                                                <span class="badge {% if task.status == 'not_started' %}bg-secondary{% elif task.status == 'in_progress' %}bg-primary{% elif task.status == 'paused' %}bg-warning{% endif %}">
+                                                    {{ task.status.replace('_', ' ').title() }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check"></i> Apply Assignments
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 let currentAssignTaskId = null;
 
@@ -709,9 +797,9 @@ function connectSSE() {
             const data = JSON.parse(event.data);
             console.log('SSE received:', data);
             
-            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' || 
-                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_paused' || 
-                data.type === 'task_resumed' || data.type === 'task_completed') {
+            if (data.type === 'task_assigned' || data.type === 'inventory_updated' || data.type === 'tasks_generated' ||
+                data.type === 'task_created' || data.type === 'task_started' || data.type === 'task_paused' ||
+                data.type === 'task_resumed' || data.type === 'task_completed' || data.type === 'bulk_assignments_updated') {
                 // For timer-related events, update timers immediately then reload
                 if (data.type === 'task_started' || data.type === 'task_paused' || data.type === 'task_resumed') {
                     updateTimers();
@@ -779,13 +867,19 @@ function showRegenerateModal() {
 function showAssignModal(taskId, description) {
     currentAssignTaskId = taskId;
     document.getElementById('assignTaskDescription').textContent = description;
-    
+
     // Clear previous selections
     document.querySelectorAll('#assignModal input[type="checkbox"]').forEach(cb => {
         cb.checked = false;
     });
-    
+
     const modal = new bootstrap.Modal(document.getElementById('assignModal'));
+    modal.show();
+}
+
+// Show bulk assign modal
+function showBulkAssignModal() {
+    const modal = new bootstrap.Modal(document.getElementById('bulkAssignModal'));
     modal.show();
 }
 

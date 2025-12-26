@@ -485,6 +485,67 @@ async def assign_multiple_employees_to_task(
     
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
+@router.post("/day/{day_id}/tasks/bulk_assign")
+async def bulk_assign_tasks(
+    day_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    """Bulk assign multiple tasks to employees"""
+    form_data = await request.form()
+
+    # Parse form data: task_1_emp_5, task_2_emp_7, etc.
+    task_assignments = {}  # {task_id: [emp_id1, emp_id2]}
+
+    for key, value in form_data.multi_items():
+        if key.startswith('task_'):
+            # Parse: task_1_emp_5 -> task_id=1, emp_id=5
+            parts = key.split('_')
+            if len(parts) >= 4:
+                try:
+                    task_id = int(parts[1])
+                    emp_id = int(parts[3])
+
+                    if task_id not in task_assignments:
+                        task_assignments[task_id] = []
+                    task_assignments[task_id].append(emp_id)
+                except (ValueError, IndexError):
+                    continue
+
+    # Get all tasks for this day
+    all_tasks = db.query(Task).filter(Task.day_id == day_id, Task.status != 'completed').all()
+
+    # Update each task
+    updated_count = 0
+    for task in all_tasks:
+        employee_ids = task_assignments.get(task.id, [])
+
+        # Update task assignments (even if empty - allows unassigning all)
+        if employee_ids:
+            task.assigned_to_id = employee_ids[0]  # Set primary assignee to first
+            task.assigned_employee_ids = ','.join(map(str, employee_ids))
+        else:
+            # Clear assignments
+            task.assigned_to_id = None
+            task.assigned_employee_ids = None
+
+        updated_count += 1
+
+    db.commit()
+
+    # Broadcast bulk assignment update
+    try:
+        await broadcast_day_update(day_id, "bulk_assignments_updated", {
+            "updated_count": updated_count,
+            "assigned_by": current_user.full_name or current_user.username
+        })
+        print(f"✅ Broadcasted bulk assignment for {updated_count} tasks")
+    except Exception as e:
+        print(f"❌ Error broadcasting bulk assignment: {e}")
+
+    return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=303)
+
 @router.post("/day/{day_id}/tasks/{task_id}/start")
 async def start_task(
     day_id: int,
