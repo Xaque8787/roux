@@ -297,6 +297,11 @@
                     <div class="alert alert-success text-center">
                         <i class="fas fa-check-circle"></i> Task Completed
                     </div>
+                    {% if current_user.role in ["admin", "manager"] %}
+                    <button type="button" class="btn btn-warning w-100 mt-2" onclick="showEditTimeModal({{ task.id }})">
+                        <i class="fas fa-clock"></i> Edit Time
+                    </button>
+                    {% endif %}
                     {% endif %}
                 </div>
                 {% else %}
@@ -499,31 +504,127 @@ function showMadeAmountInput(taskId, recipeName) {
 function finishTaskWithAmount(taskId) {
     const madeAmount = document.getElementById('madeAmount').value;
     const madeUnitInput = document.getElementById('madeUnit');
-    
+
     const madeUnit = madeUnitInput.value;
-    
+
     if (!madeAmount || !madeUnit) {
         alert('Please enter amount made and select unit');
         return;
     }
-    
+
     const form = document.createElement('form');
     form.method = 'post';
     form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
     form.style.display = 'none';
-    
+
     const amountInput = document.createElement('input');
     amountInput.name = 'made_amount';
     amountInput.value = madeAmount;
-    
+
     const unitInput = document.createElement('input');
     unitInput.name = 'made_unit';
     unitInput.value = madeUnit;
-    
+
     form.appendChild(amountInput);
     form.appendChild(unitInput);
     document.body.appendChild(form);
     form.submit();
+}
+
+function showEditTimeModal(taskId) {
+    fetch(`/api/tasks/${taskId}`)
+        .then(response => response.json())
+        .then(task => {
+            const startedAt = new Date(task.started_at);
+            const finishedAt = new Date(task.finished_at);
+            const totalMinutes = task.total_time_minutes;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Edit Task Time</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info">
+                                <small>
+                                    <strong>Started:</strong> ${startedAt.toLocaleString()}<br>
+                                    <strong>Current Finish:</strong> ${finishedAt.toLocaleString()}<br>
+                                    <strong>Current Total Time:</strong> ${totalMinutes} minutes
+                                </small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label"><strong>Edit Total Time (minutes):</strong></label>
+                                <input type="number" class="form-control" id="editTotalMinutes"
+                                       value="${totalMinutes}" min="0" step="1" required>
+                                <small class="text-muted">Enter the total time in minutes for this task</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label"><strong>Or Edit Finish Time Directly:</strong></label>
+                                <input type="datetime-local" class="form-control" id="editFinishedAt"
+                                       value="${finishedAt.toISOString().slice(0, 16)}" required>
+                                <small class="text-muted">Changing this will override the minutes above</small>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="saveEditedTime(${taskId})">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading task:', error);
+            alert('Error loading task details');
+        });
+}
+
+function saveEditedTime(taskId) {
+    const totalMinutes = document.getElementById('editTotalMinutes').value;
+    const finishedAt = document.getElementById('editFinishedAt').value;
+
+    if (!totalMinutes || !finishedAt) {
+        alert('Please enter both total minutes and finish time');
+        return;
+    }
+
+    fetch(`/api/tasks/${taskId}/edit_time`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            total_minutes: parseInt(totalMinutes),
+            finished_at: finishedAt
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error updating task time:', error);
+        alert(error.detail || 'Error updating task time');
+    });
 }
 </script>
 {% endblock %}

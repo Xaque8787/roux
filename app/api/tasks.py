@@ -1,9 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session, joinedload
+from pydantic import BaseModel
+from datetime import datetime, timedelta
 from ..database import get_db
-from ..models import Task, Batch, InventoryItem, WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS, BAKING_MEASUREMENTS
+from ..models import Task, Batch, InventoryItem, User, WEIGHT_CONVERSIONS, VOLUME_CONVERSIONS, BAKING_MEASUREMENTS
+from ..auth import get_current_user
+from ..utils.datetime_utils import get_naive_local_time
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks-api"])
+
+class EditTimeRequest(BaseModel):
+    total_minutes: int
+    finished_at: str
 
 @router.get("/{task_id}/scale_options")
 async def get_task_scale_options(task_id: int, db: Session = Depends(get_db)):
@@ -88,12 +96,69 @@ async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_d
             InventoryDayItem.day_id == task.day_id,
             InventoryDayItem.inventory_item_id == task.inventory_item.id
         ).first()
-        
+
         if day_item:
             result["inventory_info"] = {
                 "current": day_item.quantity,
                 "par_level": task.inventory_item.par_level,
                 "par_unit_name": task.inventory_item.par_unit_name.name if task.inventory_item.par_unit_name else "units"
             }
-    
+
     return result
+
+@router.get("/{task_id}")
+async def get_task_details(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return {
+        "id": task.id,
+        "description": task.description,
+        "started_at": task.started_at.isoformat() if task.started_at else None,
+        "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+        "total_time_minutes": task.total_time_minutes,
+        "total_pause_time": task.total_pause_time,
+        "status": task.status
+    }
+
+@router.put("/{task_id}/edit_time")
+async def edit_task_time(
+    task_id: int,
+    request: EditTimeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Only admins and managers can edit task times")
+
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status != "completed":
+        raise HTTPException(status_code=400, detail="Can only edit completed tasks")
+
+    if not task.started_at:
+        raise HTTPException(status_code=400, detail="Task has no start time")
+
+    finished_at_dt = datetime.fromisoformat(request.finished_at)
+
+    if finished_at_dt <= task.started_at:
+        raise HTTPException(status_code=400, detail="Finish time must be after start time")
+
+    task.finished_at = finished_at_dt
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Task time updated successfully",
+        "task": {
+            "id": task.id,
+            "started_at": task.started_at.isoformat(),
+            "finished_at": task.finished_at.isoformat(),
+            "total_time_minutes": task.total_time_minutes,
+            "labor_cost": task.labor_cost
+        }
+    }
