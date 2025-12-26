@@ -531,6 +531,15 @@ function finishTaskWithAmount(taskId) {
     form.submit();
 }
 
+function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function showEditTimeModal(taskId) {
     fetch(`/api/tasks/${taskId}`)
         .then(response => response.json())
@@ -538,6 +547,8 @@ function showEditTimeModal(taskId) {
             const startedAt = new Date(task.started_at);
             const finishedAt = new Date(task.finished_at);
             const totalMinutes = task.total_time_minutes;
+
+            const finishedAtLocal = formatDateTimeLocal(finishedAt);
 
             const modal = document.createElement('div');
             modal.className = 'modal fade';
@@ -561,14 +572,14 @@ function showEditTimeModal(taskId) {
                                 <label class="form-label"><strong>Edit Total Time (minutes):</strong></label>
                                 <input type="number" class="form-control" id="editTotalMinutes"
                                        value="${totalMinutes}" min="0" step="1" required>
-                                <small class="text-muted">Enter the total time in minutes for this task</small>
+                                <small class="text-muted">Adjusting this will update the finish time below</small>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label"><strong>Or Edit Finish Time Directly:</strong></label>
                                 <input type="datetime-local" class="form-control" id="editFinishedAt"
-                                       value="${finishedAt.toISOString().slice(0, 16)}" required>
-                                <small class="text-muted">Changing this will override the minutes above</small>
+                                       value="${finishedAtLocal}" required>
+                                <small class="text-muted">Adjusting this will update the total minutes above</small>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -583,6 +594,8 @@ function showEditTimeModal(taskId) {
             const modalInstance = new bootstrap.Modal(modal);
             modalInstance.show();
 
+            setupTimeSync(startedAt);
+
             modal.addEventListener('hidden.bs.modal', function() {
                 document.body.removeChild(modal);
             });
@@ -591,6 +604,24 @@ function showEditTimeModal(taskId) {
             console.error('Error loading task:', error);
             alert('Error loading task details');
         });
+}
+
+function setupTimeSync(startedAt) {
+    const totalMinutesInput = document.getElementById('editTotalMinutes');
+    const finishedAtInput = document.getElementById('editFinishedAt');
+
+    totalMinutesInput.addEventListener('input', function() {
+        const minutes = parseInt(this.value) || 0;
+        const newFinishedAt = new Date(startedAt.getTime() + minutes * 60000);
+        finishedAtInput.value = formatDateTimeLocal(newFinishedAt);
+    });
+
+    finishedAtInput.addEventListener('input', function() {
+        const finishedAt = new Date(this.value);
+        const diffMs = finishedAt - startedAt;
+        const minutes = Math.round(diffMs / 60000);
+        totalMinutesInput.value = Math.max(0, minutes);
+    });
 }
 
 function saveEditedTime(taskId) {
