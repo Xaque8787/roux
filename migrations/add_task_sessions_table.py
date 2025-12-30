@@ -22,31 +22,34 @@ Note: The Task model will automatically use sessions for time calculations
 when they exist, maintaining backward compatibility with existing tasks.
 """
 
-from sqlalchemy import create_engine, Column, Integer, DateTime, ForeignKey, text
-from sqlalchemy.orm import sessionmaker
 import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/food_cost.db")
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
 
-def upgrade():
-    with engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS task_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id INTEGER NOT NULL,
-                started_at TIMESTAMP NOT NULL,
-                ended_at TIMESTAMP,
-                pause_duration INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
-            )
-        """))
+def upgrade(conn):
+    """Apply migration - conn is passed by migration runner"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS task_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            started_at TIMESTAMP NOT NULL,
+            ended_at TIMESTAMP,
+            pause_duration INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+        )
+    """)
 
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_task_sessions_task_id ON task_sessions (task_id)
-        """))
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS ix_task_sessions_task_id ON task_sessions (task_id)
+    """)
 
 if __name__ == "__main__":
-    upgrade()
-    print("Migration completed: task_sessions table created")
+    import sqlite3
+    db_conn = sqlite3.connect(DATABASE_URL.replace('sqlite:///', ''))
+    try:
+        upgrade(db_conn)
+        db_conn.commit()
+        print("Migration completed: task_sessions table created")
+    finally:
+        db_conn.close()
