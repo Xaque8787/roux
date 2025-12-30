@@ -553,6 +553,8 @@ async def start_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    from ..models import TaskSession
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -564,14 +566,22 @@ async def start_task(
     if not task.assigned_to_id and not task.assigned_employee_ids:
         raise HTTPException(status_code=400, detail="Please assign employees before starting this task")
 
-    task.started_at = get_naive_local_time()
+    now = get_naive_local_time()
+    task.started_at = now
     task.is_paused = False
+
+    # Create new session
+    session = TaskSession(
+        task_id=task.id,
+        started_at=now
+    )
+    db.add(session)
     db.commit()
 
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
-            "started_at": get_naive_local_time().isoformat(),
+            "started_at": now.isoformat(),
             "started_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task start for task {task_id}")
@@ -589,6 +599,8 @@ async def start_task_with_scale(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    from ..models import TaskSession
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -617,14 +629,22 @@ async def start_task_with_scale(
     task.scale_factor = scale_factors.get(selected_scale, 1.0)
 
     # Start the task
-    task.started_at = get_naive_local_time()
+    now = get_naive_local_time()
+    task.started_at = now
     task.is_paused = False
+
+    # Create new session
+    session = TaskSession(
+        task_id=task.id,
+        started_at=now
+    )
+    db.add(session)
     db.commit()
 
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_started", {
-            "started_at": get_naive_local_time().isoformat(),
+            "started_at": now.isoformat(),
             "started_by": current_user.full_name or current_user.username,
             "scale": selected_scale
         })
@@ -645,25 +665,26 @@ async def pause_task(
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if task.status != "in_progress":
         raise HTTPException(status_code=400, detail="Task is not in progress")
-    
-    task.paused_at = get_naive_local_time()
+
+    now = get_naive_local_time()
+    task.paused_at = now
     task.is_paused = True
     db.commit()
-    
+
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_paused", {
-            "paused_at": get_naive_local_time().isoformat(),
+            "paused_at": now.isoformat(),
             "paused_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
         print(f"✅ Broadcasted task pause for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task pause: {e}")
-    
+
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/resume")
@@ -673,26 +694,39 @@ async def resume_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    from ..models import TaskSession
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if task.status != "paused":
         raise HTTPException(status_code=400, detail="Task is not paused")
-    
-    # Add pause time to total
+
+    now = get_naive_local_time()
+
+    # Add pause time to total and current session
     if task.paused_at:
-        pause_duration = (get_naive_local_time() - task.paused_at).total_seconds()
-        task.total_pause_time += int(pause_duration)
-    
+        pause_duration = int((now - task.paused_at).total_seconds())
+        task.total_pause_time += pause_duration
+
+        # Update current session pause duration
+        current_session = db.query(TaskSession).filter(
+            TaskSession.task_id == task.id,
+            TaskSession.ended_at.is_(None)
+        ).first()
+
+        if current_session:
+            current_session.pause_duration += pause_duration
+
     task.paused_at = None
     task.is_paused = False
     db.commit()
-    
+
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_resumed", {
-            "resumed_at": get_naive_local_time().isoformat(),
+            "resumed_at": now.isoformat(),
             "resumed_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
@@ -709,33 +743,55 @@ async def finish_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    from ..models import TaskSession
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if task.status not in ["in_progress", "paused"]:
         raise HTTPException(status_code=400, detail="Task cannot be finished")
-    
-    # Handle paused task
+
+    now = get_naive_local_time()
+
+    # Handle paused task - add pause time to total and current session
     if task.is_paused and task.paused_at:
-        pause_duration = (get_naive_local_time() - task.paused_at).total_seconds()
-        task.total_pause_time += int(pause_duration)
-    
-    task.finished_at = get_naive_local_time()
+        pause_duration = int((now - task.paused_at).total_seconds())
+        task.total_pause_time += pause_duration
+
+        # Update current session pause duration
+        current_session = db.query(TaskSession).filter(
+            TaskSession.task_id == task.id,
+            TaskSession.ended_at.is_(None)
+        ).first()
+
+        if current_session:
+            current_session.pause_duration += pause_duration
+
+    task.finished_at = now
     task.is_paused = False
     task.paused_at = None
-    
+
+    # Close the current session
+    current_session = db.query(TaskSession).filter(
+        TaskSession.task_id == task.id,
+        TaskSession.ended_at.is_(None)
+    ).first()
+
+    if current_session:
+        current_session.ended_at = now
+
     # For non-variable yield batches, set made amount automatically
     if task.batch and not task.batch.variable_yield and task.scale_factor:
         task.made_amount = task.batch.yield_amount * task.scale_factor
         task.made_unit = task.batch.yield_unit
-    
+
     db.commit()
-    
+
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
-            "finished_at": get_naive_local_time().isoformat(),
+            "finished_at": now.isoformat(),
             "total_time": task.total_time_minutes,
             "labor_cost": task.labor_cost,
             "completed_by": current_user.full_name or current_user.username,
@@ -745,7 +801,7 @@ async def finish_task(
         print(f"✅ Broadcasted task completion for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
-    
+
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/finish_with_amount")
@@ -757,33 +813,55 @@ async def finish_task_with_amount(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    from ..models import TaskSession
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     if task.status not in ["in_progress", "paused"]:
         raise HTTPException(status_code=400, detail="Task cannot be finished")
-    
+
+    now = get_naive_local_time()
+
     # Set made amount
     task.made_amount = made_amount
     task.made_unit = made_unit
-    
-    # Handle paused task
+
+    # Handle paused task - add pause time to total and current session
     if task.is_paused and task.paused_at:
-        pause_duration = (get_naive_local_time() - task.paused_at).total_seconds()
-        task.total_pause_time += int(pause_duration)
-    
+        pause_duration = int((now - task.paused_at).total_seconds())
+        task.total_pause_time += pause_duration
+
+        # Update current session pause duration
+        current_session = db.query(TaskSession).filter(
+            TaskSession.task_id == task.id,
+            TaskSession.ended_at.is_(None)
+        ).first()
+
+        if current_session:
+            current_session.pause_duration += pause_duration
+
     # Finish the task
-    task.finished_at = get_naive_local_time()
+    task.finished_at = now
     task.is_paused = False
     task.paused_at = None
-    
+
+    # Close the current session
+    current_session = db.query(TaskSession).filter(
+        TaskSession.task_id == task.id,
+        TaskSession.ended_at.is_(None)
+    ).first()
+
+    if current_session:
+        current_session.ended_at = now
+
     db.commit()
-    
+
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_completed", {
-            "finished_at": get_naive_local_time().isoformat(),
+            "finished_at": now.isoformat(),
             "total_time": task.total_time_minutes,
             "made_amount": task.made_amount,
             "made_unit": task.made_unit,
@@ -793,7 +871,7 @@ async def finish_task_with_amount(
         print(f"✅ Broadcasted task completion with amount for task {task_id}")
     except Exception as e:
         print(f"❌ Error broadcasting task completion: {e}")
-    
+
     return RedirectResponse(url=f"/inventory/day/{day_id}", status_code=302)
 
 @router.post("/day/{day_id}/tasks/{task_id}/reopen")
@@ -803,6 +881,8 @@ async def reopen_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    from ..models import TaskSession
+
     task = db.query(Task).filter(Task.id == task_id, Task.day_id == day_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -810,21 +890,24 @@ async def reopen_task(
     if task.status != "completed":
         raise HTTPException(status_code=400, detail="Only completed tasks can be reopened")
 
-    # Clear finish timestamp to reopen the task
-    # Keep the started_at, total_pause_time, and other timer data intact
-    task.finished_at = None
-    task.made_amount = None
-    task.made_unit = None
+    now = get_naive_local_time()
 
-    # Resume the task at the point where it was completed
-    task.is_paused = False
+    # Use the model's reopen method to clear completion data
+    task.reopen()
+
+    # Create a new session for the reopened task
+    new_session = TaskSession(
+        task_id=task.id,
+        started_at=now
+    )
+    db.add(new_session)
 
     db.commit()
 
     # Broadcast AFTER committing
     try:
         await broadcast_task_update(day_id, task_id, "task_reopened", {
-            "reopened_at": get_naive_local_time().isoformat(),
+            "reopened_at": now.isoformat(),
             "reopened_by": current_user.full_name or current_user.username
         })
         print(f"✅ Broadcasted task reopen for task {task_id}")

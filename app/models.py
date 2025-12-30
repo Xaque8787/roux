@@ -850,6 +850,7 @@ class Task(Base):
     batch = relationship("Batch")
     janitorial_task = relationship("JanitorialTask")
     category = relationship("Category")
+    sessions = relationship("TaskSession", back_populates="task", cascade="all, delete-orphan")
     
     @property
     def status(self):
@@ -862,20 +863,46 @@ class Task(Base):
             return "in_progress"
         else:
             return "not_started"
-    
+
+    @property
+    def current_session(self):
+        """Get the current active session (not ended)"""
+        for session in self.sessions:
+            if not session.ended_at:
+                return session
+        return None
+
+    @property
+    def completed_sessions_seconds(self):
+        """Calculate total time in seconds from all COMPLETED sessions (excluding current running session)"""
+        if not self.sessions:
+            return 0
+
+        total_seconds = 0
+        for session in self.sessions:
+            if session.ended_at:  # Only count completed sessions
+                session_seconds = (session.ended_at - session.started_at).total_seconds()
+                session_seconds -= session.pause_duration
+                total_seconds += max(0, session_seconds)
+
+        return int(total_seconds)
+
     @property
     def total_time_minutes(self):
-        """Calculate total time in minutes"""
+        """Calculate total time in minutes from all sessions"""
+        if self.sessions:
+            return sum(session.duration_minutes for session in self.sessions)
+
         if not self.started_at:
             return 0
-        
+
         end_time = self.finished_at or get_naive_local_time()
         if self.is_paused and self.paused_at:
             end_time = self.paused_at
-        
+
         total_seconds = (end_time - self.started_at).total_seconds()
         total_seconds -= self.total_pause_time
-        
+
         return max(0, int(total_seconds / 60))
     
     @property
@@ -906,14 +933,14 @@ class Task(Base):
         # Variable yield batches always require made amount
         if self.batch and self.batch.variable_yield:
             return True
-        
+
         # Inventory items with par unit settings require made amount ONLY if:
         # 1. They don't have a linked batch (manual restocking), OR
         # 2. They have a linked batch with variable yield
-        if (self.inventory_item and 
-            self.inventory_item.par_unit_name and 
+        if (self.inventory_item and
+            self.inventory_item.par_unit_name and
             self.inventory_item.par_unit_equals_type):
-            
+
             # If inventory item has a linked batch
             if self.inventory_item.batch:
                 # Only require input if the batch has variable yield
@@ -921,8 +948,14 @@ class Task(Base):
             else:
                 # No linked batch = manual restocking, require input
                 return True
-        
+
         return False
+
+    def reopen(self):
+        """Reopen a completed task"""
+        self.finished_at = None
+        self.is_paused = False
+        self.paused_at = None
 
 class UtilityCost(Base):
     __tablename__ = "utility_costs"
@@ -936,6 +969,30 @@ class UtilityCost(Base):
     def daily_cost(self):
         """Calculate daily cost (monthly / 30)"""
         return self.monthly_cost / 30
+
+class TaskSession(Base):
+    __tablename__ = "task_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime)
+    pause_duration = Column(Integer, default=0)
+    created_at = Column(DateTime, default=get_naive_local_time)
+
+    task = relationship("Task", back_populates="sessions")
+
+    @property
+    def duration_minutes(self):
+        if not self.ended_at:
+            end_time = get_naive_local_time()
+        else:
+            end_time = self.ended_at
+
+        total_seconds = (end_time - self.started_at).total_seconds()
+        total_seconds -= self.pause_duration
+
+        return max(0, int(total_seconds / 60))
 
 class MigrationsApplied(Base):
     __tablename__ = "migrations_applied"
