@@ -292,18 +292,18 @@
                                 <td>
                                     {% if task.status == "in_progress" %}
                                         <div class="timer-container">
-                                            <span class="timer running" 
-                                                  data-task-id="{{ task.id }}" 
-                                                  data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" 
-                                                  data-pause-time="{{ task.total_pause_time }}">0:00</span>
+                                            <span class="timer running"
+                                                  data-task-id="{{ task.id }}"
+                                                  data-started-at="{{ task.current_session.started_at.isoformat() if task.current_session else (task.started_at.isoformat() if task.started_at else '') }}"
+                                                  data-pause-time="{{ task.current_session.pause_duration if task.current_session else task.total_pause_time }}">0:00</span>
                                             <br><small class="text-success">Running</small>
                                         </div>
                                     {% elif task.status == "paused" %}
                                         <div class="timer-container">
-                                            <span class="timer paused" 
-                                                  data-task-id="{{ task.id }}" 
-                                                  data-started-at="{{ task.started_at.isoformat() if task.started_at else '' }}" 
-                                                  data-pause-time="{{ task.total_pause_time }}" 
+                                            <span class="timer paused"
+                                                  data-task-id="{{ task.id }}"
+                                                  data-started-at="{{ task.current_session.started_at.isoformat() if task.current_session else (task.started_at.isoformat() if task.started_at else '') }}"
+                                                  data-pause-time="{{ task.current_session.pause_duration if task.current_session else task.total_pause_time }}"
                                                   data-paused-at="{{ task.paused_at.isoformat() if task.paused_at else '' }}">0:00</span>
                                             <br><small class="text-warning">Paused</small>
                                         </div>

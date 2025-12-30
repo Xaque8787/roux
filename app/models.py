@@ -863,6 +863,14 @@ class Task(Base):
             return "in_progress"
         else:
             return "not_started"
+
+    @property
+    def current_session(self):
+        """Get the current active session (not ended)"""
+        for session in self.sessions:
+            if not session.ended_at:
+                return session
+        return None
     
     @property
     def total_time_minutes(self):
