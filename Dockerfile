@@ -41,8 +41,8 @@ COPY run_migrations.py .
 COPY docker-entrypoint.sh .
 COPY .dockerversion .
 
-# Ensure data directory has proper permissions and make entrypoint executable
-RUN chown -R app:app /app/data && chmod -R 755 /app/data && \
+# Ensure data and migrations directories have proper permissions and make entrypoint executable
+RUN chown -R app:app /app/data /app/migrations && chmod -R 755 /app/data /app/migrations && \
     chmod +x /app/docker-entrypoint.sh
 
 # Switch to non-root user
