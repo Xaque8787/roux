@@ -871,7 +871,22 @@ class Task(Base):
             if not session.ended_at:
                 return session
         return None
-    
+
+    @property
+    def completed_sessions_seconds(self):
+        """Calculate total time in seconds from all COMPLETED sessions (excluding current running session)"""
+        if not self.sessions:
+            return 0
+
+        total_seconds = 0
+        for session in self.sessions:
+            if session.ended_at:  # Only count completed sessions
+                session_seconds = (session.ended_at - session.started_at).total_seconds()
+                session_seconds -= session.pause_duration
+                total_seconds += max(0, session_seconds)
+
+        return int(total_seconds)
+
     @property
     def total_time_minutes(self):
         """Calculate total time in minutes from all sessions"""

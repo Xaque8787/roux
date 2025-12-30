@@ -296,7 +296,7 @@
                                                   data-task-id="{{ task.id }}"
                                                   data-started-at="{{ task.current_session.started_at.isoformat() if task.current_session else (task.started_at.isoformat() if task.started_at else '') }}"
                                                   data-pause-time="{{ task.current_session.pause_duration if task.current_session else task.total_pause_time }}"
-                                                  data-base-seconds="{{ task.total_time_seconds }}">0:00</span>
+                                                  data-base-seconds="{{ task.completed_sessions_seconds }}">0:00</span>
                                             <br><small class="text-success">Running</small>
                                         </div>
                                     {% elif task.status == "paused" %}
@@ -306,7 +306,7 @@
                                                   data-started-at="{{ task.current_session.started_at.isoformat() if task.current_session else (task.started_at.isoformat() if task.started_at else '') }}"
                                                   data-pause-time="{{ task.current_session.pause_duration if task.current_session else task.total_pause_time }}"
                                                   data-paused-at="{{ task.paused_at.isoformat() if task.paused_at else '' }}"
-                                                  data-base-seconds="{{ task.total_time_seconds }}">0:00</span>
+                                                  data-base-seconds="{{ task.completed_sessions_seconds }}">0:00</span>
                                             <br><small class="text-warning">Paused</small>
                                         </div>
                                     {% elif task.status == "completed" %}
