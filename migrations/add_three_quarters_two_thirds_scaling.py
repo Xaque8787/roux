@@ -26,3 +26,43 @@ def upgrade(conn):
             print("⊘ scale_two_thirds column already exists")
         else:
             raise e
+
+if __name__ == "__main__":
+    import sys
+    import os
+    import sqlite3
+    from pathlib import Path
+
+    # Add parent directory to path
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+    from app.database import get_database_url
+
+    print("=" * 60)
+    print("Migration: Add three-quarters and two-thirds scaling")
+    print("=" * 60)
+
+    # Get database path
+    db_url = get_database_url()
+    if db_url.startswith('sqlite:///'):
+        db_path = db_url.replace('sqlite:///', '')
+    else:
+        print("❌ Could not determine database path")
+        sys.exit(1)
+
+    print(f"📊 Database: {db_path}")
+
+    # Connect and run migration
+    conn = sqlite3.connect(db_path)
+    try:
+        upgrade(conn)
+        conn.commit()
+        print("=" * 60)
+        print("✅ Migration complete!")
+        print("=" * 60)
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Migration failed: {e}")
+        sys.exit(1)
+    finally:
+        conn.close()
