@@ -38,6 +38,8 @@ async def create_batch(
     scale_double: bool = Form(False),
     scale_triple: bool = Form(False),
     scale_quadruple: bool = Form(False),
+    scale_three_quarters: bool = Form(False),
+    scale_two_thirds: bool = Form(False),
     scale_half: bool = Form(False),
     scale_quarter: bool = Form(False),
     scale_eighth: bool = Form(False),
@@ -57,6 +59,8 @@ async def create_batch(
         scale_double=scale_double if can_be_scaled else False,
         scale_triple=scale_triple if can_be_scaled else False,
         scale_quadruple=scale_quadruple if can_be_scaled else False,
+        scale_three_quarters=scale_three_quarters if can_be_scaled else False,
+        scale_two_thirds=scale_two_thirds if can_be_scaled else False,
         scale_half=scale_half if can_be_scaled else False,
         scale_quarter=scale_quarter if can_be_scaled else False,
         scale_eighth=scale_eighth if can_be_scaled else False,
@@ -133,6 +137,8 @@ async def update_batch(
     scale_double: bool = Form(False),
     scale_triple: bool = Form(False),
     scale_quadruple: bool = Form(False),
+    scale_three_quarters: bool = Form(False),
+    scale_two_thirds: bool = Form(False),
     scale_half: bool = Form(False),
     scale_quarter: bool = Form(False),
     scale_eighth: bool = Form(False),
@@ -155,6 +161,8 @@ async def update_batch(
     batch.scale_double = scale_double if can_be_scaled else False
     batch.scale_triple = scale_triple if can_be_scaled else False
     batch.scale_quadruple = scale_quadruple if can_be_scaled else False
+    batch.scale_three_quarters = scale_three_quarters if can_be_scaled else False
+    batch.scale_two_thirds = scale_two_thirds if can_be_scaled else False
     batch.scale_half = scale_half if can_be_scaled else False
     batch.scale_quarter = scale_quarter if can_be_scaled else False
     batch.scale_eighth = scale_eighth if can_be_scaled else False
