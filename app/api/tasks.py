@@ -132,6 +132,8 @@ async def edit_task_time(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from ..models import TaskSession
+
     if current_user.role not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only admins and managers can edit task times")
 
@@ -147,10 +149,55 @@ async def edit_task_time(
 
     finished_at_dt = datetime.fromisoformat(request.finished_at)
 
-    if finished_at_dt <= task.started_at:
-        raise HTTPException(status_code=400, detail="Finish time must be after start time")
+    # Update the last session's ended_at to match the new finished_at
+    # This is critical because total_time_minutes is calculated from sessions
+    last_session = db.query(TaskSession).filter(
+        TaskSession.task_id == task_id
+    ).order_by(TaskSession.started_at.desc()).first()
 
-    task.finished_at = finished_at_dt
+    if last_session:
+        # Get all sessions to determine if we need special handling for multi-session tasks
+        all_sessions = db.query(TaskSession).filter(
+            TaskSession.task_id == task_id
+        ).order_by(TaskSession.started_at.asc()).all()
+
+        if len(all_sessions) > 1:
+            # Multi-session task: use total_minutes to calculate the last session's end time
+            # Calculate time from all previous sessions (excluding the last one)
+            previous_sessions_minutes = sum(
+                session.duration_minutes for session in all_sessions[:-1]
+            )
+            # Calculate how many minutes the last session should be
+            last_session_minutes = request.total_minutes - previous_sessions_minutes
+
+            # Validate that the last session would have positive duration
+            if last_session_minutes < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Total time must be at least {previous_sessions_minutes} minutes (duration of previous sessions)"
+                )
+
+            # Calculate the end time for the last session
+            # ended_at = started_at + (last_session_minutes * 60) + pause_duration
+            last_session_seconds = (last_session_minutes * 60) + last_session.pause_duration
+            last_session.ended_at = last_session.started_at + timedelta(seconds=last_session_seconds)
+
+            # Also update task.finished_at to match
+            task.finished_at = last_session.ended_at
+        else:
+            # Single session task: directly use the finished_at_dt
+            # Validate against the session's start time
+            if finished_at_dt <= last_session.started_at:
+                raise HTTPException(status_code=400, detail="Finish time must be after start time")
+
+            last_session.ended_at = finished_at_dt
+            task.finished_at = finished_at_dt
+    else:
+        # No sessions exist (edge case - shouldn't happen for completed tasks)
+        # Fall back to just updating task.finished_at
+        if finished_at_dt <= task.started_at:
+            raise HTTPException(status_code=400, detail="Finish time must be after start time")
+        task.finished_at = finished_at_dt
 
     db.commit()
 

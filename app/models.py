@@ -426,6 +426,8 @@ class Batch(Base):
     scale_double = Column(Boolean, default=False)
     scale_triple = Column(Boolean, default=False)
     scale_quadruple = Column(Boolean, default=False)
+    scale_three_quarters = Column(Boolean, default=False)
+    scale_two_thirds = Column(Boolean, default=False)
     scale_half = Column(Boolean, default=False)
     scale_quarter = Column(Boolean, default=False)
     scale_eighth = Column(Boolean, default=False)
@@ -452,6 +454,10 @@ class Batch(Base):
                 scales.append(('triple', 3.0, 'Triple Batch (3x)'))
             if self.scale_quadruple:
                 scales.append(('quadruple', 4.0, 'Quadruple Batch (4x)'))
+            if self.scale_three_quarters:
+                scales.append(('three_quarters', 0.75, 'Three Quarters Batch (3/4)'))
+            if self.scale_two_thirds:
+                scales.append(('two_thirds', 0.6667, 'Two Thirds Batch (2/3)'))
             if self.scale_half:
                 scales.append(('half', 0.5, 'Half Batch (1/2)'))
             if self.scale_quarter:
