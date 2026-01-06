@@ -944,15 +944,16 @@ class Task(Base):
         """Generate slug from task description and related entities"""
         from app.utils.slugify import slugify
 
-        # Start with the description if available
-        if self.description:
-            base_slug = slugify(self.description[:50])
+        # Prefer the most specific entity name over generic descriptions
+        # Priority: inventory_item > batch/recipe > janitorial_task > description
+        if self.inventory_item:
+            base_slug = slugify(self.inventory_item.name)
         elif self.batch and self.batch.recipe:
             base_slug = slugify(self.batch.recipe.name)
-        elif self.inventory_item:
-            base_slug = slugify(self.inventory_item.name)
         elif self.janitorial_task:
             base_slug = slugify(self.janitorial_task.title)
+        elif self.description:
+            base_slug = slugify(self.description[:50])
         else:
             base_slug = f"task-{self.id}"
 

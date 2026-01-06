@@ -989,7 +989,7 @@ function startTaskWithScale(taskSlug) {
 // Check if task has assigned employees before starting
 function checkAssignmentAndStart(taskSlug, assignedToId, assignedEmployeeIds) {
     if (!assignedToId && !assignedEmployeeIds) {
-        showAssignModal(taskId, 'Task');
+        showAssignModal(taskSlug, 'Task');
         return;
     }
 
@@ -1005,12 +1005,12 @@ function checkAssignmentAndStart(taskSlug, assignedToId, assignedEmployeeIds) {
 // Check assignment before showing scale selection
 function checkAssignmentAndShowScale(taskSlug, assignedToId, assignedEmployeeIds, recipeName) {
     if (!assignedToId && !assignedEmployeeIds) {
-        showAssignModal(taskId, recipeName);
+        showAssignModal(taskSlug, recipeName);
         return;
     }
 
     // Task has assignments, proceed with scale selection
-    showScaleSelection(taskId, recipeName);
+    showScaleSelection(taskSlug, recipeName);
 }
 
 // Made Amount Input Modal

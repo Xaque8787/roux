@@ -372,10 +372,10 @@ async def create_manual_task(
     inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
     if not inventory_day or inventory_day.finalized:
         raise HTTPException(status_code=400, detail="Cannot add tasks to finalized day")
-    
+
     # Create a single task with multiple employees assigned
     task = Task(
-        day_id=day_id,
+        day_id=inventory_day.id,
         assigned_to_id=assigned_to_ids[0] if assigned_to_ids else None,  # Primary assignee
         inventory_item_id=inventory_item_id if inventory_item_id else None,
         batch_id=batch_id if batch_id else None,  # Direct batch assignment or from inventory item
