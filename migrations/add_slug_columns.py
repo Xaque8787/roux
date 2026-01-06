@@ -33,9 +33,23 @@ def slugify(text):
     return text or 'item'
 
 
+def table_exists(conn, table_name):
+    """Check if a table exists in the database"""
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,)
+    )
+    return cursor.fetchone() is not None
+
+
 def generate_slugs_for_table(conn, table_name, name_column='name', join_clause=None):
     """Generate unique slugs for all rows in a table"""
     print(f"  - Processing {table_name}...")
+
+    # Check if table exists
+    if not table_exists(conn, table_name):
+        print(f"    Skipped (table doesn't exist)")
+        return
 
     # Fetch all records
     if join_clause:
@@ -75,7 +89,13 @@ def upgrade(conn):
     print("\n1. Adding slug columns to tables...")
 
     tables = ['ingredients', 'recipes', 'batches', 'dishes', 'employees']
+    tables_processed = []
+
     for table in tables:
+        if not table_exists(conn, table):
+            print(f"  - Skipped {table} (table doesn't exist)")
+            continue
+        tables_processed.append(table)
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN slug TEXT")
             print(f"  - Added slug column to {table}")
@@ -113,10 +133,14 @@ def upgrade(conn):
     # Step 3: Add unique indexes
     print("\n3. Adding unique indexes...")
 
+    indexes_created = 0
     for table in tables:
+        if not table_exists(conn, table):
+            continue
         try:
             conn.execute(f"CREATE UNIQUE INDEX idx_{table}_slug ON {table}(slug)")
             print(f"  - Added unique index to {table}.slug")
+            indexes_created += 1
         except Exception as e:
             if "already exists" not in str(e).lower():
                 print(f"  - Warning: {e}")
@@ -124,9 +148,9 @@ def upgrade(conn):
     conn.commit()
 
     print("\n✅ Slug columns migration completed successfully!")
-    print(f"   - Added slug columns to 5 tables")
+    print(f"   - Added slug columns to {len(tables_processed)} table(s)")
     print(f"   - Populated slugs for all existing records")
-    print(f"   - Created unique indexes for slug lookups")
+    print(f"   - Created {indexes_created} unique index(es) for slug lookups")
 
 
 if __name__ == '__main__':
