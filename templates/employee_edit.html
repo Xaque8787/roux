@@ -6,7 +6,7 @@
 <div class="row">
     <div class="col-12">
         <h1><i class="fas fa-user-edit"></i> Edit Employee: {{ employee.full_name }}</h1>
-        <a href="/employees/{{ employee.id }}" class="btn btn-secondary mb-3">
+        <a href="/employees/{{ employee.slug }}" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Employee
         </a>
     </div>
@@ -19,7 +19,7 @@
                 <h5><i class="fas fa-edit"></i> Employee Information</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/employees/{{ employee.id }}/edit">
+                <form method="post" action="/employees/{{ employee.slug }}/edit">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -113,9 +113,9 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="d-flex justify-content-between">
-                        <a href="/employees/{{ employee.id }}" class="btn btn-secondary">Cancel</a>
+                        <a href="/employees/{{ employee.slug }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Save Changes
                         </button>
@@ -129,7 +129,7 @@
 <script>
 // Handle work schedule checkboxes
 document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form[action="/employees/{{ employee.id }}/edit"]');
+    const form = document.querySelector('form[action="/employees/{{ employee.slug }}/edit"]');
     if (form) {
         form.addEventListener('submit', function(e) {
             const checkboxes = form.querySelectorAll('input[name="work_schedule"]:checked');

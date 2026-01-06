@@ -400,7 +400,7 @@
                                 <td><small>{{ task.total_time_minutes }} min</small></td>
                                 <td>
                                     {% if task.batch %}
-                                        <small><a href="/batches/{{ task.batch.id }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a></small>
+                                        <small><a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a></small>
                                     {% elif task.janitorial_task %}
                                         <small class="text-warning">Janitorial Task</small>
                                     {% elif task.inventory_item_id and not task.inventory_item %}

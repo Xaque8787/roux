@@ -73,11 +73,11 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <a href="/employees/{{ employee.id }}/edit" class="btn btn-warning">
+                    <a href="/employees/{{ employee.slug }}/edit" class="btn btn-warning">
                         <i class="fas fa-edit"></i> Edit Employee
                     </a>
                     {% if employee.id != current_user.id %}
-                    <a href="/employees/{{ employee.id }}/delete" class="btn btn-danger" 
+                    <a href="/employees/{{ employee.slug }}/delete" class="btn btn-danger"
                        onclick="return confirm('Are you sure you want to deactivate this employee?')">
                         <i class="fas fa-user-slash"></i> Deactivate Employee
                     </a>
