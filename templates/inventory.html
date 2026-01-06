@@ -57,12 +57,12 @@
                 <p>Current inventory day: <strong>{{ current_day.date }}</strong></p>
                 {% if current_day.finalized %}
                 <p><span class="badge bg-success">Finalized</span></p>
-                <a href="/inventory/reports/{{ current_day.id }}" class="btn btn-info btn-sm">
+                <a href="/inventory/reports/{{ current_day.date }}" class="btn btn-info btn-sm">
                     <i class="fas fa-chart-bar"></i> View Report
                 </a>
                 {% else %}
                 <p><span class="badge bg-warning">In Progress</span></p>
-                <a href="/inventory/day/{{ current_day.id }}" class="btn btn-primary btn-sm">
+                <a href="/inventory/day/{{ current_day.date }}" class="btn btn-primary btn-sm">
                     <i class="fas fa-edit"></i> Manage Today's Inventory
                 </a>
                 {% endif %}

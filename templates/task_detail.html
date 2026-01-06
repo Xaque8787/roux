@@ -6,7 +6,7 @@
 <div class="row">
     <div class="col-12">
         <h1><i class="fas fa-tasks"></i> Task Details</h1>
-        <a href="/inventory/day/{{ inventory_day.id }}" class="btn btn-secondary mb-3">
+        <a href="/inventory/day/{{ inventory_day.date }}" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Inventory Day
         </a>
     </div>
@@ -57,7 +57,7 @@
                                 <span class="badge bg-primary">In Progress</span>
                             {% elif task.status == "paused" %}
                                 {% if task.requires_made_amount %}
-                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput('{{ task.slug }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                     <i class="fas fa-check"></i> Finish & Enter Amount
                                 </button>
                                 {% else %}
@@ -245,7 +245,7 @@
             </div>
             <div class="card-body">
                 {% if not inventory_day.finalized %}
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/notes">
+                <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/notes">
                     <div class="mb-3">
                         <textarea class="form-control" name="notes" rows="4" placeholder="Add notes about this task...">{{ task.notes or '' }}</textarea>
                     </div>
@@ -271,24 +271,24 @@
                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
                 <div class="d-grid gap-2">
                     {% if task.status == "not_started" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/start">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/start">
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-play"></i> Start Task
                         </button>
                     </form>
                     {% elif task.status == "in_progress" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/pause">
                         <button type="submit" class="btn btn-warning w-100">
                             <i class="fas fa-pause"></i> Pause Task
                         </button>
                     </form>
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/finish">
                         <button type="submit" class="btn btn-success w-100">
                             <i class="fas fa-check"></i> Finish Task
                         </button>
                     </form>
                     {% elif task.status == "paused" %}
-                    <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume">
+                    <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/resume">
                         <button type="submit" class="btn btn-info w-100">
                             <i class="fas fa-play"></i> Resume Task
                         </button>
@@ -298,10 +298,10 @@
                         <i class="fas fa-check-circle"></i> Task Completed
                     </div>
                     {% if current_user.role in ["admin", "manager"] %}
-                    <button type="button" class="btn btn-warning w-100 mt-2" onclick="showEditTimeModal({{ task.id }})">
+                    <button type="button" class="btn btn-warning w-100 mt-2" onclick="showEditTimeModal('{{ task.slug }}')">
                         <i class="fas fa-clock"></i> Edit Time
                     </button>
-                    <button type="button" class="btn btn-info w-100 mt-2" onclick="showEditEmployeesModal({{ task.id }})">
+                    <button type="button" class="btn btn-info w-100 mt-2" onclick="showEditEmployeesModal('{{ task.slug }}')">
                         <i class="fas fa-users"></i> Edit Assigned Employees
                     </button>
                     {% endif %}
@@ -370,8 +370,8 @@
 
 <script>
 // Scale Selection Modal (same as inventory_day.html)
-function showScaleSelection(taskId, recipeName) {
-    fetch(`/api/tasks/${taskId}/scale_options`)
+function showScaleSelection(taskSlug, recipeName) {
+    fetch(`/api/tasks/${taskSlug}/scale_options`)
         .then(response => response.json())
         .then(scales => {
             const modal = document.createElement('div');
@@ -396,7 +396,7 @@ function showScaleSelection(taskId, recipeName) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale(${taskId})">Start Task</button>
+                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale('${taskSlug}')">Start Task</button>
                         </div>
                     </div>
                 </div>
@@ -416,7 +416,7 @@ function showScaleSelection(taskId, recipeName) {
         });
 }
 
-function startTaskWithScale(taskId) {
+function startTaskWithScale(taskSlug) {
     const scaleSelect = document.getElementById('scaleSelect');
     const selectedScale = scaleSelect.value;
     
@@ -427,7 +427,7 @@ function startTaskWithScale(taskId) {
     
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${taskSlug}/start_with_scale`;
     form.style.display = 'none';
     
     const scaleInput = document.createElement('input');
@@ -440,8 +440,8 @@ function startTaskWithScale(taskId) {
 }
 
 // Made Amount Input Modal (same as inventory_day.html)
-function showMadeAmountInput(taskId, recipeName) {
-    fetch(`/api/tasks/${taskId}/finish_requirements`)
+function showMadeAmountInput(taskSlug, recipeName) {
+    fetch(`/api/tasks/${taskSlug}/finish_requirements`)
         .then(response => response.json())
         .then(data => {
             const modal = document.createElement('div');
@@ -484,7 +484,7 @@ function showMadeAmountInput(taskId, recipeName) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount(${taskId})">Finish Task</button>
+                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount('${taskSlug}')">Finish Task</button>
                         </div>
                     </div>
                 </div>
@@ -504,7 +504,7 @@ function showMadeAmountInput(taskId, recipeName) {
         });
 }
 
-function finishTaskWithAmount(taskId) {
+function finishTaskWithAmount(taskSlug) {
     const madeAmount = document.getElementById('madeAmount').value;
     const madeUnitInput = document.getElementById('madeUnit');
 
@@ -517,7 +517,7 @@ function finishTaskWithAmount(taskId) {
 
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${taskSlug}/finish_with_amount`;
     form.style.display = 'none';
 
     const amountInput = document.createElement('input');
@@ -543,8 +543,8 @@ function formatDateTimeLocal(date) {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-function showEditTimeModal(taskId) {
-    fetch(`/api/tasks/${taskId}`)
+function showEditTimeModal(taskSlug) {
+    fetch(`/api/tasks/${taskSlug}`)
         .then(response => response.json())
         .then(task => {
             const startedAt = new Date(task.started_at);
@@ -587,7 +587,7 @@ function showEditTimeModal(taskId) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" onclick="saveEditedTime(${taskId})">Save Changes</button>
+                            <button type="button" class="btn btn-primary" onclick="saveEditedTime('${taskSlug}')">Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -627,7 +627,7 @@ function setupTimeSync(startedAt) {
     });
 }
 
-function saveEditedTime(taskId) {
+function saveEditedTime(taskSlug) {
     const totalMinutes = document.getElementById('editTotalMinutes').value;
     const finishedAt = document.getElementById('editFinishedAt').value;
 
@@ -636,7 +636,7 @@ function saveEditedTime(taskId) {
         return;
     }
 
-    fetch(`/api/tasks/${taskId}/edit_time`, {
+    fetch(`/api/tasks/${taskSlug}/edit_time`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
@@ -661,8 +661,8 @@ function saveEditedTime(taskId) {
     });
 }
 
-function showEditEmployeesModal(taskId) {
-    fetch(`/api/tasks/${taskId}`)
+function showEditEmployeesModal(taskSlug) {
+    fetch(`/api/tasks/${taskSlug}`)
         .then(response => response.json())
         .then(task => {
             const employees = {{ employees_data | tojson }};
@@ -704,7 +704,7 @@ function showEditEmployeesModal(taskId) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" onclick="saveEditedEmployees(${taskId})">Save Changes</button>
+                            <button type="button" class="btn btn-primary" onclick="saveEditedEmployees('${taskSlug}')">Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -724,7 +724,7 @@ function showEditEmployeesModal(taskId) {
         });
 }
 
-function saveEditedEmployees(taskId) {
+function saveEditedEmployees(taskSlug) {
     const checkboxes = document.querySelectorAll('#employeeCheckboxes input[type="checkbox"]:checked');
     const employeeIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
@@ -733,7 +733,7 @@ function saveEditedEmployees(taskId) {
         return;
     }
 
-    fetch(`/api/tasks/${taskId}/edit_assigned_employees`, {
+    fetch(`/api/tasks/${taskSlug}/edit_assigned_employees`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'

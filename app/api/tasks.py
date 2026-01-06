@@ -16,9 +16,9 @@ class EditTimeRequest(BaseModel):
 class EditAssignedEmployeesRequest(BaseModel):
     employee_ids: list[int]
 
-@router.get("/{task_id}/scale_options")
-async def get_task_scale_options(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).options(joinedload(Task.batch)).filter(Task.id == task_id).first()
+@router.get("/{task_slug}/scale_options")
+async def get_task_scale_options(task_slug: str, db: Session = Depends(get_db)):
+    task = db.query(Task).options(joinedload(Task.batch)).filter(Task.slug == task_slug).first()
     if not task or not task.batch:
         raise HTTPException(status_code=404, detail="Task or batch not found")
     
@@ -41,8 +41,8 @@ async def get_task_scale_options(task_id: int, db: Session = Depends(get_db)):
     
     return result
 
-@router.get("/{task_id}/finish_requirements")
-async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_db)):
+@router.get("/{task_slug}/finish_requirements")
+async def get_task_finish_requirements(task_slug: str, db: Session = Depends(get_db)):
     task = db.query(Task).options(
         joinedload(Task.batch),
         joinedload(Task.inventory_item)
@@ -109,9 +109,9 @@ async def get_task_finish_requirements(task_id: int, db: Session = Depends(get_d
 
     return result
 
-@router.get("/{task_id}")
-async def get_task_details(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
+@router.get("/{task_slug}")
+async def get_task_details(task_slug: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.slug == task_slug).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -125,7 +125,7 @@ async def get_task_details(task_id: int, db: Session = Depends(get_db)):
         "status": task.status
     }
 
-@router.put("/{task_id}/edit_time")
+@router.put("/{task_slug}/edit_time")
 async def edit_task_time(
     task_id: int,
     request: EditTimeRequest,
@@ -137,7 +137,7 @@ async def edit_task_time(
     if current_user.role not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only admins and managers can edit task times")
 
-    task = db.query(Task).filter(Task.id == task_id).first()
+    task = db.query(Task).filter(Task.slug == task_slug).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -213,7 +213,7 @@ async def edit_task_time(
         }
     }
 
-@router.put("/{task_id}/edit_assigned_employees")
+@router.put("/{task_slug}/edit_assigned_employees")
 async def edit_assigned_employees(
     task_id: int,
     request: EditAssignedEmployeesRequest,
@@ -223,7 +223,7 @@ async def edit_assigned_employees(
     if current_user.role not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only admins and managers can edit task assignments")
 
-    task = db.query(Task).filter(Task.id == task_id).first()
+    task = db.query(Task).filter(Task.slug == task_slug).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
