@@ -7,6 +7,7 @@ from ..dependencies import require_admin, get_current_user, require_manager_or_a
 from ..models import Ingredient, Category, Vendor, VendorUnit
 from ..utils.helpers import get_today_date
 from ..utils.template_helpers import setup_template_filters
+from ..utils.slugify import generate_unique_slug
 
 router = APIRouter(prefix="/ingredients", tags=["ingredients"])
 templates = setup_template_filters(Jinja2Templates(directory="templates"))
@@ -69,9 +70,12 @@ async def create_ingredient(
     
     # Use the appropriate cost field based on pricing type
     final_purchase_cost = purchase_total_cost_item if use_item_count_pricing else purchase_total_cost
-    
+
+    slug = generate_unique_slug(db, Ingredient, name)
+
     ingredient = Ingredient(
         name=name,
+        slug=slug,
         usage_type=usage_type,
         category_id=category_id if category_id else None,
         vendor_id=vendor_id if vendor_id else None,
@@ -111,12 +115,12 @@ async def create_ingredient(
     
     db.add(ingredient)
     db.commit()
-    
-    return RedirectResponse(url="/ingredients", status_code=302)
 
-@router.get("/{ingredient_id}", response_class=HTMLResponse)
-async def ingredient_detail(ingredient_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    return RedirectResponse(url=f"/ingredients/{slug}", status_code=302)
+
+@router.get("/{slug}", response_class=HTMLResponse)
+async def ingredient_detail(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    ingredient = db.query(Ingredient).filter(Ingredient.slug == slug).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     
@@ -126,9 +130,9 @@ async def ingredient_detail(ingredient_id: int, request: Request, db: Session = 
         "ingredient": ingredient
     })
 
-@router.get("/{ingredient_id}/edit", response_class=HTMLResponse)
-async def ingredient_edit_page(ingredient_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+@router.get("/{slug}/edit", response_class=HTMLResponse)
+async def ingredient_edit_page(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    ingredient = db.query(Ingredient).filter(Ingredient.slug == slug).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     
@@ -145,9 +149,9 @@ async def ingredient_edit_page(ingredient_id: int, request: Request, db: Session
         "vendor_units": vendor_units
     })
 
-@router.post("/{ingredient_id}/edit")
+@router.post("/{slug}/edit")
 async def update_ingredient(
-    ingredient_id: int,
+    slug: str,
     request: Request,
     name: str = Form(...),
     usage_type: str = Form(...),
@@ -173,10 +177,13 @@ async def update_ingredient(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    ingredient = db.query(Ingredient).filter(Ingredient.slug == slug).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
-    
+
+    if ingredient.name != name:
+        ingredient.slug = generate_unique_slug(db, Ingredient, name, exclude_id=ingredient.id)
+
     # Validate required fields based on pricing type
     if not use_item_count_pricing:
         if net_weight_volume_item is None:
@@ -233,12 +240,12 @@ async def update_ingredient(
         ingredient.baking_weight_unit = None
     
     db.commit()
-    
-    return RedirectResponse(url=f"/ingredients/{ingredient_id}", status_code=302)
 
-@router.get("/{ingredient_id}/delete")
-async def delete_ingredient(ingredient_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    return RedirectResponse(url=f"/ingredients/{ingredient.slug}", status_code=302)
+
+@router.get("/{slug}/delete")
+async def delete_ingredient(slug: str, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    ingredient = db.query(Ingredient).filter(Ingredient.slug == slug).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     

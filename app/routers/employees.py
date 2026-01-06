@@ -8,6 +8,7 @@ from ..models import User
 from ..auth import hash_password
 
 from ..utils.template_helpers import setup_template_filters
+from ..utils.slugify import generate_unique_slug
 router = APIRouter(prefix="/employees", tags=["employees"])
 templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
@@ -45,8 +46,11 @@ async def create_employee(
         })
     
     hashed_password = hash_password(password)
+    slug = generate_unique_slug(db, User, username)
+
     employee = User(
         username=username,
+        slug=slug,
         hashed_password=hashed_password,
         full_name=full_name,
         email=email if email else None,
@@ -59,12 +63,12 @@ async def create_employee(
     
     db.add(employee)
     db.commit()
-    
-    return RedirectResponse(url="/employees", status_code=302)
 
-@router.get("/{employee_id}", response_class=HTMLResponse)
-async def employee_detail(employee_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    employee = db.query(User).filter(User.id == employee_id).first()
+    return RedirectResponse(url=f"/employees/{slug}", status_code=302)
+
+@router.get("/{slug}", response_class=HTMLResponse)
+async def employee_detail(slug: str, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    employee = db.query(User).filter(User.slug == slug).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
@@ -74,9 +78,9 @@ async def employee_detail(employee_id: int, request: Request, db: Session = Depe
         "employee": employee
     })
 
-@router.get("/{employee_id}/edit", response_class=HTMLResponse)
-async def employee_edit_page(employee_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    employee = db.query(User).filter(User.id == employee_id).first()
+@router.get("/{slug}/edit", response_class=HTMLResponse)
+async def employee_edit_page(slug: str, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    employee = db.query(User).filter(User.slug == slug).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
@@ -86,9 +90,9 @@ async def employee_edit_page(employee_id: int, request: Request, db: Session = D
         "employee": employee
     })
 
-@router.post("/{employee_id}/edit")
+@router.post("/{slug}/edit")
 async def update_employee(
-    employee_id: int,
+    slug: str,
     request: Request,
     full_name: str = Form(...),
     username: str = Form(...),
@@ -101,12 +105,15 @@ async def update_employee(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    employee = db.query(User).filter(User.id == employee_id).first()
+    employee = db.query(User).filter(User.slug == slug).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
+
+    if employee.username != username:
+        employee.slug = generate_unique_slug(db, User, username, exclude_id=employee.id)
+
     # Check if username already exists (excluding current employee)
-    existing_user = db.query(User).filter(User.username == username, User.id != employee_id).first()
+    existing_user = db.query(User).filter(User.username == username, User.id != employee.id).first()
     if existing_user:
         return templates.TemplateResponse("employee_edit.html", {
             "request": request,
@@ -128,12 +135,12 @@ async def update_employee(
         employee.hashed_password = hash_password(password)
     
     db.commit()
-    
-    return RedirectResponse(url=f"/employees/{employee_id}", status_code=302)
 
-@router.get("/{employee_id}/delete")
-async def delete_employee(employee_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    employee = db.query(User).filter(User.id == employee_id).first()
+    return RedirectResponse(url=f"/employees/{employee.slug}", status_code=302)
+
+@router.get("/{slug}/delete")
+async def delete_employee(slug: str, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    employee = db.query(User).filter(User.slug == slug).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
