@@ -6,7 +6,7 @@ with slugified versions of their names. Slugs are unique within each entity type
 handle duplicate names by appending a number.
 
 Changes:
-- Adds 'slug' column to: ingredients, recipes, batches, dishes, employees
+- Adds 'slug' column to: ingredients, recipes, batches, dishes, users
 - Slugs are NOT NULL and UNIQUE per table
 - Populates existing records with slugified names
 - Handles duplicate names by auto-incrementing (e.g., 'flour', 'flour-2', 'flour-3')
@@ -88,7 +88,7 @@ def upgrade(conn):
     # Step 1: Add slug columns
     print("\n1. Adding slug columns to tables...")
 
-    tables = ['ingredients', 'recipes', 'batches', 'dishes', 'employees']
+    tables = ['ingredients', 'recipes', 'batches', 'dishes', 'users']
     tables_processed = []
 
     for table in tables:
@@ -125,8 +125,8 @@ def upgrade(conn):
     # Dishes - use name
     generate_slugs_for_table(conn, 'dishes', 'name')
 
-    # Employees - use username
-    generate_slugs_for_table(conn, 'employees', 'username')
+    # Users - use username
+    generate_slugs_for_table(conn, 'users', 'username')
 
     conn.commit()
 
