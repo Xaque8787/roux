@@ -544,7 +544,7 @@ function formatDateTimeLocal(date) {
 }
 
 function showEditTimeModal(taskSlug) {
-    fetch(`/api/tasks/${taskSlug}`)
+    fetch(`/api/tasks/${taskSlug}?day_id={{ inventory_day.id }}`)
         .then(response => response.json())
         .then(task => {
             const startedAt = new Date(task.started_at);
@@ -636,7 +636,7 @@ function saveEditedTime(taskSlug) {
         return;
     }
 
-    fetch(`/api/tasks/${taskSlug}/edit_time`, {
+    fetch(`/api/tasks/${taskSlug}/edit_time?day_id={{ inventory_day.id }}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
@@ -662,7 +662,7 @@ function saveEditedTime(taskSlug) {
 }
 
 function showEditEmployeesModal(taskSlug) {
-    fetch(`/api/tasks/${taskSlug}`)
+    fetch(`/api/tasks/${taskSlug}?day_id={{ inventory_day.id }}`)
         .then(response => response.json())
         .then(task => {
             const employees = {{ employees_data | tojson }};
@@ -733,7 +733,7 @@ function saveEditedEmployees(taskSlug) {
         return;
     }
 
-    fetch(`/api/tasks/${taskSlug}/edit_assigned_employees`, {
+    fetch(`/api/tasks/${taskSlug}/edit_assigned_employees?day_id={{ inventory_day.id }}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'

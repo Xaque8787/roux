@@ -918,7 +918,7 @@ function submitAssignment() {
 
 // Scale Selection Modal
 function showScaleSelection(taskSlug, recipeName) {
-    fetch(`/api/tasks/${taskSlug}/scale_options`)
+    fetch(`/api/tasks/${taskSlug}/scale_options?day_id={{ inventory_day.id }}`)
         .then(response => response.json())
         .then(scales => {
             const modal = document.createElement('div');
@@ -1015,7 +1015,7 @@ function checkAssignmentAndShowScale(taskSlug, assignedToId, assignedEmployeeIds
 
 // Made Amount Input Modal
 function showMadeAmountInput(taskSlug, recipeName) {
-    fetch(`/api/tasks/${taskSlug}/finish_requirements`)
+    fetch(`/api/tasks/${taskSlug}/finish_requirements?day_id={{ inventory_day.id }}`)
         .then(response => response.json())
         .then(data => {
             const modal = document.createElement('div');

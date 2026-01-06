@@ -17,9 +17,12 @@ class EditAssignedEmployeesRequest(BaseModel):
     employee_ids: list[int]
 
 @router.get("/{task_slug}/scale_options")
-async def get_task_scale_options(task_slug: str, db: Session = Depends(get_db)):
+async def get_task_scale_options(task_slug: str, day_id: int = None, db: Session = Depends(get_db)):
     # Get all tasks and find by slug (slug is a property, not a column)
-    tasks = db.query(Task).options(joinedload(Task.batch)).all()
+    query = db.query(Task).options(joinedload(Task.batch))
+    if day_id:
+        query = query.filter(Task.day_id == day_id)
+    tasks = query.all()
     task = next((t for t in tasks if t.slug == task_slug), None)
     if not task or not task.batch:
         raise HTTPException(status_code=404, detail="Task or batch not found")
@@ -44,14 +47,17 @@ async def get_task_scale_options(task_slug: str, db: Session = Depends(get_db)):
     return result
 
 @router.get("/{task_slug}/finish_requirements")
-async def get_task_finish_requirements(task_slug: str, db: Session = Depends(get_db)):
+async def get_task_finish_requirements(task_slug: str, day_id: int = None, db: Session = Depends(get_db)):
     # Get all tasks and find by slug (slug is a property, not a column)
-    tasks = db.query(Task).options(
+    query = db.query(Task).options(
         joinedload(Task.batch),
         joinedload(Task.inventory_item)
-    ).all()
+    )
+    if day_id:
+        query = query.filter(Task.day_id == day_id)
+    tasks = query.all()
     task = next((t for t in tasks if t.slug == task_slug), None)
-    
+
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -114,8 +120,11 @@ async def get_task_finish_requirements(task_slug: str, db: Session = Depends(get
     return result
 
 @router.get("/{task_slug}")
-async def get_task_details(task_slug: str, db: Session = Depends(get_db)):
-    tasks = db.query(Task).all()
+async def get_task_details(task_slug: str, day_id: int = None, db: Session = Depends(get_db)):
+    query = db.query(Task)
+    if day_id:
+        query = query.filter(Task.day_id == day_id)
+    tasks = query.all()
     task = next((t for t in tasks if t.slug == task_slug), None)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -134,6 +143,7 @@ async def get_task_details(task_slug: str, db: Session = Depends(get_db)):
 async def edit_task_time(
     task_slug: str,
     request: EditTimeRequest,
+    day_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -142,7 +152,10 @@ async def edit_task_time(
     if current_user.role not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only admins and managers can edit task times")
 
-    tasks = db.query(Task).all()
+    query = db.query(Task)
+    if day_id:
+        query = query.filter(Task.day_id == day_id)
+    tasks = query.all()
     task = next((t for t in tasks if t.slug == task_slug), None)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -223,13 +236,17 @@ async def edit_task_time(
 async def edit_assigned_employees(
     task_slug: str,
     request: EditAssignedEmployeesRequest,
+    day_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only admins and managers can edit task assignments")
 
-    tasks = db.query(Task).all()
+    query = db.query(Task)
+    if day_id:
+        query = query.filter(Task.day_id == day_id)
+    tasks = query.all()
     task = next((t for t in tasks if t.slug == task_slug), None)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
