@@ -127,3 +127,35 @@ def upgrade(conn):
     print(f"   - Added slug columns to 5 tables")
     print(f"   - Populated slugs for all existing records")
     print(f"   - Created unique indexes for slug lookups")
+
+
+if __name__ == '__main__':
+    import sys
+    import sqlite3
+    from pathlib import Path
+
+    # Get database path
+    project_root = Path(__file__).parent.parent
+    sys.path.insert(0, str(project_root))
+
+    from app.database import get_database_url
+
+    db_url = get_database_url()
+    if db_url.startswith('sqlite:///'):
+        db_path = db_url.replace('sqlite:///', '')
+
+        print(f"Running migration on: {db_path}")
+        conn = sqlite3.connect(db_path)
+
+        try:
+            upgrade(conn)
+        except Exception as e:
+            print(f"\n❌ Migration failed: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        finally:
+            conn.close()
+    else:
+        print("❌ Could not determine database path")
+        sys.exit(1)
