@@ -423,7 +423,11 @@ async def assign_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -453,6 +457,10 @@ async def assign_multiple_employees_to_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
     # Get form data to handle checkbox values
     form_data = await request.form()
     assigned_to_ids = []
@@ -465,7 +473,7 @@ async def assign_multiple_employees_to_task(
             except ValueError:
                 continue
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -569,7 +577,11 @@ async def start_task(
 ):
     from ..models import TaskSession
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -615,7 +627,11 @@ async def start_task_with_scale(
 ):
     from ..models import TaskSession
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -676,7 +692,11 @@ async def pause_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -710,7 +730,11 @@ async def resume_task(
 ):
     from ..models import TaskSession
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -759,7 +783,11 @@ async def finish_task(
 ):
     from ..models import TaskSession
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -829,7 +857,11 @@ async def finish_task_with_amount(
 ):
     from ..models import TaskSession
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -897,7 +929,11 @@ async def reopen_task(
 ):
     from ..models import TaskSession
 
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -939,7 +975,11 @@ async def update_task_notes(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    task = get_task_by_slug(db, day_id, task_slug)
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 

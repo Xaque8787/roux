@@ -941,12 +941,26 @@ class Task(Base):
     
     @property
     def slug(self):
-        """Generate slug from task description and ID"""
+        """Generate slug from task description and related entities"""
         from app.utils.slugify import slugify
+
+        # Start with the description if available
         if self.description:
             base_slug = slugify(self.description[:50])
-            return f"{base_slug}-{self.id}"
-        return f"task-{self.id}"
+        elif self.batch and self.batch.recipe:
+            base_slug = slugify(self.batch.recipe.name)
+        elif self.inventory_item:
+            base_slug = slugify(self.inventory_item.name)
+        elif self.janitorial_task:
+            base_slug = slugify(self.janitorial_task.title)
+        else:
+            base_slug = f"task-{self.id}"
+
+        # Add scale suffix for batch tasks if not full scale
+        if self.batch and self.selected_scale and self.selected_scale != 'full':
+            base_slug = f"{base_slug}-{self.selected_scale}"
+
+        return base_slug
 
     @property
     def requires_made_amount(self):
