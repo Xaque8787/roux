@@ -6,6 +6,7 @@ from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import Batch, Recipe, RecipeIngredient, Category
 from ..utils.template_helpers import setup_template_filters
+from ..utils.slugify import generate_unique_slug
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 templates = setup_template_filters(Jinja2Templates(directory="templates"))
@@ -47,7 +48,14 @@ async def create_batch(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    slug = generate_unique_slug(db, Batch, recipe.name)
+
     batch = Batch(
+        slug=slug,
         recipe_id=recipe_id,
         category_id=category_id if category_id else None,
         variable_yield=variable_yield,
@@ -66,15 +74,15 @@ async def create_batch(
         scale_eighth=scale_eighth if can_be_scaled else False,
         scale_sixteenth=scale_sixteenth if can_be_scaled else False
     )
-    
+
     db.add(batch)
     db.commit()
-    
-    return RedirectResponse(url="/batches", status_code=302)
 
-@router.get("/{batch_id}", response_class=HTMLResponse)
-async def batch_detail(batch_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    return RedirectResponse(url=f"/batches/{slug}", status_code=302)
+
+@router.get("/{slug}", response_class=HTMLResponse)
+async def batch_detail(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    batch = db.query(Batch).filter(Batch.slug == slug).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 
@@ -105,9 +113,9 @@ async def batch_detail(batch_id: int, request: Request, db: Session = Depends(ge
         "estimated_cost_per_yield_unit": estimated_cost_per_yield_unit
     })
 
-@router.get("/{batch_id}/edit", response_class=HTMLResponse)
-async def batch_edit_page(batch_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_manager_or_admin)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+@router.get("/{slug}/edit", response_class=HTMLResponse)
+async def batch_edit_page(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(require_manager_or_admin)):
+    batch = db.query(Batch).filter(Batch.slug == slug).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
@@ -122,9 +130,9 @@ async def batch_edit_page(batch_id: int, request: Request, db: Session = Depends
         "categories": categories
     })
 
-@router.post("/{batch_id}/edit")
+@router.post("/{slug}/edit")
 async def update_batch(
-    batch_id: int,
+    slug: str,
     request: Request,
     recipe_id: int = Form(...),
     category_id: int = Form(None),
@@ -146,9 +154,15 @@ async def update_batch(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    batch = db.query(Batch).filter(Batch.slug == slug).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+
+    if batch.recipe_id != recipe_id:
+        recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+        if not recipe:
+            raise HTTPException(status_code=404, detail="Recipe not found")
+        batch.slug = generate_unique_slug(db, Batch, recipe.name, exclude_id=batch.id)
 
     batch.recipe_id = recipe_id
     batch.category_id = category_id if category_id else None
@@ -169,12 +183,12 @@ async def update_batch(
     batch.scale_sixteenth = scale_sixteenth if can_be_scaled else False
     
     db.commit()
-    
-    return RedirectResponse(url=f"/batches/{batch_id}", status_code=302)
 
-@router.get("/{batch_id}/delete")
-async def delete_batch(batch_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    return RedirectResponse(url=f"/batches/{batch.slug}", status_code=302)
+
+@router.get("/{slug}/delete")
+async def delete_batch(slug: str, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    batch = db.query(Batch).filter(Batch.slug == slug).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     

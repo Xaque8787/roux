@@ -211,16 +211,16 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="/batches/{{ batch.id }}" class="btn btn-sm btn-info">
+                                    <a href="/batches/{{ batch.slug }}" class="btn btn-sm btn-info">
                                         <i class="fas fa-eye"></i> View
                                     </a>
                                     {% if current_user.role in ["admin", "manager"] %}
-                                    <a href="/batches/{{ batch.id }}/edit" class="btn btn-sm btn-warning">
+                                    <a href="/batches/{{ batch.slug }}/edit" class="btn btn-sm btn-warning">
                                         <i class="fas fa-edit"></i> Edit
                                     </a>
                                     {% endif %}
                                     {% if current_user.role == "admin" %}
-                                    <a href="/batches/{{ batch.id }}/delete" class="btn btn-sm btn-danger" 
+                                    <a href="/batches/{{ batch.slug }}/delete" class="btn btn-sm btn-danger"
                                        onclick="return confirm('Are you sure?')">
                                         <i class="fas fa-trash"></i>
                                     </a>
