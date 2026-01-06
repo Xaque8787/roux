@@ -6,7 +6,7 @@
 <div class="row">
     <div class="col-12">
         <h1><i class="fas fa-edit"></i> Edit Ingredient: {{ ingredient.name }}</h1>
-        <a href="/ingredients/{{ ingredient.id }}" class="btn btn-secondary mb-3">
+        <a href="/ingredients/{{ ingredient.slug }}" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Ingredient
         </a>
     </div>
@@ -19,7 +19,7 @@
                 <h5><i class="fas fa-edit"></i> Ingredient Information</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/ingredients/{{ ingredient.id }}/edit" id="ingredientEditForm">
+                <form method="post" action="/ingredients/{{ ingredient.slug }}/edit" id="ingredientEditForm">
                     <!-- Base Information -->
                     <div class="mb-3">
                         <label for="name" class="form-label">Ingredient Name</label>
@@ -305,9 +305,9 @@
                             <small>Current cost per unit calculations will appear here</small>
                         </div>
                     </div>
-                    
+
                     <div class="d-flex justify-content-between mt-4">
-                        <a href="/ingredients/{{ ingredient.id }}" class="btn btn-secondary">Cancel</a>
+                        <a href="/ingredients/{{ ingredient.slug }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Save Changes
                         </button>

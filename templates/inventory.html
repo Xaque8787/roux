@@ -269,10 +269,10 @@
                                </td>
                                 <td>
                                     {% if current_user.role == "admin" %}
-                                    <a href="/inventory/items/{{ item.id }}/edit" class="btn btn-sm btn-warning">
+                                    <a href="/inventory/items/{{ item.slug }}/edit" class="btn btn-sm btn-warning">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <a href="/inventory/items/{{ item.id }}/delete" class="btn btn-sm btn-danger" 
+                                    <a href="/inventory/items/{{ item.slug }}/delete" class="btn btn-sm btn-danger"
                                        onclick="return confirm('Are you sure?')">
                                         <i class="fas fa-trash"></i>
                                     </a>
