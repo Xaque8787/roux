@@ -541,7 +541,6 @@ async def assign_and_start_task(
         now = get_naive_local_time()
         task.started_at = now
         task.is_paused = False
-        task.status = "in_progress"
 
         # Create task session
         task_session = TaskSession(
