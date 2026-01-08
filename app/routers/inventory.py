@@ -529,15 +529,15 @@ async def assign_and_start_task(
     if not assigned_to_ids:
         raise HTTPException(status_code=400, detail="At least one employee must be selected")
 
-    # Check if task has a batch and needs scale selection BEFORE assigning
-    has_batch = task.batch and task.batch.recipe
+    # Check if task needs scale selection (batch with multiple scale options)
+    needs_scale_selection = task.batch and task.batch.can_be_scaled
 
     # Assign employees
     task.assigned_to_id = assigned_to_ids[0]
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
 
-    # For non-batch tasks, start immediately in the same transaction
-    if not has_batch:
+    # Start task immediately if it doesn't need scale selection
+    if not needs_scale_selection:
         now = get_naive_local_time()
         task.started_at = now
         task.is_paused = False
@@ -549,7 +549,7 @@ async def assign_and_start_task(
         )
         db.add(task_session)
 
-    # Commit once - either assignment only (batch tasks) or assignment + start (non-batch)
+    # Commit once - either assignment only (needs scale) or assignment + start (ready to go)
     db.commit()
 
     # Broadcast assignment
@@ -567,7 +567,7 @@ async def assign_and_start_task(
         pass
 
     # If task was started, broadcast that too
-    if not has_batch:
+    if not needs_scale_selection:
         try:
             await broadcast_task_update(inventory_day.id, task.id, "task_started", {
                 "started_at": task.started_at.isoformat(),
@@ -576,8 +576,8 @@ async def assign_and_start_task(
         except Exception as e:
             pass
 
-    # For batch tasks, redirect to day view for scale selection
-    if has_batch:
+    # For tasks needing scale selection, redirect to day view with task highlighted
+    if needs_scale_selection:
         return RedirectResponse(url=f"/inventory/day/{inventory_day.date}#task-{task.slug}", status_code=302)
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)

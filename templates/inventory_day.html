@@ -231,7 +231,7 @@
                         </thead>
                         <tbody>
                             {% for task in tasks %}
-                            <tr>
+                            <tr id="task-{{ task.slug }}">
                                 <td>
                                     {% if task.janitorial_task_id %}
                                         🧹 <small>Janitorial</small>
@@ -650,7 +650,7 @@
                     {% else %}
                         {% for task in tasks %}
                             {% if task.status != 'completed' %}
-                            <div class="card mb-3">
+                            <div class="card mb-3" id="task-{{ task.slug }}">
                                 <div class="card-body">
                                     <div class="d-flex align-items-start">
                                         <div class="me-3">
@@ -1134,5 +1134,50 @@ function finishTaskWithAmount(taskSlug) {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Auto-open scale selection modal if redirected with task hash
+document.addEventListener('DOMContentLoaded', function() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#task-')) {
+        // Extract task slug from hash
+        const taskSlug = hash.substring(6); // Remove '#task-'
+
+        // Scroll to task and highlight it
+        const taskElement = document.getElementById(hash.substring(1));
+        if (taskElement) {
+            taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            taskElement.style.backgroundColor = '#fff3cd';
+            setTimeout(() => {
+                taskElement.style.transition = 'background-color 1s ease';
+                taskElement.style.backgroundColor = '';
+            }, 800);
+        }
+
+        // Fetch task info to get recipe name
+        fetch(`/api/tasks/${taskSlug}/scale_options?day_id={{ inventory_day.id }}`)
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Task not found or no scale options');
+            })
+            .then(data => {
+                // Task has scale options, show the modal
+                // Use a slight delay to ensure page is fully loaded
+                setTimeout(() => {
+                    // Find recipe name from task data or use generic name
+                    const recipeName = 'Batch Recipe';
+                    showScaleSelection(taskSlug, recipeName);
+                    // Clear the hash after opening
+                    history.replaceState(null, null, ' ');
+                }, 500);
+            })
+            .catch(error => {
+                console.log('No scale selection needed for this task:', error);
+                // Clear the hash
+                history.replaceState(null, null, ' ');
+            });
+    }
+});
 </script>
 {% endblock %}
