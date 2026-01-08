@@ -422,7 +422,7 @@
                                             <br><small class="text-muted">{{ day.date.strftime('%A') }}</small>
                                         </div>
                                         <div>
-                                            <a href="/inventory/reports/{{ day.id }}" class="btn btn-sm btn-outline-info">
+                                            <a href="/inventory/reports/{{ day.date }}" class="btn btn-sm btn-outline-info">
                                                 <i class="fas fa-chart-bar"></i> Report
                                             </a>
                                         </div>
@@ -745,7 +745,7 @@ document.getElementById('showAllDaysBtn').addEventListener('click', async functi
                                         <br><small class="text-muted">${day.day_name}</small>
                                     </div>
                                     <div>
-                                        <a href="/inventory/reports/${day.id}" class="btn btn-sm btn-outline-info">
+                                        <a href="/inventory/reports/${day.date}" class="btn btn-sm btn-outline-info">
                                             <i class="fas fa-chart-bar"></i> Report
                                         </a>
                                     </div>
