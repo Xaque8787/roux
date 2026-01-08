@@ -619,6 +619,9 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="submitAssignment()">Assign</button>
+                <button type="button" class="btn btn-success" onclick="submitAssignmentAndStart()">
+                    <i class="fas fa-play"></i> Assign & Start
+                </button>
             </div>
         </div>
     </div>
@@ -912,6 +915,34 @@ function submitAssignment() {
         form.appendChild(input);
     });
     
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function submitAssignmentAndStart() {
+    const selectedEmployees = [];
+    document.querySelectorAll('#assignModal input[type="checkbox"]:checked').forEach(cb => {
+        selectedEmployees.push(cb.value);
+    });
+
+    if (selectedEmployees.length === 0) {
+        alert('Please select at least one employee.');
+        return;
+    }
+
+    // Create form and submit to assign_and_start endpoint
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${currentAssignTaskId}/assign_and_start`;
+    form.style.display = 'none';
+
+    selectedEmployees.forEach(empId => {
+        const input = document.createElement('input');
+        input.name = 'assigned_to_ids';
+        input.value = empId;
+        form.appendChild(input);
+    });
+
     document.body.appendChild(form);
     form.submit();
 }

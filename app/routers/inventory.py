@@ -238,9 +238,7 @@ async def create_inventory_day(
             "date": inventory_date_obj.isoformat(),
             "employees_working": inventory_day.employees_working
         })
-        print(f"✅ Broadcasted day creation for day {inventory_day.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting day creation: {e}")
         # Don't fail the request if broadcasting fails
         pass
 
@@ -308,10 +306,7 @@ async def update_inventory_day(
             "items": updated_items,
             "force_regenerate": force_regenerate
         })
-        print(f"✅ Broadcasted inventory update for day {inventory_day.id}")
-        
     except Exception as e:
-        print(f"❌ Error broadcasting inventory update: {e}")
         pass
     
     db.commit()
@@ -338,10 +333,7 @@ async def update_inventory_day(
             "tasks": tasks_data,
             "force_regenerate": force_regenerate
         })
-        print(f"✅ Broadcasted task generation for day {inventory_day.id}")
-
     except Exception as e:
-        print(f"❌ Error broadcasting task generation: {e}")
         pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
@@ -409,9 +401,8 @@ async def create_manual_task(
             "category": task.category.name if task.category else None,
             "auto_generated": False
         })
-        print(f"✅ Broadcasted manual task creation for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task creation: {e}")
+        pass
     
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
@@ -442,9 +433,7 @@ async def assign_task(
             "assigned_to": assigned_employee.full_name or assigned_employee.username if assigned_employee else None,
             "assigned_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task assignment for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task assignment: {e}")
         pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
@@ -457,11 +446,8 @@ async def assign_multiple_employees_to_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    print(f"🔍 Assigning employees to task - task_slug: {task_slug}, date: {date}")
-
     inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
     if not inventory_day:
-        print(f"❌ Inventory day not found: {date}")
         raise HTTPException(status_code=404, detail="Inventory day not found")
 
     # Get form data to handle checkbox values
@@ -476,21 +462,12 @@ async def assign_multiple_employees_to_task(
             except ValueError:
                 continue
 
-    print(f"📝 Received employee IDs: {assigned_to_ids}")
-
     task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
-        print(f"❌ Task not found: {task_slug} in day {inventory_day.id}")
-        # List all tasks for debugging
-        all_tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
-        print(f"Available tasks: {[(t.id, t.slug, t.description, t.auto_generated) for t in all_tasks]}")
         raise HTTPException(status_code=404, detail="Task not found")
 
     if not assigned_to_ids:
-        print(f"❌ No employees selected")
         raise HTTPException(status_code=400, detail="At least one employee must be selected")
-
-    print(f"✅ Found task: id={task.id}, description='{task.description}', auto_generated={task.auto_generated}")
 
     # Set primary assignee to first selected employee
     task.assigned_to_id = assigned_to_ids[0]
@@ -498,12 +475,8 @@ async def assign_multiple_employees_to_task(
     # Store all assigned employee IDs
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
 
-    print(f"💾 Saving assignment: assigned_to_id={task.assigned_to_id}, assigned_employee_ids={task.assigned_employee_ids}")
-
     db.commit()
 
-    print(f"✅ Assignment saved successfully!")
-    
     # Broadcast assignment AFTER committing
     try:
         assigned_employees = []
@@ -517,9 +490,93 @@ async def assign_multiple_employees_to_task(
             "team_size": len(assigned_employees),
             "assigned_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task assignment for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task assignment: {e}")
+        pass
+
+    return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
+
+@router.post("/day/{date}/tasks/{task_slug}/assign_and_start")
+async def assign_and_start_task(
+    date: str,
+    task_slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_manager_or_admin)
+):
+    """Assign employees to a task and immediately start it"""
+    from ..models import TaskSession
+
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
+    # Get form data to handle checkbox values
+    form_data = await request.form()
+    assigned_to_ids = []
+
+    # Extract employee IDs from form data
+    for key, value in form_data.multi_items():
+        if key == 'assigned_to_ids':
+            try:
+                assigned_to_ids.append(int(value))
+            except ValueError:
+                continue
+
+    task = get_task_by_slug(db, inventory_day.id, task_slug)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if not assigned_to_ids:
+        raise HTTPException(status_code=400, detail="At least one employee must be selected")
+
+    # Assign employees
+    task.assigned_to_id = assigned_to_ids[0]
+    task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
+
+    db.commit()
+
+    # Broadcast assignment
+    try:
+        employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
+        assigned_employees = [emp.full_name or emp.username for emp in employees]
+
+        await broadcast_task_update(inventory_day.id, task.id, "task_assigned", {
+            "assigned_employees": assigned_employees,
+            "primary_assignee": assigned_employees[0] if assigned_employees else None,
+            "team_size": len(assigned_employees),
+            "assigned_by": current_user.full_name or current_user.username
+        })
+    except Exception as e:
+        pass
+
+    # Check if task has a batch and needs scale selection
+    if task.batch and task.batch.recipe:
+        # For batch tasks, we need scale selection - redirect to day view
+        # The user will need to click start and select scale
+        return RedirectResponse(url=f"/inventory/day/{inventory_day.date}#task-{task.slug}", status_code=302)
+
+    # For non-batch tasks, start immediately
+    now = get_naive_local_time()
+    task.started_at = now
+    task.is_paused = False
+    task.status = "in_progress"
+
+    # Create task session
+    task_session = TaskSession(
+        task_id=task.id,
+        started_at=now
+    )
+    db.add(task_session)
+    db.commit()
+
+    # Broadcast task start
+    try:
+        await broadcast_task_update(inventory_day.id, task.id, "task_started", {
+            "started_at": now.isoformat(),
+            "started_by": current_user.full_name or current_user.username
+        })
+    except Exception as e:
+        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
@@ -583,9 +640,8 @@ async def bulk_assign_tasks(
             "updated_count": updated_count,
             "assigned_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted bulk assignment for {updated_count} tasks")
     except Exception as e:
-        print(f"❌ Error broadcasting bulk assignment: {e}")
+        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=303)
 
@@ -631,9 +687,7 @@ async def start_task(
             "started_at": now.isoformat(),
             "started_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task start for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task start: {e}")
         pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
@@ -648,30 +702,19 @@ async def start_task_with_scale(
 ):
     from ..models import TaskSession
 
-    print(f"🔍 Starting task with scale - task_slug: {task_slug}, selected_scale: {selected_scale}")
-
     inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
     if not inventory_day:
-        print(f"❌ Inventory day not found: {date}")
         raise HTTPException(status_code=404, detail="Inventory day not found")
 
     task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
-        print(f"❌ Task not found: {task_slug} in day {inventory_day.id}")
-        # List all tasks for debugging
-        all_tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
-        print(f"Available tasks: {[(t.id, t.slug, t.description) for t in all_tasks]}")
         raise HTTPException(status_code=404, detail="Task not found")
 
-    print(f"✅ Found task: id={task.id}, status={task.status}, assigned_to_id={task.assigned_to_id}, assigned_employee_ids={task.assigned_employee_ids}")
-
     if task.status != "not_started":
-        print(f"❌ Task already started: {task.status}")
         raise HTTPException(status_code=400, detail="Task already started")
 
     # Check if task has assigned employees
     if not task.assigned_to_id and not task.assigned_employee_ids:
-        print(f"❌ No employees assigned")
         raise HTTPException(status_code=400, detail="Please assign employees before starting this task")
 
     # Set scale information
@@ -691,9 +734,6 @@ async def start_task_with_scale(
         'sixteenth': 0.0625
     }
     task.scale_factor = scale_factors.get(selected_scale, 1.0)
-
-    if selected_scale not in scale_factors:
-        print(f"⚠️ Warning: Unknown scale '{selected_scale}', using default 1.0")
 
     # Start the task
     now = get_naive_local_time()
@@ -715,9 +755,8 @@ async def start_task_with_scale(
             "started_by": current_user.full_name or current_user.username,
             "scale": selected_scale
         })
-        print(f"✅ Broadcasted task start with scale for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task start: {e}")
+        pass
         pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
@@ -752,9 +791,8 @@ async def pause_task(
             "paused_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
-        print(f"✅ Broadcasted task pause for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task pause: {e}")
+        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
@@ -805,9 +843,8 @@ async def resume_task(
             "resumed_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
         })
-        print(f"✅ Broadcasted task resume for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task resume: {e}")
+        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
@@ -877,9 +914,8 @@ async def finish_task(
             "made_amount": task.made_amount,
             "made_unit": task.made_unit
         })
-        print(f"✅ Broadcasted task completion for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task completion: {e}")
+        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
@@ -951,9 +987,8 @@ async def finish_task_with_amount(
             "labor_cost": task.labor_cost,
             "completed_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task completion with amount for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task completion: {e}")
+        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
@@ -997,9 +1032,8 @@ async def reopen_task(
             "reopened_at": now.isoformat(),
             "reopened_by": current_user.full_name or current_user.username
         })
-        print(f"✅ Broadcasted task reopen for task {task.id}")
     except Exception as e:
-        print(f"❌ Error broadcasting task reopen: {e}")
+        pass
         pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
@@ -1095,9 +1129,8 @@ async def finalize_inventory_day(
         await broadcast_day_update(day_id, "day_finalized", {
             "finalized_at": get_naive_local_time().isoformat()
         })
-        print(f"✅ Broadcasted day finalization for day {day_id}")
     except Exception as e:
-        print(f"❌ Error broadcasting day finalization: {e}")
+        pass
         pass
     
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)

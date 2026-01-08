@@ -271,11 +271,17 @@
                 {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
                 <div class="d-grid gap-2">
                     {% if task.status == "not_started" %}
+                    {% if not task.assigned_to_id and not task.assigned_employee_ids %}
+                    <button type="button" class="btn btn-warning w-100" onclick="alert('Please assign employees to this task before starting. Click Back to Inventory Day and assign employees.')">
+                        <i class="fas fa-exclamation-triangle"></i> Assign Employees First
+                    </button>
+                    {% else %}
                     <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/start">
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-play"></i> Start Task
                         </button>
                     </form>
+                    {% endif %}
                     {% elif task.status == "in_progress" %}
                     <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/pause">
                         <button type="submit" class="btn btn-warning w-100">
