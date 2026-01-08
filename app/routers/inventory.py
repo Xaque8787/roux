@@ -627,19 +627,30 @@ async def start_task_with_scale(
 ):
     from ..models import TaskSession
 
+    print(f"🔍 Starting task with scale - task_slug: {task_slug}, selected_scale: {selected_scale}")
+
     inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
     if not inventory_day:
+        print(f"❌ Inventory day not found: {date}")
         raise HTTPException(status_code=404, detail="Inventory day not found")
 
     task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
+        print(f"❌ Task not found: {task_slug} in day {inventory_day.id}")
+        # List all tasks for debugging
+        all_tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
+        print(f"Available tasks: {[(t.id, t.slug, t.description) for t in all_tasks]}")
         raise HTTPException(status_code=404, detail="Task not found")
 
+    print(f"✅ Found task: id={task.id}, status={task.status}, assigned_to_id={task.assigned_to_id}, assigned_employee_ids={task.assigned_employee_ids}")
+
     if task.status != "not_started":
+        print(f"❌ Task already started: {task.status}")
         raise HTTPException(status_code=400, detail="Task already started")
 
     # Check if task has assigned employees
     if not task.assigned_to_id and not task.assigned_employee_ids:
+        print(f"❌ No employees assigned")
         raise HTTPException(status_code=400, detail="Please assign employees before starting this task")
 
     # Set scale information
@@ -651,12 +662,17 @@ async def start_task_with_scale(
         'double': 2.0,
         'triple': 3.0,
         'quadruple': 4.0,
+        'three_quarters': 0.75,
+        'two_thirds': 0.6667,
         'half': 0.5,
         'quarter': 0.25,
         'eighth': 0.125,
         'sixteenth': 0.0625
     }
     task.scale_factor = scale_factors.get(selected_scale, 1.0)
+
+    if selected_scale not in scale_factors:
+        print(f"⚠️ Warning: Unknown scale '{selected_scale}', using default 1.0")
 
     # Start the task
     now = get_naive_local_time()
