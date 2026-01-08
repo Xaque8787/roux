@@ -457,8 +457,11 @@ async def assign_multiple_employees_to_task(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    print(f"🔍 Assigning employees to task - task_slug: {task_slug}, date: {date}")
+
     inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
     if not inventory_day:
+        print(f"❌ Inventory day not found: {date}")
         raise HTTPException(status_code=404, detail="Inventory day not found")
 
     # Get form data to handle checkbox values
@@ -473,20 +476,33 @@ async def assign_multiple_employees_to_task(
             except ValueError:
                 continue
 
+    print(f"📝 Received employee IDs: {assigned_to_ids}")
+
     task = get_task_by_slug(db, inventory_day.id, task_slug)
     if not task:
+        print(f"❌ Task not found: {task_slug} in day {inventory_day.id}")
+        # List all tasks for debugging
+        all_tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
+        print(f"Available tasks: {[(t.id, t.slug, t.description, t.auto_generated) for t in all_tasks]}")
         raise HTTPException(status_code=404, detail="Task not found")
 
     if not assigned_to_ids:
+        print(f"❌ No employees selected")
         raise HTTPException(status_code=400, detail="At least one employee must be selected")
-    
+
+    print(f"✅ Found task: id={task.id}, description='{task.description}', auto_generated={task.auto_generated}")
+
     # Set primary assignee to first selected employee
     task.assigned_to_id = assigned_to_ids[0]
-    
+
     # Store all assigned employee IDs
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
-    
+
+    print(f"💾 Saving assignment: assigned_to_id={task.assigned_to_id}, assigned_employee_ids={task.assigned_employee_ids}")
+
     db.commit()
+
+    print(f"✅ Assignment saved successfully!")
     
     # Broadcast assignment AFTER committing
     try:
