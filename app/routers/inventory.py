@@ -400,8 +400,8 @@ async def create_manual_task(
         if assigned_to_ids:
             employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
             assigned_employees = [emp.full_name or emp.username for emp in employees]
-        
-        await broadcast_task_update(day_id, task.id, "task_created", {
+
+        await broadcast_task_update(inventory_day.id, task.id, "task_created", {
             "description": task.description,
             "assigned_employees": assigned_employees,
             "inventory_item": task.inventory_item.name if task.inventory_item else None,
@@ -438,7 +438,7 @@ async def assign_task(
     # Broadcast AFTER committing to ensure data is saved
     try:
         assigned_employee = db.query(User).filter(User.id == assigned_to_id).first()
-        await broadcast_task_update(day_id, task.id, "task_assigned", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_assigned", {
             "assigned_to": assigned_employee.full_name or assigned_employee.username if assigned_employee else None,
             "assigned_by": current_user.full_name or current_user.username
         })
@@ -495,7 +495,7 @@ async def assign_multiple_employees_to_task(
             employees = db.query(User).filter(User.id.in_(assigned_to_ids)).all()
             assigned_employees = [emp.full_name or emp.username for emp in employees]
 
-        await broadcast_task_update(day_id, task.id, "task_assigned", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_assigned", {
             "assigned_employees": assigned_employees,
             "primary_assignee": assigned_employees[0] if assigned_employees else None,
             "team_size": len(assigned_employees),
@@ -606,7 +606,7 @@ async def start_task(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_started", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_started", {
             "started_at": now.isoformat(),
             "started_by": current_user.full_name or current_user.username
         })
@@ -673,7 +673,7 @@ async def start_task_with_scale(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_started", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_started", {
             "started_at": now.isoformat(),
             "started_by": current_user.full_name or current_user.username,
             "scale": selected_scale
@@ -710,7 +710,7 @@ async def pause_task(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_paused", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_paused", {
             "paused_at": now.isoformat(),
             "paused_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
@@ -763,7 +763,7 @@ async def resume_task(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_resumed", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_resumed", {
             "resumed_at": now.isoformat(),
             "resumed_by": current_user.full_name or current_user.username,
             "total_pause_time": task.total_pause_time
@@ -832,7 +832,7 @@ async def finish_task(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_completed", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_completed", {
             "finished_at": now.isoformat(),
             "total_time": task.total_time_minutes,
             "labor_cost": task.labor_cost,
@@ -906,7 +906,7 @@ async def finish_task_with_amount(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_completed", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_completed", {
             "finished_at": now.isoformat(),
             "total_time": task.total_time_minutes,
             "made_amount": task.made_amount,
@@ -956,7 +956,7 @@ async def reopen_task(
 
     # Broadcast AFTER committing
     try:
-        await broadcast_task_update(day_id, task.id, "task_reopened", {
+        await broadcast_task_update(inventory_day.id, task.id, "task_reopened", {
             "reopened_at": now.isoformat(),
             "reopened_by": current_user.full_name or current_user.username
         })
