@@ -529,10 +529,28 @@ async def assign_and_start_task(
     if not assigned_to_ids:
         raise HTTPException(status_code=400, detail="At least one employee must be selected")
 
+    # Check if task has a batch and needs scale selection BEFORE assigning
+    has_batch = task.batch and task.batch.recipe
+
     # Assign employees
     task.assigned_to_id = assigned_to_ids[0]
     task.assigned_employee_ids = ','.join(map(str, assigned_to_ids))
 
+    # For non-batch tasks, start immediately in the same transaction
+    if not has_batch:
+        now = get_naive_local_time()
+        task.started_at = now
+        task.is_paused = False
+        task.status = "in_progress"
+
+        # Create task session
+        task_session = TaskSession(
+            task_id=task.id,
+            started_at=now
+        )
+        db.add(task_session)
+
+    # Commit once - either assignment only (batch tasks) or assignment + start (non-batch)
     db.commit()
 
     # Broadcast assignment
@@ -549,34 +567,19 @@ async def assign_and_start_task(
     except Exception as e:
         pass
 
-    # Check if task has a batch and needs scale selection
-    if task.batch and task.batch.recipe:
-        # For batch tasks, we need scale selection - redirect to day view
-        # The user will need to click start and select scale
+    # If task was started, broadcast that too
+    if not has_batch:
+        try:
+            await broadcast_task_update(inventory_day.id, task.id, "task_started", {
+                "started_at": task.started_at.isoformat(),
+                "started_by": current_user.full_name or current_user.username
+            })
+        except Exception as e:
+            pass
+
+    # For batch tasks, redirect to day view for scale selection
+    if has_batch:
         return RedirectResponse(url=f"/inventory/day/{inventory_day.date}#task-{task.slug}", status_code=302)
-
-    # For non-batch tasks, start immediately
-    now = get_naive_local_time()
-    task.started_at = now
-    task.is_paused = False
-    task.status = "in_progress"
-
-    # Create task session
-    task_session = TaskSession(
-        task_id=task.id,
-        started_at=now
-    )
-    db.add(task_session)
-    db.commit()
-
-    # Broadcast task start
-    try:
-        await broadcast_task_update(inventory_day.id, task.id, "task_started", {
-            "started_at": now.isoformat(),
-            "started_by": current_user.full_name or current_user.username
-        })
-    except Exception as e:
-        pass
 
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
 
