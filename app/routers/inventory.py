@@ -531,6 +531,11 @@ async def bulk_assign_tasks(
     current_user = Depends(require_manager_or_admin)
 ):
     """Bulk assign multiple tasks to employees"""
+    # Get the inventory day first
+    inventory_day = db.query(InventoryDay).filter(InventoryDay.date == date).first()
+    if not inventory_day:
+        raise HTTPException(status_code=404, detail="Inventory day not found")
+
     form_data = await request.form()
 
     # Parse form data: task_1_emp_5, task_2_emp_7, etc.
@@ -552,7 +557,7 @@ async def bulk_assign_tasks(
                     continue
 
     # Get all tasks for this day
-    all_tasks = db.query(Task).filter(Task.day_id == day_id, Task.status != 'completed').all()
+    all_tasks = db.query(Task).filter(Task.day_id == inventory_day.id, Task.status != 'completed').all()
 
     # Update each task
     updated_count = 0
@@ -574,7 +579,7 @@ async def bulk_assign_tasks(
 
     # Broadcast bulk assignment update
     try:
-        await broadcast_day_update(day_id, "bulk_assignments_updated", {
+        await broadcast_day_update(inventory_day.id, "bulk_assignments_updated", {
             "updated_count": updated_count,
             "assigned_by": current_user.full_name or current_user.username
         })
