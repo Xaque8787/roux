@@ -57,12 +57,12 @@
                 <p>Current inventory day: <strong>{{ current_day.date }}</strong></p>
                 {% if current_day.finalized %}
                 <p><span class="badge bg-success">Finalized</span></p>
-                <a href="/inventory/reports/{{ current_day.id }}" class="btn btn-info btn-sm">
+                <a href="/inventory/reports/{{ current_day.date }}" class="btn btn-info btn-sm">
                     <i class="fas fa-chart-bar"></i> View Report
                 </a>
                 {% else %}
                 <p><span class="badge bg-warning">In Progress</span></p>
-                <a href="/inventory/day/{{ current_day.id }}" class="btn btn-primary btn-sm">
+                <a href="/inventory/day/{{ current_day.date }}" class="btn btn-primary btn-sm">
                     <i class="fas fa-edit"></i> Manage Today's Inventory
                 </a>
                 {% endif %}
@@ -269,10 +269,10 @@
                                </td>
                                 <td>
                                     {% if current_user.role == "admin" %}
-                                    <a href="/inventory/items/{{ item.id }}/edit" class="btn btn-sm btn-warning">
+                                    <a href="/inventory/items/{{ item.slug }}/edit" class="btn btn-sm btn-warning">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <a href="/inventory/items/{{ item.id }}/delete" class="btn btn-sm btn-danger" 
+                                    <a href="/inventory/items/{{ item.slug }}/delete" class="btn btn-sm btn-danger"
                                        onclick="return confirm('Are you sure?')">
                                         <i class="fas fa-trash"></i>
                                     </a>
@@ -422,7 +422,7 @@
                                             <br><small class="text-muted">{{ day.date.strftime('%A') }}</small>
                                         </div>
                                         <div>
-                                            <a href="/inventory/reports/{{ day.id }}" class="btn btn-sm btn-outline-info">
+                                            <a href="/inventory/reports/{{ day.date }}" class="btn btn-sm btn-outline-info">
                                                 <i class="fas fa-chart-bar"></i> Report
                                             </a>
                                         </div>
@@ -745,7 +745,7 @@ document.getElementById('showAllDaysBtn').addEventListener('click', async functi
                                         <br><small class="text-muted">${day.day_name}</small>
                                     </div>
                                     <div>
-                                        <a href="/inventory/reports/${day.id}" class="btn btn-sm btn-outline-info">
+                                        <a href="/inventory/reports/${day.date}" class="btn btn-sm btn-outline-info">
                                             <i class="fas fa-chart-bar"></i> Report
                                         </a>
                                     </div>

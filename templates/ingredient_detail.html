@@ -102,10 +102,10 @@
             <div class="card-body">
                 <div class="d-grid gap-2">
                     {% if current_user.role == "admin" %}
-                    <a href="/ingredients/{{ ingredient.id }}/edit" class="btn btn-warning">
+                    <a href="/ingredients/{{ ingredient.slug }}/edit" class="btn btn-warning">
                         <i class="fas fa-edit"></i> Edit Ingredient
                     </a>
-                    <a href="/ingredients/{{ ingredient.id }}/delete" class="btn btn-danger" 
+                    <a href="/ingredients/{{ ingredient.slug }}/delete" class="btn btn-danger"
                        onclick="return confirm('Are you sure you want to delete this ingredient?')">
                         <i class="fas fa-trash"></i> Delete Ingredient
                     </a>

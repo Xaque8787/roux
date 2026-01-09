@@ -21,7 +21,7 @@
 {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
 <div class="row mb-3">
     <div class="col-12">
-        <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" id="inventoryForm">
+        <form method="post" action="/inventory/day/{{ inventory_day.date }}/update" id="inventoryForm">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5><i class="fas fa-save"></i> Update Inventory & Generate Tasks</h5>
@@ -231,7 +231,7 @@
                         </thead>
                         <tbody>
                             {% for task in tasks %}
-                            <tr>
+                            <tr id="task-{{ task.slug }}">
                                 <td>
                                     {% if task.janitorial_task_id %}
                                         🧹 <small>Janitorial</small>
@@ -321,59 +321,59 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}" class="btn btn-sm {% if task.notes %}btn-outline-danger{% else %}btn-outline-info{% endif %}">
+                                    <a href="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}" class="btn btn-sm {% if task.notes %}btn-outline-danger{% else %}btn-outline-info{% endif %}">
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     
                                     {% if not inventory_day.finalized and current_user.role in ["admin", "manager", "user"] %}
                                         {% if task.status == "completed" %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/reopen" style="display:inline;">
+                                            <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/reopen" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-warning">
                                                     <i class="fas fa-undo"></i>
                                                 </button>
                                             </form>
                                         {% elif task.status == "not_started" %}
                                             {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndShowScale({{ task.id }}, {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}', '{{ task.batch.recipe.name }}')">
+                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndShowScale('{{ task.slug }}', {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}', '{{ task.batch.recipe.name }}')">
                                                 <i class="fas fa-play"></i>
                                             </button>
                                             {% else %}
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndStart({{ task.id }}, {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}')">
+                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndStart('{{ task.slug }}', {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}')">
                                                 <i class="fas fa-play"></i>
                                             </button>
                                             {% endif %}
                                         {% elif task.status == "in_progress" %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/pause" style="display:inline;">
+                                            <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/pause" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-warning">
                                                     <i class="fas fa-pause"></i>
                                                 </button>
                                             </form>
                                             {% if task.requires_made_amount %}
-                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput('{{ task.slug }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                                 <i class="fas fa-check"></i>
                                             </button>
                                             {% else %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/finish" style="display:inline;">
+                                            <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/finish" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-success">
                                                     <i class="fas fa-check"></i>
                                                 </button>
                                             </form>
                                             {% endif %}
                                         {% elif task.status == "paused" %}
-                                            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/{{ task.id }}/resume" style="display:inline;">
+                                            <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/{{ task.slug }}/resume" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-info">
                                                     <i class="fas fa-play"></i>
                                                 </button>
                                             </form>
                                             {% if task.requires_made_amount %}
-                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput({{ task.id }}, '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput('{{ task.slug }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
                                                 <i class="fas fa-check"></i>
                                             </button>
                                             {% endif %}
                                         {% endif %}
                                         
                                         {% if task.status in ["not_started", "in_progress", "paused"] %}
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal({{ task.id }}, '{{ task.description }}')">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showAssignModal('{{ task.slug }}', '{{ task.description }}')">
                                             <i class="fas fa-user-plus"></i>
                                         </button>
                                         {% endif %}
@@ -393,7 +393,7 @@
                 <h5><i class="fas fa-chart-bar"></i> Day Report</h5>
             </div>
             <div class="card-body">
-                <a href="/inventory/reports/{{ inventory_day.id }}" class="btn btn-info">
+                <a href="/inventory/reports/{{ inventory_day.date }}" class="btn btn-info">
                     <i class="fas fa-chart-bar"></i> View Full Report
                 </a>
             </div>
@@ -410,7 +410,7 @@
             </div>
             <div class="card-body">
                 <p class="text-muted">Once finalized, no further changes can be made to this day.</p>
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/finalize">
+                <form method="post" action="/inventory/day/{{ inventory_day.date }}/finalize">
                     <button type="submit" class="btn btn-success" onclick="return confirm('Are you sure you want to finalize this day? This cannot be undone.')">
                         <i class="fas fa-lock"></i> Finalize Day
                     </button>
@@ -482,7 +482,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form method="post" action="/inventory/day/{{ inventory_day.id }}/update" style="display: inline;">
+                <form method="post" action="/inventory/day/{{ inventory_day.date }}/update" style="display: inline;">
                     <input type="hidden" name="force_regenerate" value="true">
                     <input type="hidden" name="global_notes" value="{{ inventory_day.global_notes or '' }}">
                     {% for day_item in inventory_day_items %}
@@ -516,7 +516,7 @@
                 <h5 class="modal-title">Add Manual Task</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/new">
+            <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/new">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="description" class="form-label">Task Description</label>
@@ -619,6 +619,9 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="submitAssignment()">Assign</button>
+                <button type="button" class="btn btn-success" onclick="submitAssignmentAndStart()">
+                    <i class="fas fa-play"></i> Assign & Start
+                </button>
             </div>
         </div>
     </div>
@@ -632,7 +635,7 @@
                 <h5 class="modal-title"><i class="fas fa-users"></i> Bulk Assign Tasks</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="post" action="/inventory/day/{{ inventory_day.id }}/tasks/bulk_assign" id="bulkAssignForm">
+            <form method="post" action="/inventory/day/{{ inventory_day.date }}/tasks/bulk_assign" id="bulkAssignForm">
                 <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
                     {% set working_employee_ids = inventory_day.employees_working.split(',') if inventory_day.employees_working else [] %}
                     {% set working_employees = [] %}
@@ -647,7 +650,7 @@
                     {% else %}
                         {% for task in tasks %}
                             {% if task.status != 'completed' %}
-                            <div class="card mb-3">
+                            <div class="card mb-3" id="task-{{ task.slug }}">
                                 <div class="card-body">
                                     <div class="d-flex align-items-start">
                                         <div class="me-3">
@@ -868,8 +871,8 @@ function showRegenerateModal() {
 }
 
 // Show assign modal
-function showAssignModal(taskId, description) {
-    currentAssignTaskId = taskId;
+function showAssignModal(taskSlug, description) {
+    currentAssignTaskId = taskSlug;
     document.getElementById('assignTaskDescription').textContent = description;
 
     // Clear previous selections
@@ -902,7 +905,7 @@ function submitAssignment() {
     // Create form and submit
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${currentAssignTaskId}/assign_multiple`;
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${currentAssignTaskId}/assign_multiple`;
     form.style.display = 'none';
     
     selectedEmployees.forEach(empId => {
@@ -916,9 +919,37 @@ function submitAssignment() {
     form.submit();
 }
 
+function submitAssignmentAndStart() {
+    const selectedEmployees = [];
+    document.querySelectorAll('#assignModal input[type="checkbox"]:checked').forEach(cb => {
+        selectedEmployees.push(cb.value);
+    });
+
+    if (selectedEmployees.length === 0) {
+        alert('Please select at least one employee.');
+        return;
+    }
+
+    // Create form and submit to assign_and_start endpoint
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${currentAssignTaskId}/assign_and_start`;
+    form.style.display = 'none';
+
+    selectedEmployees.forEach(empId => {
+        const input = document.createElement('input');
+        input.name = 'assigned_to_ids';
+        input.value = empId;
+        form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
 // Scale Selection Modal
-function showScaleSelection(taskId, recipeName) {
-    fetch(`/api/tasks/${taskId}/scale_options`)
+function showScaleSelection(taskSlug, recipeName) {
+    fetch(`/api/tasks/${taskSlug}/scale_options?day_id={{ inventory_day.id }}`)
         .then(response => response.json())
         .then(scales => {
             const modal = document.createElement('div');
@@ -943,7 +974,7 @@ function showScaleSelection(taskId, recipeName) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale(${taskId})">Start Task</button>
+                            <button type="button" class="btn btn-primary" onclick="startTaskWithScale('${taskSlug}')">Start Task</button>
                         </div>
                     </div>
                 </div>
@@ -963,7 +994,7 @@ function showScaleSelection(taskId, recipeName) {
         });
 }
 
-function startTaskWithScale(taskId) {
+function startTaskWithScale(taskSlug) {
     const scaleSelect = document.getElementById('scaleSelect');
     const selectedScale = scaleSelect.value;
 
@@ -974,7 +1005,7 @@ function startTaskWithScale(taskId) {
 
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start_with_scale`;
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${taskSlug}/start_with_scale`;
     form.style.display = 'none';
 
     const scaleInput = document.createElement('input');
@@ -987,35 +1018,35 @@ function startTaskWithScale(taskId) {
 }
 
 // Check if task has assigned employees before starting
-function checkAssignmentAndStart(taskId, assignedToId, assignedEmployeeIds) {
+function checkAssignmentAndStart(taskSlug, assignedToId, assignedEmployeeIds) {
     if (!assignedToId && !assignedEmployeeIds) {
-        showAssignModal(taskId, 'Task');
+        showAssignModal(taskSlug, 'Task');
         return;
     }
 
     // Task has assignments, proceed with start
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/start`;
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${taskSlug}/start`;
     form.style.display = 'none';
     document.body.appendChild(form);
     form.submit();
 }
 
 // Check assignment before showing scale selection
-function checkAssignmentAndShowScale(taskId, assignedToId, assignedEmployeeIds, recipeName) {
+function checkAssignmentAndShowScale(taskSlug, assignedToId, assignedEmployeeIds, recipeName) {
     if (!assignedToId && !assignedEmployeeIds) {
-        showAssignModal(taskId, recipeName);
+        showAssignModal(taskSlug, recipeName);
         return;
     }
 
     // Task has assignments, proceed with scale selection
-    showScaleSelection(taskId, recipeName);
+    showScaleSelection(taskSlug, recipeName);
 }
 
 // Made Amount Input Modal
-function showMadeAmountInput(taskId, recipeName) {
-    fetch(`/api/tasks/${taskId}/finish_requirements`)
+function showMadeAmountInput(taskSlug, recipeName) {
+    fetch(`/api/tasks/${taskSlug}/finish_requirements?day_id={{ inventory_day.id }}`)
         .then(response => response.json())
         .then(data => {
             const modal = document.createElement('div');
@@ -1056,7 +1087,7 @@ function showMadeAmountInput(taskId, recipeName) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount(${taskId})">Finish Task</button>
+                            <button type="button" class="btn btn-success" onclick="finishTaskWithAmount('${taskSlug}')">Finish Task</button>
                         </div>
                     </div>
                 </div>
@@ -1076,7 +1107,7 @@ function showMadeAmountInput(taskId, recipeName) {
         });
 }
 
-function finishTaskWithAmount(taskId) {
+function finishTaskWithAmount(taskSlug) {
     const madeAmount = document.getElementById('madeAmount').value;
     const madeUnit = document.getElementById('madeUnit').value;
     
@@ -1087,7 +1118,7 @@ function finishTaskWithAmount(taskId) {
     
     const form = document.createElement('form');
     form.method = 'post';
-    form.action = `/inventory/day/{{ inventory_day.id }}/tasks/${taskId}/finish_with_amount`;
+    form.action = `/inventory/day/{{ inventory_day.date }}/tasks/${taskSlug}/finish_with_amount`;
     form.style.display = 'none';
     
     const amountInput = document.createElement('input');
@@ -1103,5 +1134,50 @@ function finishTaskWithAmount(taskId) {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Auto-open scale selection modal if redirected with task hash
+document.addEventListener('DOMContentLoaded', function() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#task-')) {
+        // Extract task slug from hash
+        const taskSlug = hash.substring(6); // Remove '#task-'
+
+        // Scroll to task and highlight it
+        const taskElement = document.getElementById(hash.substring(1));
+        if (taskElement) {
+            taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            taskElement.style.backgroundColor = '#fff3cd';
+            setTimeout(() => {
+                taskElement.style.transition = 'background-color 1s ease';
+                taskElement.style.backgroundColor = '';
+            }, 800);
+        }
+
+        // Fetch task info to get recipe name
+        fetch(`/api/tasks/${taskSlug}/scale_options?day_id={{ inventory_day.id }}`)
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Task not found or no scale options');
+            })
+            .then(data => {
+                // Task has scale options, show the modal
+                // Use a slight delay to ensure page is fully loaded
+                setTimeout(() => {
+                    // Find recipe name from task data or use generic name
+                    const recipeName = 'Batch Recipe';
+                    showScaleSelection(taskSlug, recipeName);
+                    // Clear the hash after opening
+                    history.replaceState(null, null, ' ');
+                }, 500);
+            })
+            .catch(error => {
+                console.log('No scale selection needed for this task:', error);
+                // Clear the hash
+                history.replaceState(null, null, ' ');
+            });
+    }
+});
 </script>
 {% endblock %}

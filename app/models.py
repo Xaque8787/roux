@@ -75,6 +75,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
+    slug = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String)
     email = Column(String, index=True)
@@ -117,9 +118,10 @@ class ParUnitName(Base):
 
 class Ingredient(Base):
     __tablename__ = "ingredients"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
+    slug = Column(String, unique=True, index=True)
     usage_type = Column(String)  # weight, volume
     category_id = Column(Integer, ForeignKey("categories.id"))
     vendor_id = Column(Integer, ForeignKey("vendors.id"))
@@ -283,9 +285,10 @@ class Ingredient(Base):
 
 class Recipe(Base):
     __tablename__ = "recipes"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
+    slug = Column(String, unique=True, index=True)
     instructions = Column(Text)
     category_id = Column(Integer, ForeignKey("categories.id"))
     created_at = Column(DateTime, default=get_naive_local_time)
@@ -413,8 +416,9 @@ class RecipeBatchPortion(Base):
 
 class Batch(Base):
     __tablename__ = "batches"
-    
+
     id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String, unique=True, index=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"))
     category_id = Column(Integer, ForeignKey("categories.id"))
     variable_yield = Column(Boolean, default=False)
@@ -498,9 +502,10 @@ class Batch(Base):
 
 class Dish(Base):
     __tablename__ = "dishes"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
+    slug = Column(String, unique=True, index=True)
     category_id = Column(Integer, ForeignKey("categories.id"))
     sale_price = Column(Float)
     description = Column(Text)
@@ -712,9 +717,10 @@ class DishIngredientPortion(Base):
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
+    slug = Column(String, unique=True, index=True)
     par_unit_name_id = Column(Integer, ForeignKey("par_unit_names.id"))
     par_level = Column(Float, default=0.0)
     batch_id = Column(Integer, ForeignKey("batches.id"))
@@ -933,6 +939,34 @@ class Task(Base):
         
         return (self.total_time_minutes / 60) * highest_wage
     
+    @property
+    def slug(self):
+        """Generate slug from task description and related entities"""
+        from app.utils.slugify import slugify
+
+        # For manual tasks, ALWAYS use the description if available
+        # This ensures manually created tasks keep their custom names even when attached to batches
+        if not self.auto_generated and self.description:
+            base_slug = slugify(self.description[:50])
+        # For auto-generated tasks, prefer the most specific entity name
+        # Priority: inventory_item > batch/recipe > janitorial_task > description
+        elif self.inventory_item:
+            base_slug = slugify(self.inventory_item.name)
+        elif self.batch and self.batch.recipe:
+            base_slug = slugify(self.batch.recipe.name)
+        elif self.janitorial_task:
+            base_slug = slugify(self.janitorial_task.title)
+        elif self.description:
+            base_slug = slugify(self.description[:50])
+        else:
+            base_slug = f"task-{self.id}"
+
+        # Add scale suffix for batch tasks if not full scale
+        if self.batch and self.selected_scale and self.selected_scale != 'full':
+            base_slug = f"{base_slug}-{self.selected_scale}"
+
+        return base_slug
+
     @property
     def requires_made_amount(self):
         """Check if this task requires entering a made amount"""

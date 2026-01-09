@@ -6,7 +6,7 @@
 <div class="row">
     <div class="col-12">
         <h1><i class="fas fa-edit"></i> Edit Recipe: {{ recipe.name }}</h1>
-        <a href="/recipes/{{ recipe.id }}" class="btn btn-secondary mb-3">
+        <a href="/recipes/{{ recipe.slug }}" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Recipe
         </a>
     </div>
@@ -19,7 +19,7 @@
                 <h5><i class="fas fa-edit"></i> Recipe Information</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="/recipes/{{ recipe.id }}/edit" id="recipeEditForm">
+                <form method="post" action="/recipes/{{ recipe.slug }}/edit" id="recipeEditForm">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -82,7 +82,7 @@
                     <input type="hidden" name="batch_portions_data" id="batchPortionsData">
 
                     <div class="d-flex justify-content-between">
-                        <a href="/recipes/{{ recipe.id }}" class="btn btn-secondary">Cancel</a>
+                        <a href="/recipes/{{ recipe.slug }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Save Changes
                         </button>

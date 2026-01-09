@@ -7,6 +7,7 @@ from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import Dish, Category, DishBatchPortion, DishIngredientPortion, Batch
 from ..utils.template_helpers import setup_template_filters
+from ..utils.slugify import generate_unique_slug
 
 router = APIRouter(prefix="/dishes", tags=["dishes"])
 templates = setup_template_filters(Jinja2Templates(directory="templates"))
@@ -35,13 +36,16 @@ async def create_dish(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    slug = generate_unique_slug(db, Dish, name)
+
     dish = Dish(
         name=name,
+        slug=slug,
         category_id=category_id if category_id else None,
         sale_price=sale_price,
         description=description if description else None
     )
-    
+
     db.add(dish)
     db.flush()  # Get the dish ID
     
@@ -78,17 +82,17 @@ async def create_dish(
         raise HTTPException(status_code=400, detail="Invalid ingredient portions data")
     
     db.commit()
-    
-    return RedirectResponse(url="/dishes", status_code=302)
 
-@router.get("/{dish_id}", response_class=HTMLResponse)
-async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    return RedirectResponse(url=f"/dishes/{slug}", status_code=302)
+
+@router.get("/{slug}", response_class=HTMLResponse)
+async def dish_detail(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    dish = db.query(Dish).filter(Dish.slug == slug).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
-    
-    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
-    dish_ingredient_portions = db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).all()
+
+    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish.id).all()
+    dish_ingredient_portions = db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish.id).all()
     
     # Calculate costs dynamically for each portion
     expected_recipe_cost = sum(portion.get_recipe_cost(db) for portion in dish_batch_portions)
@@ -163,15 +167,15 @@ async def dish_detail(dish_id: int, request: Request, db: Session = Depends(get_
         "db": db
     })
 
-@router.get("/{dish_id}/edit", response_class=HTMLResponse)
-async def dish_edit_page(dish_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_manager_or_admin)):
-    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+@router.get("/{slug}/edit", response_class=HTMLResponse)
+async def dish_edit_page(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(require_manager_or_admin)):
+    dish = db.query(Dish).filter(Dish.slug == slug).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
-    
+
     categories = db.query(Category).filter(Category.type == "dish").all()
-    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).all()
-    dish_ingredient_portions = db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).all()
+    dish_batch_portions = db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish.id).all()
+    dish_ingredient_portions = db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish.id).all()
     
     return templates.TemplateResponse("dish_edit.html", {
         "request": request,
@@ -183,9 +187,9 @@ async def dish_edit_page(dish_id: int, request: Request, db: Session = Depends(g
         "db": db
     })
 
-@router.post("/{dish_id}/edit")
+@router.post("/{slug}/edit")
 async def update_dish(
-    dish_id: int,
+    slug: str,
     request: Request,
     name: str = Form(...),
     category_id: int = Form(None),
@@ -196,20 +200,23 @@ async def update_dish(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    dish = db.query(Dish).filter(Dish.slug == slug).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
-    
+
+    if dish.name != name:
+        dish.slug = generate_unique_slug(db, Dish, name, exclude_id=dish.id)
+
     dish.name = name
     dish.category_id = category_id if category_id else None
     dish.sale_price = sale_price
     dish.description = description if description else None
-    
+
     # Remove existing batch portions
-    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
-    
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish.id).delete()
+
     # Remove existing ingredient portions
-    db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).delete()
+    db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish.id).delete()
     
     # Parse and add new batch portions
     try:
@@ -244,20 +251,20 @@ async def update_dish(
         raise HTTPException(status_code=400, detail="Invalid ingredient portions data")
     
     db.commit()
-    
-    return RedirectResponse(url=f"/dishes/{dish_id}", status_code=302)
 
-@router.get("/{dish_id}/delete")
-async def delete_dish(dish_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    dish = db.query(Dish).filter(Dish.id == dish_id).first()
+    return RedirectResponse(url=f"/dishes/{dish.slug}", status_code=302)
+
+@router.get("/{slug}/delete")
+async def delete_dish(slug: str, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    dish = db.query(Dish).filter(Dish.slug == slug).first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
-    
+
     # Delete dish batch portions first
-    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish_id).delete()
-    
+    db.query(DishBatchPortion).filter(DishBatchPortion.dish_id == dish.id).delete()
+
     # Delete dish ingredient portions
-    db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish_id).delete()
+    db.query(DishIngredientPortion).filter(DishIngredientPortion.dish_id == dish.id).delete()
     
     db.delete(dish)
     db.commit()

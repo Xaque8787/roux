@@ -7,6 +7,7 @@ from ..database import get_db
 from ..dependencies import require_manager_or_admin, get_current_user, require_admin
 from ..models import Recipe, Category, RecipeIngredient, RecipeBatchPortion
 from ..utils.template_helpers import setup_template_filters
+from ..utils.slugify import generate_unique_slug
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 templates = setup_template_filters(Jinja2Templates(directory="templates"))
@@ -34,8 +35,11 @@ async def create_recipe(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
+    slug = generate_unique_slug(db, Recipe, name)
+
     recipe = Recipe(
         name=name,
+        slug=slug,
         instructions=instructions if instructions else None,
         category_id=category_id if category_id else None
     )
@@ -77,16 +81,16 @@ async def create_recipe(
 
     db.commit()
 
-    return RedirectResponse(url="/recipes", status_code=302)
+    return RedirectResponse(url=f"/recipes/{slug}", status_code=302)
 
-@router.get("/{recipe_id}", response_class=HTMLResponse)
-async def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+@router.get("/{slug}", response_class=HTMLResponse)
+async def recipe_detail(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    recipe = db.query(Recipe).filter(Recipe.slug == slug).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
-    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).all()
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).all()
+    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe.id).all()
 
     ingredients_cost = sum(ri.cost for ri in recipe_ingredients)
     batch_portions_cost = sum(rbp.get_total_cost(db) for rbp in recipe_batch_portions)
@@ -102,15 +106,15 @@ async def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(
         "db": db
     })
 
-@router.get("/{recipe_id}/edit", response_class=HTMLResponse)
-async def recipe_edit_page(recipe_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(require_manager_or_admin)):
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+@router.get("/{slug}/edit", response_class=HTMLResponse)
+async def recipe_edit_page(slug: str, request: Request, db: Session = Depends(get_db), current_user = Depends(require_manager_or_admin)):
+    recipe = db.query(Recipe).filter(Recipe.slug == slug).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     categories = db.query(Category).filter(Category.type == "recipe").all()
-    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).all()
-    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).all()
+    recipe_ingredients = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).all()
+    recipe_batch_portions = db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe.id).all()
 
     return templates.TemplateResponse("recipe_edit.html", {
         "request": request,
@@ -122,9 +126,9 @@ async def recipe_edit_page(recipe_id: int, request: Request, db: Session = Depen
         "db": db
     })
 
-@router.post("/{recipe_id}/edit")
+@router.post("/{slug}/edit")
 async def update_recipe(
-    recipe_id: int,
+    slug: str,
     request: Request,
     name: str = Form(...),
     instructions: str = Form(""),
@@ -134,16 +138,19 @@ async def update_recipe(
     db: Session = Depends(get_db),
     current_user = Depends(require_manager_or_admin)
 ):
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    recipe = db.query(Recipe).filter(Recipe.slug == slug).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
+
+    if recipe.name != name:
+        recipe.slug = generate_unique_slug(db, Recipe, name, exclude_id=recipe.id)
 
     recipe.name = name
     recipe.instructions = instructions if instructions else None
     recipe.category_id = category_id if category_id else None
 
     # Remove existing ingredients
-    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).delete()
 
     # Parse and add new ingredients
     try:
@@ -161,7 +168,7 @@ async def update_recipe(
         raise HTTPException(status_code=400, detail="Invalid ingredients data")
 
     # Remove existing batch portions
-    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).delete()
+    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe.id).delete()
 
     # Parse and add new batch portions
     try:
@@ -182,17 +189,17 @@ async def update_recipe(
 
     db.commit()
 
-    return RedirectResponse(url=f"/recipes/{recipe_id}", status_code=302)
+    return RedirectResponse(url=f"/recipes/{recipe.slug}", status_code=302)
 
-@router.get("/{recipe_id}/delete")
-async def delete_recipe(recipe_id: int, db: Session = Depends(get_db), current_user = Depends(require_admin)):
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+@router.get("/{slug}/delete")
+async def delete_recipe(slug: str, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    recipe = db.query(Recipe).filter(Recipe.slug == slug).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     # Delete recipe ingredients and batch portions first
-    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
-    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe_id).delete()
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).delete()
+    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe.id).delete()
 
     db.delete(recipe)
     db.commit()

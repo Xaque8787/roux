@@ -93,18 +93,18 @@ app.include_router(email_reports.router)
 app.include_router(sse_router)
 
 # Additional API endpoint for batch labor stats
-@app.get("/api/batches/{batch_id}/labor_stats")
-async def api_batch_labor_stats(batch_id: int, db: Session = Depends(get_db)):
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+@app.get("/api/batches/{slug}/labor_stats")
+async def api_batch_labor_stats(slug: str, db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.slug == slug).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    
+
     completed_tasks = db.query(Task).filter(
         or_(
-            Task.batch_id == batch_id,
+            Task.batch_id == batch.id,
             and_(
                 Task.inventory_item_id.isnot(None),
-                Task.inventory_item.has(InventoryItem.batch_id == batch_id)
+                Task.inventory_item.has(InventoryItem.batch_id == batch.id)
             )
         ),
         Task.finished_at.isnot(None)
