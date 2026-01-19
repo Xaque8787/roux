@@ -95,7 +95,8 @@
                                            value="{{ day_item.quantity }}"
                                            step="any" min="0"
                                            form="inventoryForm"
-                                           style="width: 80px;">
+                                           style="width: 80px;"
+                                           onfocus="this.select()">
                                     {% else %}
                                     {{ day_item.quantity }}
                                     {% endif %}
