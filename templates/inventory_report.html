@@ -81,7 +81,7 @@
     </div>
 </div>
 
-{% set tasks_with_notes = tasks|selectattr('notes')|list %}
+{% set tasks_with_notes = started_tasks|selectattr('notes')|list %}
 {% if inventory_day.global_notes or tasks_with_notes %}
 <div class="row mt-3">
     <div class="col-md-12">
@@ -102,7 +102,7 @@
                 </div>
                 {% endif %}
 
-                {% for task in tasks|sort(attribute='started_at') %}
+                {% for task in started_tasks|sort(attribute='started_at') %}
                     {% if task.notes %}
                     <div class="{% if not loop.first or inventory_day.global_notes %}mt-3{% endif %}">
                         <div class="d-flex align-items-start">
@@ -157,7 +157,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for task in tasks %}
+                            {% for task in started_tasks %}
                             <tr>
                                 <td>
                                     <small>{{ task.description }}</small>
@@ -202,11 +202,7 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if task.started_at %}
-                                        {{ task.total_time_minutes }}
-                                    {% else %}
-                                        -
-                                    {% endif %}
+                                    {{ task.total_time_minutes }}
                                 </td>
                                 <td>
                                     {% if task.janitorial_task_id %}
@@ -286,6 +282,59 @@
     </div>
 </div>
 
+{% if unstarted_tasks %}
+<div class="row mt-3">
+    <div class="col-md-12">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5><i class="fas fa-exclamation-triangle"></i> Tasks Not Completed ({{ unstarted_tasks|length }})</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">The following tasks were generated but never started during this shift:</p>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Task</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in unstarted_tasks %}
+                            <tr>
+                                <td><small>{{ task.description }}</small></td>
+                                <td>
+                                    <small>
+                                    {% if task.janitorial_task_id %}
+                                        🧹 Janitorial
+                                    {% elif task.inventory_item_id and not task.inventory_item %}
+                                        <span class="text-muted">Item Removed</span>
+                                    {% elif task.inventory_item and task.inventory_item.category %}
+                                        {{ task.inventory_item.category.icon or '🔘' }} {{ task.inventory_item.category.name }}
+                                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
+                                        {{ task.inventory_item.batch.category.icon or '🔘' }} {{ task.inventory_item.batch.category.name }}
+                                    {% elif task.batch and task.batch.category %}
+                                        {{ task.batch.category.icon or '🔘' }} {{ task.batch.category.name }}
+                                    {% elif task.category %}
+                                        {{ task.category.icon or '🔘' }} {{ task.category.name }}
+                                    {% else %}
+                                        🔘 Uncategorized
+                                    {% endif %}
+                                    </small>
+                                </td>
+                                <td><span class="badge bg-secondary">Not Started</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="row mt-3">
     <div class="col-md-12">
         <div class="card">
@@ -293,8 +342,8 @@
                 <h5><i class="fas fa-clock"></i> Time Analysis</h5>
             </div>
             <div class="card-body">
-                {% set total_time = tasks|sum(attribute='total_time_minutes') %}
-                {% set completed_time = tasks|selectattr('finished_at')|sum(attribute='total_time_minutes') %}
+                {% set total_time = started_tasks|sum(attribute='total_time_minutes') %}
+                {% set completed_time = started_tasks|selectattr('finished_at')|sum(attribute='total_time_minutes') %}
 
                 {% if total_shift_duration %}
                 <div class="alert alert-info">
@@ -348,7 +397,7 @@
                     </div>
                 </div>
                 
-                {% if tasks|selectattr('finished_at')|list %}
+                {% if started_tasks|selectattr('finished_at')|list %}
                 <h6 class="mt-3">Completed Tasks Detail:</h6>
                 <div class="table-responsive">
                     <table class="table table-sm">
@@ -364,7 +413,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for task in tasks|selectattr('finished_at') %}
+                            {% for task in started_tasks|selectattr('finished_at') %}
                             <tr>
                                 <td><small>{{ task.description }}</small></td>
                                 <td>
