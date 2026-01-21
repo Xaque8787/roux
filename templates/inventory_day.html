@@ -85,7 +85,11 @@
                                 <td>
                                     <strong>{{ day_item.inventory_item.name }}</strong>
                                     {% if day_item.inventory_item.batch %}
-                                        <br><small class="text-muted">Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}</small>
+                                        <br><small class="text-muted">Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}
+                                        {% if day_item.inventory_item.batch.recipe.deleted %}
+                                        <span class="text-danger">(removed)</span>
+                                        {% endif %}
+                                        </small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -335,7 +339,7 @@
                                             </form>
                                         {% elif task.status == "not_started" %}
                                             {% if task.batch and task.batch.can_be_scaled and not task.batch.variable_yield %}
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndShowScale('{{ task.slug }}', {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}', '{{ task.batch.recipe.name }}')">
+                                            <button type="button" class="btn btn-sm btn-primary" onclick="checkAssignmentAndShowScale('{{ task.slug }}', {{ task.assigned_to_id or 'null' }}, '{{ task.assigned_employee_ids or '' }}', '{% if task.batch.recipe %}{{ task.batch.recipe.name }}{% else %}{{ task.description }}{% endif %}')">
                                                 <i class="fas fa-play"></i>
                                             </button>
                                             {% else %}
@@ -350,7 +354,7 @@
                                                 </button>
                                             </form>
                                             {% if task.requires_made_amount %}
-                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput('{{ task.slug }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput('{{ task.slug }}', '{% if task.batch and task.batch.recipe %}{{ task.batch.recipe.name }}{% else %}{{ task.description }}{% endif %}')">
                                                 <i class="fas fa-check"></i>
                                             </button>
                                             {% else %}
@@ -367,7 +371,7 @@
                                                 </button>
                                             </form>
                                             {% if task.requires_made_amount %}
-                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput('{{ task.slug }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                            <button type="button" class="btn btn-sm btn-success" onclick="showMadeAmountInput('{{ task.slug }}', '{% if task.batch and task.batch.recipe %}{{ task.batch.recipe.name }}{% else %}{{ task.description }}{% endif %}')">
                                                 <i class="fas fa-check"></i>
                                             </button>
                                             {% endif %}

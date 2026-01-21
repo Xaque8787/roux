@@ -18,10 +18,10 @@ def calculate_recipe_total_cost(recipe_id: int, db: Session) -> float:
 
 @router.get("/search")
 async def search_batches(q: str = "", db: Session = Depends(get_db)):
-    query = db.query(Batch).options(joinedload(Batch.recipe))
+    query = db.query(Batch).options(joinedload(Batch.recipe)).join(Recipe).filter(Recipe.deleted == False)
 
     if q:
-        query = query.join(Recipe).filter(Recipe.name.ilike(f"%{q}%"))
+        query = query.filter(Recipe.name.ilike(f"%{q}%"))
 
     batches = query.all()
 
@@ -47,7 +47,7 @@ async def search_batches(q: str = "", db: Session = Depends(get_db)):
 
 @router.get("/all")
 async def get_all_batches(db: Session = Depends(get_db)):
-    batches = db.query(Batch).options(joinedload(Batch.recipe)).all()
+    batches = db.query(Batch).options(joinedload(Batch.recipe)).join(Recipe).filter(Recipe.deleted == False).all()
 
     result = []
     for batch in batches:

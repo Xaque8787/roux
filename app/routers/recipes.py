@@ -13,15 +13,20 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
 templates = setup_template_filters(Jinja2Templates(directory="templates"))
 
 @router.get("/", response_class=HTMLResponse)
-async def recipes_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    recipes = db.query(Recipe).all()
+async def recipes_page(request: Request, show_deleted: bool = False, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    if show_deleted:
+        recipes = db.query(Recipe).all()
+    else:
+        recipes = db.query(Recipe).filter(Recipe.deleted == False).all()
+
     categories = db.query(Category).filter(Category.type == "recipe").all()
-    
+
     return templates.TemplateResponse("recipes.html", {
         "request": request,
         "current_user": current_user,
         "recipes": recipes,
-        "categories": categories
+        "categories": categories,
+        "show_deleted": show_deleted
     })
 
 @router.post("/new")
@@ -197,11 +202,18 @@ async def delete_recipe(slug: str, db: Session = Depends(get_db), current_user =
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
-    # Delete recipe ingredients and batch portions first
-    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).delete()
-    db.query(RecipeBatchPortion).filter(RecipeBatchPortion.recipe_id == recipe.id).delete()
-
-    db.delete(recipe)
+    recipe.deleted = True
     db.commit()
 
     return RedirectResponse(url="/recipes", status_code=302)
+
+@router.get("/{slug}/restore")
+async def restore_recipe(slug: str, db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    recipe = db.query(Recipe).filter(Recipe.slug == slug).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    recipe.deleted = False
+    db.commit()
+
+    return RedirectResponse(url="/recipes?show_deleted=true", status_code=302)

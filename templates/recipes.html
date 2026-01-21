@@ -88,8 +88,16 @@
     
     <div class="{% if current_user.role in ['admin', 'manager'] %}col-md-6{% else %}col-12{% endif %}">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-list"></i> Recipes List</h5>
+                {% if current_user.role == "admin" %}
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="showDeletedCheckbox"
+                           {% if show_deleted %}checked{% endif %}
+                           onchange="toggleShowDeleted(this.checked)">
+                    <label class="form-check-label" for="showDeletedCheckbox">Show deleted recipes</label>
+                </div>
+                {% endif %}
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -104,7 +112,7 @@
                         </thead>
                         <tbody>
                             {% for recipe in recipes %}
-                            <tr>
+                            <tr {% if recipe.deleted %}class="table-secondary" style="opacity: 0.6;"{% endif %}>
                                 <td>
                                     {% if recipe.category %}
                                         {{ recipe.category.icon or '🔘' }}
@@ -112,6 +120,9 @@
                                         🔘
                                     {% endif %}
                                     <strong>{{ recipe.name }}</strong>
+                                    {% if recipe.deleted %}
+                                        <span class="badge bg-danger ms-2">DELETED</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ recipe.category.name if recipe.category else '-' }}
@@ -124,19 +135,28 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="/recipes/{{ recipe.slug }}" class="btn btn-sm btn-info">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-                                    {% if current_user.role in ["admin", "manager"] %}
-                                    <a href="/recipes/{{ recipe.slug }}/edit" class="btn btn-sm btn-warning">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </a>
-                                    {% endif %}
-                                    {% if current_user.role == "admin" %}
-                                    <a href="/recipes/{{ recipe.slug }}/delete" class="btn btn-sm btn-danger"
-                                       onclick="return confirm('Are you sure?')">
-                                        <i class="fas fa-trash"></i>
-                                    </a>
+                                    {% if recipe.deleted %}
+                                        {% if current_user.role == "admin" %}
+                                        <a href="/recipes/{{ recipe.slug }}/restore" class="btn btn-sm btn-success"
+                                           onclick="return confirm('Restore this recipe?')">
+                                            <i class="fas fa-undo"></i> Restore
+                                        </a>
+                                        {% endif %}
+                                    {% else %}
+                                        <a href="/recipes/{{ recipe.slug }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        {% if current_user.role in ["admin", "manager"] %}
+                                        <a href="/recipes/{{ recipe.slug }}/edit" class="btn btn-sm btn-warning">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        {% endif %}
+                                        {% if current_user.role == "admin" %}
+                                        <a href="/recipes/{{ recipe.slug }}/delete" class="btn btn-sm btn-danger"
+                                           onclick="return confirm('Delete this recipe? It will be hidden but can be restored later.')">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                             </tr>
@@ -823,6 +843,16 @@ function previewIcon() {
     const iconInput = document.getElementById('categoryIcon');
     const preview = document.getElementById('iconPreview');
     preview.textContent = iconInput.value || '🔘';
+}
+
+function toggleShowDeleted(checked) {
+    const url = new URL(window.location.href);
+    if (checked) {
+        url.searchParams.set('show_deleted', 'true');
+    } else {
+        url.searchParams.delete('show_deleted');
+    }
+    window.location.href = url.toString();
 }
 </script>
 {% endblock %}

@@ -399,8 +399,14 @@
                                 <td><small>{{ task.finished_at.strftime('%H:%M') if task.finished_at else '-' }}</small></td>
                                 <td><small>{{ task.total_time_minutes }} min</small></td>
                                 <td>
-                                    {% if task.batch %}
-                                        <small><a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a></small>
+                                    {% if task.batch and task.batch.recipe %}
+                                        <small><a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">{{ task.batch.recipe.name }}
+                                        {% if task.batch.recipe.deleted %}
+                                        <span class="text-danger">(removed)</span>
+                                        {% endif %}
+                                        </a></small>
+                                    {% elif task.batch %}
+                                        <small class="text-warning">Recipe not found</small>
                                     {% elif task.janitorial_task %}
                                         <small class="text-warning">Janitorial Task</small>
                                     {% elif task.inventory_item_id and not task.inventory_item %}

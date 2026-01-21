@@ -57,7 +57,7 @@
                                 <span class="badge bg-primary">In Progress</span>
                             {% elif task.status == "paused" %}
                                 {% if task.requires_made_amount %}
-                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput('{{ task.slug }}', '{{ task.batch.recipe.name if task.batch else task.description }}')">
+                                <button type="button" class="btn btn-success w-100" onclick="showMadeAmountInput('{{ task.slug }}', '{% if task.batch and task.batch.recipe %}{{ task.batch.recipe.name }}{% else %}{{ task.description }}{% endif %}')">
                                     <i class="fas fa-check"></i> Finish & Enter Amount
                                 </button>
                                 {% else %}
@@ -158,12 +158,19 @@
                 {% if task.batch %}
                 <h6><i class="fas fa-industry"></i> Linked Batch</h6>
                 <p><strong>Recipe:</strong>
+                    {% if task.batch.recipe %}
                     <a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">
                         {{ task.batch.recipe.name }}
+                        {% if task.batch.recipe.deleted %}
+                        <span class="text-danger">(removed)</span>
+                        {% endif %}
                     </a>
+                    {% else %}
+                    <span class="text-warning">Recipe not found</span>
+                    {% endif %}
                 </p>
-                
-                {% if task.batch.recipe.instructions %}
+
+                {% if task.batch.recipe and task.batch.recipe.instructions %}
                 <div class="mt-3">
                     <h6><i class="fas fa-list-ol"></i> Recipe Instructions</h6>
                     <div class="border p-3 bg-light rounded">
