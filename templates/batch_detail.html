@@ -5,7 +5,11 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h1><i class="fas fa-industry"></i> Batch: {{ batch.recipe.name }}</h1>
+        <h1><i class="fas fa-industry"></i> Batch: {{ batch.recipe.name }}
+        {% if batch.recipe.deleted %}
+        <span class="text-danger">(removed)</span>
+        {% endif %}
+        </h1>
         <a href="/batches" class="btn btn-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Batches
         </a>

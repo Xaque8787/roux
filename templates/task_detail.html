@@ -161,6 +161,9 @@
                     {% if task.batch.recipe %}
                     <a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">
                         {{ task.batch.recipe.name }}
+                        {% if task.batch.recipe.deleted %}
+                        <span class="text-danger">(removed)</span>
+                        {% endif %}
                     </a>
                     {% else %}
                     <span class="text-warning">Recipe not found</span>

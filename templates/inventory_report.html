@@ -400,7 +400,11 @@
                                 <td><small>{{ task.total_time_minutes }} min</small></td>
                                 <td>
                                     {% if task.batch and task.batch.recipe %}
-                                        <small><a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">{{ task.batch.recipe.name }}</a></small>
+                                        <small><a href="/batches/{{ task.batch.slug }}" class="text-decoration-none">{{ task.batch.recipe.name }}
+                                        {% if task.batch.recipe.deleted %}
+                                        <span class="text-danger">(removed)</span>
+                                        {% endif %}
+                                        </a></small>
                                     {% elif task.batch %}
                                         <small class="text-warning">Recipe not found</small>
                                     {% elif task.janitorial_task %}

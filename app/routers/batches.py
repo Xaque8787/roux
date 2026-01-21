@@ -14,9 +14,9 @@ templates = setup_template_filters(Jinja2Templates(directory="templates"))
 @router.get("/", response_class=HTMLResponse)
 async def batches_page(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     batches = db.query(Batch).all()
-    recipes = db.query(Recipe).all()
+    recipes = db.query(Recipe).filter(Recipe.deleted == False).all()
     categories = db.query(Category).filter(Category.type == "batch").all()
-    
+
     return templates.TemplateResponse("batches.html", {
         "request": request,
         "current_user": current_user,

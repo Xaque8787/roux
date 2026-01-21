@@ -291,8 +291,9 @@ class Recipe(Base):
     slug = Column(String, unique=True, index=True)
     instructions = Column(Text)
     category_id = Column(Integer, ForeignKey("categories.id"))
+    deleted = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=get_naive_local_time)
-    
+
     # Relationships
     category = relationship("Category")
 

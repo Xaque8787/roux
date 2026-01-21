@@ -85,7 +85,11 @@
                                 <td>
                                     <strong>{{ day_item.inventory_item.name }}</strong>
                                     {% if day_item.inventory_item.batch %}
-                                        <br><small class="text-muted">Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}</small>
+                                        <br><small class="text-muted">Linked Batch: {{ day_item.inventory_item.batch.recipe.name }}
+                                        {% if day_item.inventory_item.batch.recipe.deleted %}
+                                        <span class="text-danger">(removed)</span>
+                                        {% endif %}
+                                        </small>
                                     {% endif %}
                                 </td>
                                 <td>
