@@ -1151,19 +1151,23 @@ async def inventory_report(
         raise HTTPException(status_code=400, detail="Day must be finalized to view report")
 
     inventory_day_items = db.query(InventoryDayItem).filter(InventoryDayItem.day_id == inventory_day.id).all()
-    tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
+    all_tasks = db.query(Task).filter(Task.day_id == inventory_day.id).all()
     employees = db.query(User).filter(User.is_active == True).all()
 
     # Filter out inventory day items where inventory item was deleted
     inventory_day_items = [item for item in inventory_day_items if item.inventory_item is not None]
 
-    # Calculate statistics
-    total_tasks = len(tasks)
-    completed_tasks = len([t for t in tasks if t.status == "completed"])
+    # Separate started and unstarted tasks
+    started_tasks = [t for t in all_tasks if t.started_at is not None]
+    unstarted_tasks = [t for t in all_tasks if t.started_at is None]
+
+    # Calculate statistics (only include started tasks in counts)
+    total_tasks = len(started_tasks)
+    completed_tasks = len([t for t in started_tasks if t.status == "completed"])
     below_par_items = len([item for item in inventory_day_items if item.quantity <= item.inventory_item.par_level])
 
-    # Calculate time metrics
-    total_task_time = sum(t.total_time_minutes for t in tasks if t.total_time_minutes)
+    # Calculate time metrics (only from started tasks)
+    total_task_time = sum(t.total_time_minutes for t in started_tasks if t.total_time_minutes)
     total_shift_duration = None
     off_task_time = None
     shift_efficiency = None
@@ -1180,7 +1184,8 @@ async def inventory_report(
         "current_user": current_user,
         "inventory_day": inventory_day,
         "inventory_day_items": inventory_day_items,
-        "tasks": tasks,
+        "started_tasks": started_tasks,
+        "unstarted_tasks": unstarted_tasks,
         "employees": employees,
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
