@@ -1128,11 +1128,10 @@ async def finalize_inventory_day(
     
     # Broadcast day finalization
     try:
-        await broadcast_day_update(day_id, "day_finalized", {
+        await broadcast_day_update(inventory_day.id, "day_finalized", {
             "finalized_at": get_naive_local_time().isoformat()
         })
     except Exception as e:
-        pass
         pass
     
     return RedirectResponse(url=f"/inventory/day/{inventory_day.date}", status_code=302)
