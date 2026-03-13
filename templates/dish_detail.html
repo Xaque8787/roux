@@ -87,7 +87,10 @@
                         </tfoot>
                     </table>
                 </div>
-                
+                {% else %}
+                <p class="text-muted">No batch portions added to this dish yet.</p>
+                {% endif %}
+
                 {% if dish_ingredient_portions %}
                 <h6 class="mt-4">Ingredient Portions</h6>
                 <div class="table-responsive">
@@ -123,9 +126,6 @@
                         </tfoot>
                     </table>
                 </div>
-                {% endif %}
-                {% else %}
-                <p class="text-muted">No batch portions added to this dish yet.</p>
                 {% endif %}
             </div>
         </div>
