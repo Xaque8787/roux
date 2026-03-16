@@ -37,7 +37,7 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="global_notes" class="form-label">Day Notes</label>
-                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2" 
+                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2"
                                   placeholder="General notes for the day...">{{ inventory_day.global_notes or '' }}</textarea>
                     </div>
                 </div>
@@ -47,9 +47,23 @@
 </div>
 {% endif %}
 
-<div class="row">
-    <!-- Left Column: Inventory Items -->
-    <div class="col-md-6">
+<ul class="nav nav-tabs mb-3" id="inventoryTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="inventory-tab" data-bs-toggle="tab" data-bs-target="#inventoryPanel" type="button" role="tab" aria-controls="inventoryPanel" aria-selected="true">
+            <i class="fas fa-boxes"></i> Inventory
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tasks-tab" data-bs-toggle="tab" data-bs-target="#tasksPanel" type="button" role="tab" aria-controls="tasksPanel" aria-selected="false">
+            <i class="fas fa-tasks"></i> Tasks
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content position-relative" id="inventoryTabContent">
+    <div class="tab-pane fade show active" id="inventoryPanel" role="tabpanel" aria-labelledby="inventory-tab">
+        <div class="row">
+            <div class="col-12">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-boxes"></i> Daily Inventory</h5>
@@ -203,10 +217,13 @@
             </div>
         </div>
         {% endif %}
+            </div>
+        </div>
     </div>
-    
-    <!-- Right Column: Tasks -->
-    <div class="col-md-6">
+
+    <div class="tab-pane fade" id="tasksPanel" role="tabpanel" aria-labelledby="tasks-tab">
+        <div class="row">
+            <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-tasks"></i> Tasks</h5>
@@ -403,11 +420,11 @@
                 </a>
             </div>
         </div>
-        {% endif %}
-    </div>
-    
-    <!-- Right Column: Day Information -->
-    <div class="col-md-6">
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-12">
         {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card">
             <div class="card-header">
@@ -462,6 +479,64 @@
         </div>
     </div>
 </div>
+
+<button class="fab-toggle" id="fabToggle" title="Toggle view">
+    <i class="fas fa-boxes"></i>
+</button>
+
+<style>
+.fab-toggle {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fab-toggle:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5), 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+.fab-toggle:active {
+    transform: scale(0.95);
+}
+
+.fab-toggle i {
+    transition: transform 0.3s ease;
+}
+
+.fab-toggle.rotating i {
+    animation: rotate 0.3s ease;
+}
+
+@keyframes rotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(180deg); }
+}
+
+@media (max-width: 768px) {
+    .fab-toggle {
+        bottom: 16px;
+        right: 16px;
+        width: 48px;
+        height: 48px;
+        font-size: 18px;
+    }
+}
+</style>
 
 <!-- Regenerate All Tasks Modal -->
 <div class="modal fade" id="regenerateModal" tabindex="-1">
@@ -1139,6 +1214,47 @@ function finishTaskWithAmount(taskSlug) {
     document.body.appendChild(form);
     form.submit();
 }
+
+// FAB Toggle Functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const fabToggle = document.getElementById('fabToggle');
+    const inventoryTab = document.getElementById('inventory-tab');
+    const tasksTab = document.getElementById('tasks-tab');
+    const inventoryPanel = document.getElementById('inventoryPanel');
+    const tasksPanel = document.getElementById('tasksPanel');
+
+    function updateFabIcon() {
+        const fabIcon = fabToggle.querySelector('i');
+        fabToggle.classList.add('rotating');
+
+        if (inventoryPanel.classList.contains('show')) {
+            fabIcon.className = 'fas fa-boxes';
+        } else {
+            fabIcon.className = 'fas fa-tasks';
+        }
+
+        setTimeout(() => {
+            fabToggle.classList.remove('rotating');
+        }, 300);
+    }
+
+    fabToggle.addEventListener('click', function() {
+        if (inventoryPanel.classList.contains('show')) {
+            tasksTab.click();
+        } else {
+            inventoryTab.click();
+        }
+        updateFabIcon();
+    });
+
+    inventoryTab.addEventListener('shown.bs.tab', function() {
+        updateFabIcon();
+    });
+
+    tasksTab.addEventListener('shown.bs.tab', function() {
+        updateFabIcon();
+    });
+});
 
 // Auto-open scale selection modal if redirected with task hash
 document.addEventListener('DOMContentLoaded', function() {
