@@ -37,7 +37,7 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="global_notes" class="form-label">Day Notes</label>
-                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2" 
+                        <textarea class="form-control" id="global_notes" name="global_notes" rows="2"
                                   placeholder="General notes for the day...">{{ inventory_day.global_notes or '' }}</textarea>
                     </div>
                 </div>
@@ -47,9 +47,23 @@
 </div>
 {% endif %}
 
-<div class="row">
-    <!-- Left Column: Inventory Items -->
-    <div class="col-md-6">
+<ul class="nav nav-tabs mb-3" id="inventoryTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="inventory-tab" data-bs-toggle="tab" data-bs-target="#inventoryPanel" type="button" role="tab" aria-controls="inventoryPanel" aria-selected="true">
+            <i class="fas fa-boxes"></i> Inventory
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tasks-tab" data-bs-toggle="tab" data-bs-target="#tasksPanel" type="button" role="tab" aria-controls="tasksPanel" aria-selected="false">
+            <i class="fas fa-tasks"></i> Tasks
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content position-relative" id="inventoryTabContent">
+    <div class="tab-pane fade show active" id="inventoryPanel" role="tabpanel" aria-labelledby="inventory-tab">
+        <div class="row">
+            <div class="col-12">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-boxes"></i> Daily Inventory</h5>
@@ -76,10 +90,12 @@
                             {% set is_near_par = day_item.quantity == day_item.inventory_item.par_level + 1 %}
                             <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}">
                                 <td>
-                                    {% if day_item.inventory_item.category %}
-                                        {{ day_item.inventory_item.category.icon or '🔘' }} <small>{{ day_item.inventory_item.category.name }}</small>
+                                    {% if day_item.inventory_item.category and day_item.inventory_item.category.icon %}
+                                        <span>{{ day_item.inventory_item.category.icon|safe }}</span> <small>{{ day_item.inventory_item.category.name }}</small>
+                                    {% elif day_item.inventory_item.category %}
+                                        <span>🔘</span> <small>{{ day_item.inventory_item.category.name }}</small>
                                     {% else %}
-                                        🔘 <small>Uncategorized</small>
+                                        <span>🔘</span> <small>Uncategorized</small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -150,7 +166,22 @@
                 </div>
             </div>
         </div>
-        
+
+        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+        <div class="card mt-3">
+            <div class="card-body">
+                <div class="d-flex gap-2 justify-content-end">
+                    <button type="submit" form="inventoryForm" class="btn btn-primary">
+                        <i class="fas fa-sync"></i> Update & Generate Tasks
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="showRegenerateModal()">
+                        <i class="fas fa-exclamation-triangle"></i> Regenerate All Tasks
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card mt-3">
             <div class="card-header">
@@ -170,7 +201,7 @@
                             {% for janitorial_day_item in janitorial_day_items %}
                             <tr>
                                 <td>
-                                    🧹 <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
+                                    <span>🧹</span> <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
                                     {% if janitorial_day_item.janitorial_task.instructions %}
                                         <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:50] }}{% if janitorial_day_item.janitorial_task.instructions|length > 50 %}...{% endif %}</small>
                                     {% endif %}
@@ -203,10 +234,13 @@
             </div>
         </div>
         {% endif %}
+            </div>
+        </div>
     </div>
-    
-    <!-- Right Column: Tasks -->
-    <div class="col-md-6">
+
+    <div class="tab-pane fade" id="tasksPanel" role="tabpanel" aria-labelledby="tasks-tab">
+        <div class="row">
+            <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-tasks"></i> Tasks</h5>
@@ -239,17 +273,17 @@
                             <tr id="task-{{ task.slug }}">
                                 <td>
                                     {% if task.janitorial_task_id %}
-                                        🧹 <small>Janitorial</small>
-                                    {% elif task.inventory_item and task.inventory_item.category %}
-                                        {{ task.inventory_item.category.icon or '🔘' }} <small>{{ task.inventory_item.category.name }}</small>
-                                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
-                                        {{ task.inventory_item.batch.category.icon or '🔘' }} <small>{{ task.inventory_item.batch.category.name }}</small>
-                                    {% elif task.batch and task.batch.category %}
-                                        {{ task.batch.category.icon or '🔘' }} <small>{{ task.batch.category.name }}</small>
-                                    {% elif task.category %}
-                                        {{ task.category.icon or '🔘' }} <small>{{ task.category.name }}</small>
+                                        <span>🧹</span> <small>Janitorial</small>
+                                    {% elif task.inventory_item and task.inventory_item.category and task.inventory_item.category.icon %}
+                                        <span>{{ task.inventory_item.category.icon|safe }}</span> <small>{{ task.inventory_item.category.name }}</small>
+                                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category and task.inventory_item.batch.category.icon %}
+                                        <span>{{ task.inventory_item.batch.category.icon|safe }}</span> <small>{{ task.inventory_item.batch.category.name }}</small>
+                                    {% elif task.batch and task.batch.category and task.batch.category.icon %}
+                                        <span>{{ task.batch.category.icon|safe }}</span> <small>{{ task.batch.category.name }}</small>
+                                    {% elif task.category and task.category.icon %}
+                                        <span>{{ task.category.icon|safe }}</span> <small>{{ task.category.name }}</small>
                                     {% else %}
-                                        🔘 <small>Uncategorized</small>
+                                        <span>🔘</span> <small>{% if task.category %}{{ task.category.name }}{% else %}Uncategorized{% endif %}</small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -404,10 +438,11 @@
             </div>
         </div>
         {% endif %}
-    </div>
-    
-    <!-- Right Column: Day Information -->
-    <div class="col-md-6">
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-12">
         {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card">
             <div class="card-header">
@@ -423,21 +458,21 @@
             </div>
         </div>
         {% endif %}
-        
+
         <div class="card mt-3">
             <div class="card-header">
                 <h5><i class="fas fa-info-circle"></i> Day Information</h5>
             </div>
             <div class="card-body">
                 <p><strong>Date:</strong> {{ inventory_day.date }}</p>
-                <p><strong>Status:</strong> 
+                <p><strong>Status:</strong>
                     {% if inventory_day.finalized %}
                         <span class="badge bg-success">Finalized</span>
                     {% else %}
                         <span class="badge bg-warning">In Progress</span>
                     {% endif %}
                 </p>
-                
+
                 {% if inventory_day.employees_working %}
                 <p><strong>Employees Working:</strong></p>
                 <ul class="list-unstyled">
@@ -451,7 +486,7 @@
                     {% endfor %}
                 </ul>
                 {% endif %}
-                
+
                 {% if inventory_day.global_notes %}
                 <p><strong>Day Notes:</strong></p>
                 <div class="border p-2 bg-light">
@@ -460,8 +495,68 @@
                 {% endif %}
             </div>
         </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<button class="fab-toggle" id="fabToggle" title="Toggle view">
+    <i class="fas fa-boxes"></i>
+</button>
+
+<style>
+.fab-toggle {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fab-toggle:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5), 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+.fab-toggle:active {
+    transform: scale(0.95);
+}
+
+.fab-toggle i {
+    transition: transform 0.3s ease;
+}
+
+.fab-toggle.rotating i {
+    animation: rotate 0.3s ease;
+}
+
+@keyframes rotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(180deg); }
+}
+
+@media (max-width: 768px) {
+    .fab-toggle {
+        bottom: 16px;
+        right: 16px;
+        width: 48px;
+        height: 48px;
+        font-size: 18px;
+    }
+}
+</style>
 
 <!-- Regenerate All Tasks Modal -->
 <div class="modal fade" id="regenerateModal" tabindex="-1">
@@ -1139,6 +1234,47 @@ function finishTaskWithAmount(taskSlug) {
     document.body.appendChild(form);
     form.submit();
 }
+
+// FAB Toggle Functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const fabToggle = document.getElementById('fabToggle');
+    const inventoryTab = document.getElementById('inventory-tab');
+    const tasksTab = document.getElementById('tasks-tab');
+    const inventoryPanel = document.getElementById('inventoryPanel');
+    const tasksPanel = document.getElementById('tasksPanel');
+
+    function updateFabIcon() {
+        const fabIcon = fabToggle.querySelector('i');
+        fabToggle.classList.add('rotating');
+
+        if (inventoryPanel.classList.contains('show')) {
+            fabIcon.className = 'fas fa-boxes';
+        } else {
+            fabIcon.className = 'fas fa-tasks';
+        }
+
+        setTimeout(() => {
+            fabToggle.classList.remove('rotating');
+        }, 300);
+    }
+
+    fabToggle.addEventListener('click', function() {
+        if (inventoryPanel.classList.contains('show')) {
+            tasksTab.click();
+        } else {
+            inventoryTab.click();
+        }
+        updateFabIcon();
+    });
+
+    inventoryTab.addEventListener('shown.bs.tab', function() {
+        updateFabIcon();
+    });
+
+    tasksTab.addEventListener('shown.bs.tab', function() {
+        updateFabIcon();
+    });
+});
 
 // Auto-open scale selection modal if redirected with task hash
 document.addEventListener('DOMContentLoaded', function() {
