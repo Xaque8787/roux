@@ -420,6 +420,7 @@
                 </a>
             </div>
         </div>
+        {% endif %}
             </div>
         </div>
 
@@ -440,21 +441,21 @@
             </div>
         </div>
         {% endif %}
-        
+
         <div class="card mt-3">
             <div class="card-header">
                 <h5><i class="fas fa-info-circle"></i> Day Information</h5>
             </div>
             <div class="card-body">
                 <p><strong>Date:</strong> {{ inventory_day.date }}</p>
-                <p><strong>Status:</strong> 
+                <p><strong>Status:</strong>
                     {% if inventory_day.finalized %}
                         <span class="badge bg-success">Finalized</span>
                     {% else %}
                         <span class="badge bg-warning">In Progress</span>
                     {% endif %}
                 </p>
-                
+
                 {% if inventory_day.employees_working %}
                 <p><strong>Employees Working:</strong></p>
                 <ul class="list-unstyled">
@@ -468,13 +469,15 @@
                     {% endfor %}
                 </ul>
                 {% endif %}
-                
+
                 {% if inventory_day.global_notes %}
                 <p><strong>Day Notes:</strong></p>
                 <div class="border p-2 bg-light">
                     {{ inventory_day.global_notes }}
                 </div>
                 {% endif %}
+            </div>
+        </div>
             </div>
         </div>
     </div>
