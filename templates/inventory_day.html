@@ -90,10 +90,12 @@
                             {% set is_near_par = day_item.quantity == day_item.inventory_item.par_level + 1 %}
                             <tr class="{% if is_below_par %}table-danger{% elif is_on_par %}table-info{% elif is_near_par %}table-warning{% endif %}">
                                 <td>
-                                    {% if day_item.inventory_item.category %}
-                                        {{ day_item.inventory_item.category.icon or '🔘' }} <small>{{ day_item.inventory_item.category.name }}</small>
+                                    {% if day_item.inventory_item.category and day_item.inventory_item.category.icon %}
+                                        <span>{{ day_item.inventory_item.category.icon|safe }}</span> <small>{{ day_item.inventory_item.category.name }}</small>
+                                    {% elif day_item.inventory_item.category %}
+                                        <span>🔘</span> <small>{{ day_item.inventory_item.category.name }}</small>
                                     {% else %}
-                                        🔘 <small>Uncategorized</small>
+                                        <span>🔘</span> <small>Uncategorized</small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -164,7 +166,22 @@
                 </div>
             </div>
         </div>
-        
+
+        {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
+        <div class="card mt-3">
+            <div class="card-body">
+                <div class="d-flex gap-2 justify-content-end">
+                    <button type="submit" form="inventoryForm" class="btn btn-primary">
+                        <i class="fas fa-sync"></i> Update & Generate Tasks
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="showRegenerateModal()">
+                        <i class="fas fa-exclamation-triangle"></i> Regenerate All Tasks
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if not inventory_day.finalized and current_user.role in ["admin", "manager"] %}
         <div class="card mt-3">
             <div class="card-header">
@@ -184,7 +201,7 @@
                             {% for janitorial_day_item in janitorial_day_items %}
                             <tr>
                                 <td>
-                                    🧹 <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
+                                    <span>🧹</span> <strong>{{ janitorial_day_item.janitorial_task.title }}</strong>
                                     {% if janitorial_day_item.janitorial_task.instructions %}
                                         <br><small class="text-muted">{{ janitorial_day_item.janitorial_task.instructions[:50] }}{% if janitorial_day_item.janitorial_task.instructions|length > 50 %}...{% endif %}</small>
                                     {% endif %}
@@ -256,17 +273,17 @@
                             <tr id="task-{{ task.slug }}">
                                 <td>
                                     {% if task.janitorial_task_id %}
-                                        🧹 <small>Janitorial</small>
-                                    {% elif task.inventory_item and task.inventory_item.category %}
-                                        {{ task.inventory_item.category.icon or '🔘' }} <small>{{ task.inventory_item.category.name }}</small>
-                                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category %}
-                                        {{ task.inventory_item.batch.category.icon or '🔘' }} <small>{{ task.inventory_item.batch.category.name }}</small>
-                                    {% elif task.batch and task.batch.category %}
-                                        {{ task.batch.category.icon or '🔘' }} <small>{{ task.batch.category.name }}</small>
-                                    {% elif task.category %}
-                                        {{ task.category.icon or '🔘' }} <small>{{ task.category.name }}</small>
+                                        <span>🧹</span> <small>Janitorial</small>
+                                    {% elif task.inventory_item and task.inventory_item.category and task.inventory_item.category.icon %}
+                                        <span>{{ task.inventory_item.category.icon|safe }}</span> <small>{{ task.inventory_item.category.name }}</small>
+                                    {% elif task.inventory_item and task.inventory_item.batch and task.inventory_item.batch.category and task.inventory_item.batch.category.icon %}
+                                        <span>{{ task.inventory_item.batch.category.icon|safe }}</span> <small>{{ task.inventory_item.batch.category.name }}</small>
+                                    {% elif task.batch and task.batch.category and task.batch.category.icon %}
+                                        <span>{{ task.batch.category.icon|safe }}</span> <small>{{ task.batch.category.name }}</small>
+                                    {% elif task.category and task.category.icon %}
+                                        <span>{{ task.category.icon|safe }}</span> <small>{{ task.category.name }}</small>
                                     {% else %}
-                                        🔘 <small>Uncategorized</small>
+                                        <span>🔘</span> <small>{% if task.category %}{{ task.category.name }}{% else %}Uncategorized{% endif %}</small>
                                     {% endif %}
                                 </td>
                                 <td>
