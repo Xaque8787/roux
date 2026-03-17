@@ -755,15 +755,15 @@
                                     <div class="d-flex align-items-start">
                                         <div class="me-3">
                                             {% if task.janitorial_task_id %}
-                                                🧹
-                                            {% elif task.inventory_item and task.inventory_item.category %}
-                                                {{ task.inventory_item.category.icon or '🔘' }}
-                                            {% elif task.batch and task.batch.category %}
-                                                {{ task.batch.category.icon or '🔘' }}
-                                            {% elif task.category %}
-                                                {{ task.category.icon or '🔘' }}
+                                                <span>🧹</span>
+                                            {% elif task.inventory_item and task.inventory_item.category and task.inventory_item.category.icon %}
+                                                <span>{{ task.inventory_item.category.icon|safe }}</span>
+                                            {% elif task.batch and task.batch.category and task.batch.category.icon %}
+                                                <span>{{ task.batch.category.icon|safe }}</span>
+                                            {% elif task.category and task.category.icon %}
+                                                <span>{{ task.category.icon|safe }}</span>
                                             {% else %}
-                                                🔘
+                                                <span>🔘</span>
                                             {% endif %}
                                         </div>
                                         <div class="flex-grow-1">
@@ -812,6 +812,30 @@
 
 <script>
 let currentAssignTaskId = null;
+
+// Tab persistence using localStorage
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('#inventoryTabs button[data-bs-toggle="tab"]');
+    const storageKey = 'inventoryDayActiveTab_{{ inventory_day.date }}';
+
+    // Restore the last active tab
+    const lastActiveTab = localStorage.getItem(storageKey);
+    if (lastActiveTab) {
+        const tabToActivate = document.querySelector(`#inventoryTabs button[data-bs-target="${lastActiveTab}"]`);
+        if (tabToActivate) {
+            const tab = new bootstrap.Tab(tabToActivate);
+            tab.show();
+        }
+    }
+
+    // Save the active tab when it changes
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(event) {
+            const targetPane = event.target.getAttribute('data-bs-target');
+            localStorage.setItem(storageKey, targetPane);
+        });
+    });
+});
 
 // Timer functionality
 function updateTimers() {
