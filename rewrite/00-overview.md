@@ -1,6 +1,6 @@
 # 00 - Overview
 
-Status: REVISED - review round 2 incorporated, pending approval
+Status: REVISED - review round 3 incorporated, pending approval
 
 This is the root blueprint for the Roux rewrite. It records the decisions made so far, sums up the current system, and sets the conventions every later sub-blueprint follows. Feature details belong in sub-blueprints 05-09, not here.
 
@@ -16,14 +16,20 @@ This is the root blueprint for the Roux rewrite. It records the decisions made s
 | D4 | **SQLite tuned for concurrency** | WAL journal mode, `busy_timeout`, short transactions. Details in 01 and 11. |
 | D5 | **Alembic owns the schema** | One initial migration builds a clean schema. Later changes use Alembic batch mode where SQLite needs it. `create_all` and hand-rolled migration scripts are removed. |
 | D6 | **Blank-slate data** | No migration from production is required. An optional recipe/ingredient import can be done after launch (see section 7). |
-| D7 | **Self-hosted Docker, one container** | Same deployment model as today: app plus SQLite file in a named volume. Postgres stays possible later through `DATABASE_URL`, but it is not a goal. |
+| D7 | **Self-hosted Docker, one container** | Same deployment model as today: app plus SQLite file in a named volume. Vendor price sync (F5) is **bundled inside the app**, not run as a sidecar. Postgres stays possible later through `DATABASE_URL`, but it is not a goal. |
 | D8 | **Blueprint process** | One sub-blueprint per concern. Each one is reviewed and approved before the next is written. New domains/features are listed early in `99-feature-backlog.md` so the schema accounts for them, then designed in detail inside the relevant section. |
 | D9 | **Three role tiers** | **Admin**: full control and access. **Manager**: login; runs daily operations (start/finalize day, take inventory, assign tasks) and most of the app. **Employee**: no login; can be assigned tasks and can start/finish them; used for labor tracking. The old `user` role and the `is_admin`/`is_user` flags are removed. |
-| D10 | **Multi-arch images via buildx** | One multi-arch manifest on GHCR covering `linux/amd64` (64-bit PC), `linux/386` (32-bit PC), `linux/arm64` (64-bit ARM, including the Pi 3 B), and `linux/arm/v7` (32-bit ARM). `docker pull` picks the right image automatically. Linux only. |
-| D11 | **Iroh-ready networking** | Remote access will come later through iroh. The app must work unchanged behind any tunnel or proxy (see section 5). |
+| D10 | **64-bit only: `linux/amd64` + `linux/arm64`** | One multi-arch manifest on GHCR, and `docker pull` picks the right one automatically. The Pi 3 B on its 64-bit OS uses `arm64`. 32-bit images (`386`, `arm/v7`) are dropped: Playwright (F5) can't run there, they need slow compile-from-source builds, and two feature sets would have to be tested. This can be revisited later by building those images without price sync. |
+| D11 | **Iroh-ready networking** | Remote access will come later through iroh. The app must work unchanged behind any tunnel or proxy (see section 6). |
 | D12 | **TypeScript + Tailwind** | Neither choice affects iroh; picked for maintainability. |
 | D13 | **Shared-device task flow** | A Manager or Admin signs in on a kitchen device. Employees (no login) tap tasks assigned to them to start and stop them. Hardening is deferred: a likely approach is a PIN-locked "task station" view that asks for a Manager/Admin PIN before you can leave the page. The data model leaves room for a per-user PIN hash so this can be added after the rewrite. |
 | D14 | **Keep the CI/versioning system** | GHCR at `ghcr.io/xaque8787/roux`. `.dockerversion` holds the version. A push to `main` builds the image and tags it `latest` plus that version. Manual dispatch stays available. Details in 11. |
+| D15 | **Launch scope includes F1 + F2** | Stock/ordering and the US/Metric unit system are part of the rewrite itself, not later additions. |
+| D16 | **F5 follows F1** | Vendor price sync is built right after stock/ordering, bundled in the app. Chromium starts only for a run and exits afterwards, so it uses no memory while idle. A swap file covers the occasional peak on a 1 GB Pi. |
+| D17 | **Generic Schedules page** | Administration > Schedules is one job manager for all recurring work (vendor price pulls, S3 backups, email reports, future jobs). Each job type plugs in with its own settings; the page handles timing, enable/disable, "run now", and run history. It is built with the first scheduled job (F5). |
+| D18 | **F3, F4 later** | Iroh access and S3 backups come after launch. Their constraints are still respected now (section 6, D17). |
+| D19 | **Readable URLs, no sequential IDs exposed** | See section 5.1. |
+| D20 | **Full CRUD + dependency-aware changes everywhere** | See section 5.2. |
 
 ---
 
@@ -80,7 +86,7 @@ This is the root blueprint for the Roux rewrite. It records the decisions made s
 
 ### Infrastructure
 - One Docker image, multi-stage: Node build stage, Python build stage, slim runtime
-- Multi-arch images (`linux/arm64` and `linux/arm/v7` for the Pi, plus `amd64`) built by GitHub Actions and pushed to GHCR
+- Multi-arch images (`linux/amd64`, `linux/arm64`) built by GitHub Actions and pushed to GHCR. Chromium for Playwright is included in the image.
 - SQLite file in a Docker **named volume**
 - Entrypoint runs `alembic upgrade head`, then starts uvicorn
 
@@ -122,10 +128,43 @@ The rule is that **routers stay thin, services hold the logic, and models hold o
 
 ---
 
-## 5. Cross-cutting conventions (expanded in 03 and 04)
+## 5. Core principles
+
+These rules apply to every domain. Each sub-blueprint must show how it satisfies them.
+
+### 5.1 Identity and URLs
+
+- **URLs and API paths use meaningful identifiers and never sequential database IDs.**
+  - Named things are addressed by slug: `/ingredients/carrots`, `/recipes/blue-cheese-dressing`, `/api/vendors/sysco`.
+  - Date-based things are addressed by date: `/inventory/days/2026-10-22`, with **one inventory day per calendar date** enforced by a unique constraint.
+  - Child rows are addressed under their parent by the child's natural key: `/api/recipes/blue-cheese-dressing/ingredients/blue-cheese`.
+  - Things that have no name or date (task sessions, stock movements, sync runs) use a **short random ID** (for example `k3f9x2qa`). It is never sequential or guessable.
+- Integer primary keys still exist for foreign keys and joins, but they **never leave the server**. API responses identify records by slug, date, or random ID.
+- **Names are unique** within each table. The comparison ignores case and surrounding spaces, and is enforced by a database constraint, not only by the UI. Saving a duplicate name gives a clear message ("An ingredient named Carrots already exists").
+- **Slugs** are generated from the name. If two different names produce the same slug ("Carrots!" and "carrots"), the second one gets a `-2` suffix, then `-3`, and so on.
+- **Renaming changes the slug, and old URLs keep working.** Previous slugs are kept as aliases, and visiting one redirects to the current URL. Bookmarks and shared links do not break.
+- **Archived items keep their name reserved.** Creating a new item with an archived item's name offers to restore the archived one instead.
+
+### 5.2 CRUD and cross-domain dependencies
+
+- **Everything users enter can be created, viewed, edited, renamed, archived, restored, and deleted.** There are no write-only records. Read-only exceptions are system-generated history (finalized inventory days, completed task sessions, stock movements, sync/backup runs). These can only be corrected through an explicit adjustment, which is itself recorded.
+- **Live references.** Batches, dishes, inventory items, stock, and tasks link to the current recipe/ingredient rather than to a copy. Editing a recipe updates every batch, dish, and cost that uses it.
+- **History is frozen.** Finalized or completed records store a snapshot of the values they used (cost, quantity, unit, name). Editing a recipe today does not rewrite last month's reports.
+- **Dependency check before a destructive change.** Before an archive or delete, the server returns an **impact list** of everything affected, grouped by domain. For example: deleting "Blue Cheese Dressing" affects 1 batch (Blue Cheese Batch), 1 inventory item, 2 dishes, and 3 prep tasks.
+- **The user chooses what happens:**
+  1. **Archive (recommended, the default)**: hidden from pickers and lists, existing links keep working with an "archived" badge, and it can be restored at any time.
+  2. **Delete this only**: allowed only if nothing depends on it. Otherwise the user is told what still uses it.
+  3. **Delete with dependents**: shows the full list once more and needs a typed confirmation. Removes the item and everything listed, in **one transaction**. Frozen history keeps its snapshots and is never deleted by a cascade.
+- **The preview matches the action.** The impact list and the actual delete use the same service function, so the result can never differ from what was shown.
+- **Every relationship has a declared rule** in 01: cascade with parent (a recipe's own ingredient lines), block (a recipe used by a batch), or detach (an optional link set to empty). The database enforces these with foreign keys (`PRAGMA foreign_keys=ON`, which SQLite leaves off by default). The service layer runs the cascades explicitly.
+- **No circular recipes.** A recipe that uses batch portions from other recipes is checked on save so it can never end up using itself, directly or indirectly.
+- **Changes broadcast.** Every create, update, archive, or delete sends a realtime event, so other screens update themselves (see 10).
+
+---
+
+## 6. Cross-cutting conventions (expanded in 03 and 04)
 
 - All JSON routes live under `/api/...`. Every other path returns the SPA's `index.html`.
-- Resources are addressed by slug in URLs where they are today, and by ID internally.
 - Errors use one consistent JSON shape, and the frontend shows them in a standard way.
 - All timestamps are stored in UTC and converted to the configured `TZ` only for display and for "business day" logic.
 - Money is stored as integer cents, or Decimal. This is decided in 01. Floats are not used for money.
@@ -142,29 +181,32 @@ The rule is that **routers stay thin, services hold the logic, and models hold o
 
 ---
 
-## 6. Memory budget (Pi 3 B, 1 GB)
+## 7. Memory budget (Pi 3 B, 1 GB)
 
 | Component | Target |
 |-----------|--------|
 | OS + Docker | ~300 MB |
 | uvicorn + app | <= 120 MB |
 | SQLite | in process (negligible) |
-| Headroom | > 500 MB |
+| Chromium during a price sync (F5) | ~200-400 MB, only while a run is active |
+| Headroom while idle | > 500 MB |
 
-The built frontend is static files and uses no server memory beyond serving them.
-
----
-
-## 7. Out of scope / deferred
-
-- Data migration from the current production DB. Optional later: a one-off script to import recipes, ingredients, and related reference data.
-- Postgres support beyond keeping `DATABASE_URL` configurable.
-- Multiple workers or horizontal scaling. This would need an external broker for SSE.
-- New features. These are collected after each section's review.
+- The built frontend is static files and uses no server memory beyond serving them.
+- Price sync runs in a **child process**. When it ends, all of its memory goes back to the system, and a crash in the browser can't take the app down. Only one sync runs at a time.
+- Recommended Pi setup: a 1-2 GB swap file (documented in 11).
 
 ---
 
-## 8. Sub-blueprint index
+## 8. Scope and phasing
+
+- **Launch:** all current domains plus F1 (stock/ordering) and F2 (US/Metric).
+- **Right after launch:** F5 (vendor price sync) and the generic Schedules page.
+- **Later:** F3 (iroh), F4 (S3 backups, as a Schedules job).
+- **Out of scope:** migrating production data (an optional import script may come later), Postgres support beyond a configurable `DATABASE_URL`, multiple workers.
+
+---
+
+## 9. Sub-blueprint index
 
 | File | Concern | Status |
 |------|---------|--------|
@@ -177,7 +219,7 @@ The built frontend is static files and uses no server memory beyond serving them
 | 06-dishes-batches.md | Batches, yields, scaling, dishes, margins | Pending |
 | 07-inventory.md | Items, pars, days, finalization, reports | Pending |
 | 08-employees-tasks.md | Employees, prep/janitorial tasks, sessions, labor | Pending |
-| 09-admin-utilities.md | Admin, backup/restore, vendors, categories, utilities, docs, email | Pending |
+| 09-admin-utilities.md | Admin, Schedules page, backup/restore, vendors, categories, utilities, docs, email | Pending |
 | 10-realtime-sse.md | Broadcaster, rooms, events, client reconnect | Pending |
 | 11-deployment.md | Dockerfile, compose, entrypoint, WAL, multi-arch CI | Pending |
 | 12-stock-ordering.md | Stock ledger, pars, order guide (F1) | Pending |
@@ -187,12 +229,14 @@ The built frontend is static files and uses no server memory beyond serving them
 
 ---
 
-## 9. Open questions for review
+## 10. Open questions for review
 
-_None outstanding for 00. Ready for approval._
+1. **Edits to frozen history:** confirm that finalized inventory days and completed task sessions can only be corrected by an adjustment that is recorded, never edited directly. Or should Admins be able to edit them directly?
+2. **Inventory days:** confirm it is exactly one per calendar date (no second count on the same date).
 
 ### Notes carried into 11-deployment
 - The current workflow has no QEMU setup step, and its final "Image digest" step refers to a build step ID that doesn't exist, so it prints nothing. Both will be fixed.
 - The workflow's `paths:` filter will be updated for the new `backend/` and `frontend/` folders.
-- The frontend build stage will run on the build machine's native architecture (its output is plain static files). Node does not publish 32-bit x86 images, so building it per-architecture would fail for `linux/386`.
-- Some Python packages (for example `pydantic-core` and `bcrypt`) may not ship ready-made builds for `386` or `arm/v7`. The builder stage may need a compiler toolchain for those architectures, which makes CI builds slower. It does not affect the runtime image.
+- Change `platforms` to `linux/amd64,linux/arm64` (the same as today).
+- The frontend build stage runs on the build machine's native architecture (its output is plain static files).
+- Chromium adds roughly 300-400 MB to the image. A smaller headless-only Chromium build will be evaluated.

@@ -18,7 +18,7 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 - **Who:** Manager (order guide, receiving), Admin (setup). Employees affect stock indirectly by finishing tasks.
 - **Lands in:** new `12-stock-ordering.md`. The schema is planned in 01 from the start.
 - **Touches data:** yes. New tables.
-- **Priority:** TBD
+- **Priority:** **Launch (D15)**
 
 **Design notes**
 - Stock is kept as a **ledger of movements** (received, used by batch, waste, count adjustment) rather than a single number that gets overwritten. The current level is the sum of the movements. This gives a history and makes mistakes easy to fix.
@@ -33,7 +33,7 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 - **Who:** Everyone (display preference). Admin sets the default.
 - **Lands in:** 01 (how quantities are stored) and 05 (the engine and the UI).
 - **Touches data:** yes. **This is foundational and must be decided in 01**, because it affects every quantity column.
-- **Priority:** Must-have for launch. F1 depends on it.
+- **Priority:** **Launch (D15).** F1 depends on it.
 
 **Design notes**
 - Every quantity is stored in a canonical base unit for its dimension: **grams** (weight), **milliliters** (volume), or **each** (count). The unit originally entered is kept too, so it can be shown the way the user typed it.
@@ -48,7 +48,7 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 - **Who:** Admin and Managers, remotely.
 - **Lands in:** new `13-remote-access.md`. It also constrains 02 (auth) and 04 (the frontend data layer) **now**.
 - **Touches data:** a little (node identity/keys, which devices are allowed).
-- **Priority:** after launch, but the design accommodates it now.
+- **Priority:** Later (D18). The design accommodates it now.
 
 **Design notes and impact on earlier decisions**
 - If the app runs from a GitHub Pages origin, it is **no longer the same origin as the Pi**. Requests travel over an iroh connection instead of normal HTTP from the browser. This affects two choices made in 00:
@@ -61,9 +61,9 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 
 - **What:** Back up the whole database to any S3-compatible storage on a custom schedule, and restore from a chosen backup. The design will follow the approach of the user's other app that already does this.
 - **Who:** Admin.
-- **Lands in:** 09 (admin UI) and 11 (scheduler, runtime).
-- **Touches data:** yes. Backup settings, a schedule, and a backup history log.
-- **Priority:** TBD
+- **Lands in:** 09 (as a job type on the Schedules page) and 11 (runtime).
+- **Touches data:** yes. Backup settings and a backup history log. The timing and run history come from the generic Schedules system (D17).
+- **Priority:** Later (D18).
 
 **Design notes**
 - The scheduler (APScheduler) runs inside the app process. That is safe because 00 commits to a single process.
@@ -77,14 +77,14 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 
 - **What:** Neither vendor offers an API. A headless browser (Playwright) logs into the vendor's ordering site and pulls item prices. Admins **build the steps inside the app** (go to page, fill in login, click, wait, read price) so it works with any vendor's web ordering platform.
 - **Who:** Admin (builds the steps). Managers see the updated prices.
-- **Lands in:** new `14-vendor-price-sync.md`.
-- **Touches data:** yes. Sync definitions (steps), vendor credentials, run history, and price history linked to vendor items (shared with F1).
-- **Priority:** TBD
+- **Lands in:** new `14-vendor-price-sync.md`. Scheduled through the Schedules page (D17).
+- **Touches data:** yes. Sync definitions (steps), vendor credentials, and price history linked to vendor items (shared with F1). Run history comes from the Schedules system.
+- **Priority:** Right after F1 (D16). **Bundled in the app**, 64-bit images only (D10).
 
 **Design notes and risks (important)**
 - **Hardware limits:** headless Chromium needs about 200-400 MB of RAM while running, which is a large share of the Pi 3's 1 GB. It also adds roughly 400 MB or more to the image.
 - **Architecture limits:** Playwright ships browsers only for 64-bit Linux (`amd64`, `arm64`). It **cannot run on `386` or `arm/v7`**.
-- **Proposal:** run price sync as a **separate, optional companion container** (`roux-pricesync`) that is only built for `amd64`/`arm64`. The main app stays light and works on every architecture. The companion runs on a schedule (off-hours), does its work, and exits. If it isn't installed, the feature is simply hidden. This is the one exception to D7 (single container).
+- **Decision:** bundled in the main image (D7, D16). Each run starts Chromium in a child process, does its work, and exits, so nothing stays in memory between runs. Only one run at a time. 32-bit images were dropped so the feature works everywhere (D10).
 - The step builder is a small, safe action list (goto, fill, click, wait-for, extract-text, select a row by text, next page) with **no arbitrary code**. Extracted prices are matched to vendor items by SKU or name, and a manager reviews them before they are applied.
 - Vendor logins are encrypted at rest. Sites with MFA or captchas may not be possible to automate; that will be documented as a known limitation.
 - Check each vendor's terms of use. Some prohibit automated access.
@@ -94,11 +94,9 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 ## Cross-cutting needs these features create
 
 - **Encrypted secrets storage** (F4 S3 keys, F5 vendor logins). One app-wide encryption key comes from the environment, and secrets are never sent back to the browser after they are saved. Belongs in 01/02.
-- **Background jobs** (F1 order guide refresh, F4 backups, F5 sync triggers). One in-process scheduler with a job history table. Belongs in 11.
+- **Background jobs** (F4 backups, F5 price pulls, email reports, future jobs). One in-process scheduler behind a generic **Administration > Schedules** page, with job types, per-job settings, enable/disable, run now, and run history (D17). UI in 09, runtime in 11.
 - **Vendor items** (F1, F5). Designed once in 01.
 
 ## Open questions
 
-1. Priority for F1, F4, F5: launch, soon after, or someday?
-2. F1: should stock come off **automatically** when a task finishes, or should the manager **confirm** first?
-3. F5: OK with price sync running as an optional companion container that only works on 64-bit machines?
+1. F1: should stock come off **automatically** when a task finishes, or should the manager **confirm** first?
