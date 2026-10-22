@@ -1,6 +1,6 @@
 # 00 - Overview
 
-Status: REVISED - review round 3 incorporated, pending approval
+Status: APPROVED - review round 4 incorporated
 
 This is the root blueprint for the Roux rewrite. It records the decisions made so far, sums up the current system, and sets the conventions every later sub-blueprint follows. Feature details belong in sub-blueprints 05-09, not here.
 
@@ -30,6 +30,7 @@ This is the root blueprint for the Roux rewrite. It records the decisions made s
 | D18 | **F3, F4 later** | Iroh access and S3 backups come after launch. Their constraints are still respected now (section 6, D17). |
 | D19 | **Readable URLs, no sequential IDs exposed** | See section 5.1. |
 | D20 | **Full CRUD + dependency-aware changes everywhere** | See section 5.2. |
+| D21 | **Audit trail for finished records** | Managers and Admins can edit finished records. Each edit is logged (see section 5.2). |
 
 ---
 
@@ -148,7 +149,8 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 
 ### 5.2 CRUD and cross-domain dependencies
 
-- **Everything users enter can be created, viewed, edited, renamed, archived, restored, and deleted.** There are no write-only records. Finished records (finalized inventory days, completed task sessions, stock movements) can be edited by a Manager or Admin, and how those edits are recorded is open question 1 in section 10. Purely automatic logs (schedule/sync/backup runs) are read-only.
+- **Everything users enter can be created, viewed, edited, renamed, archived, restored, and deleted.** There are no write-only records. Finished records (finalized inventory days, completed task sessions, stock movements) can be edited by a **Manager or Admin**. Purely automatic logs (schedule/sync/backup runs) are read-only.
+- **Audit trail (D21).** Every edit, reopen, or delete of a finished record writes to one shared change-log table: record, field, value before, value after, who, and when. The record shows an "Edited by Jane, Oct 22 3:14 PM" badge, and opening it shows the full change history. Everyday records (recipes, ingredients, vendors...) only show "created" and "updated" times and who made them; their previous values are not kept.
 - **Live references.** Batches, dishes, inventory items, stock, and tasks link to the current recipe/ingredient rather than to a copy. Editing a recipe updates every batch, dish, and cost that uses it.
 - **Undoing side effects.** If an action created stock movements (finishing a task, finalizing a day) and it is later edited, deleted, or reopened, those movements are reversed or recalculated automatically.
 - **History is frozen by default.** Finalized or completed records store a snapshot of the values they used (cost, quantity, unit, name). Editing a recipe today does not rewrite last month's reports.
@@ -213,7 +215,7 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 
 | File | Concern | Status |
 |------|---------|--------|
-| 00-overview.md | Architecture, stack, layout | Draft |
+| 00-overview.md | Architecture, stack, layout | Approved |
 | 01-database-schema.md | Tables, relationships, indexes, money/time types | Pending |
 | 02-authentication.md | Setup wizard, login, sessions, roles | Pending |
 | 03-api-design.md | Conventions, endpoint map, errors | Pending |
@@ -234,10 +236,7 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 
 ## 10. Open questions for review
 
-1. **Editing finished records (audit trail).** Options:
-   - **A. Simple:** the edit replaces the old values, and the record shows an "Edited by Jane, Oct 22 3:14 PM" badge. The previous values are not kept.
-   - **B. Audit trail (recommended for finished records):** same as A, but the badge can be opened to show each change (field, before, after, who, when). Stored in one shared change-log table, so it costs little to build.
-   - Recommendation: use B for finalized inventory days, completed task sessions, and stock movements, because they feed labor cost, ordering, and reports, and disputes come up. Use A (just an "updated at" time) for everyday records like recipes and ingredients.
+_None outstanding. 00 is approved._
 
 ### Notes carried into 11-deployment
 - The current workflow has no QEMU setup step, and its final "Image digest" step refers to a build step ID that doesn't exist, so it prints nothing. Both will be fixed.
