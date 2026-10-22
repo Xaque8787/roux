@@ -1,6 +1,6 @@
 # 00 - Overview
 
-Status: DRAFT - awaiting review
+Status: REVISED - review round 1 incorporated
 
 This is the root blueprint for the Roux rewrite. It records the decisions made so far, sums up the current system, and sets the conventions every later sub-blueprint follows. Feature details belong in sub-blueprints 05-09, not here.
 
@@ -17,7 +17,11 @@ This is the root blueprint for the Roux rewrite. It records the decisions made s
 | D5 | **Alembic owns the schema** | One initial migration builds a clean schema. Later changes use Alembic batch mode where SQLite needs it. `create_all` and hand-rolled migration scripts are removed. |
 | D6 | **Blank-slate data** | No migration from production is required. An optional recipe/ingredient import can be done after launch (see section 7). |
 | D7 | **Self-hosted Docker, one container** | Same deployment model as today: app plus SQLite file in a named volume. Postgres stays possible later through `DATABASE_URL`, but it is not a goal. |
-| D8 | **Blueprint process** | One sub-blueprint per concern. Each one is reviewed and approved before the next is written. New features are added during or after each section's review. |
+| D8 | **Blueprint process** | One sub-blueprint per concern. Each one is reviewed and approved before the next is written. New domains/features are listed early in `99-feature-backlog.md` so the schema accounts for them, then designed in detail inside the relevant section. |
+| D9 | **Three role tiers** | **Admin**: full control and access. **Manager**: login; runs daily operations (start/finalize day, take inventory, assign tasks) and most of the app. **Employee**: no login; can be assigned tasks and can start/finish them; used for labor tracking. The old `user` role and the `is_admin`/`is_user` flags are removed. |
+| D10 | **Multi-arch images via buildx** | One multi-arch manifest on GHCR for `linux/amd64`, `linux/arm64` (Pi 3 B, 64-bit OS), and `linux/arm/v7` (32-bit ARM). `docker pull` picks the right image automatically. Linux only. |
+| D11 | **Iroh-ready networking** | Remote access will come later through iroh. The app must work unchanged behind any tunnel or proxy (see section 5). |
+| D12 | **TypeScript + Tailwind** | Neither choice affects iroh; picked for maintainability. |
 
 ---
 
@@ -126,6 +130,13 @@ The rule is that **routers stay thin, services hold the logic, and models hold o
 - Secrets have no defaults. The app refuses to start without `SECRET_KEY`.
 - Logs are at INFO for lifecycle events and DEBUG for per-event detail, written to stdout only.
 
+### Tunnel/proxy readiness (for iroh)
+- The frontend uses only **relative URLs** (`/api/...`, `/events/...`). No hostnames or ports are baked into the build.
+- One origin serves both the SPA and the API, so there is no CORS and no cross-site cookie problem.
+- The cookie `Secure` flag is configurable, because a tunnel may present plain `http://localhost` to the browser.
+- SSE sends heartbeats and disables proxy buffering (`X-Accel-Buffering: no`), and the client reconnects automatically. This lets streams survive tunnel hiccups.
+- No feature depends on the client's IP address or on LAN-only discovery.
+
 ---
 
 ## 6. Memory budget (Pi 3 B, 1 GB)
@@ -166,13 +177,12 @@ The built frontend is static files and uses no server memory beyond serving them
 | 09-admin-utilities.md | Admin, backup/restore, vendors, categories, utilities, docs, email | Pending |
 | 10-realtime-sse.md | Broadcaster, rooms, events, client reconnect | Pending |
 | 11-deployment.md | Dockerfile, compose, entrypoint, WAL, multi-arch CI | Pending |
+| 99-feature-backlog.md | New domains/features not in the current code | Collecting |
 
 ---
 
 ## 9. Open questions for review
 
-1. **TypeScript and Tailwind:** OK, or do you prefer plain JS and/or keeping Bootstrap?
-2. **Employees vs. users:** today every employee is a login account. Should employees be able to exist without a login (for example, line cooks who are only assigned tasks)? This affects 01 and 02.
-3. **Pi model:** is it a Pi 3 B or a 3 B+, and is the OS 32-bit or 64-bit? This decides the image architectures.
-4. **Image registry:** keep publishing to GHCR at `xaque8787/roux`?
-5. **Anything in section 2 that is intentional** rather than a problem?
+1. **How does a no-login Employee start or finish a task?** Proposal: a Manager signs in on a shared kitchen device; employees tap their name on the task (optionally confirmed with a short PIN). To be settled in 02/08.
+2. **32-bit x86 (`linux/386`)?** Not included by default. Add it only if you have hardware that needs it.
+3. **Image registry:** keep publishing to GHCR at `xaque8787/roux`?
