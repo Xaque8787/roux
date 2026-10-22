@@ -1,6 +1,6 @@
 # 00 - Overview
 
-Status: REVISED - review round 1 incorporated
+Status: REVISED - review round 2 incorporated, pending approval
 
 This is the root blueprint for the Roux rewrite. It records the decisions made so far, sums up the current system, and sets the conventions every later sub-blueprint follows. Feature details belong in sub-blueprints 05-09, not here.
 
@@ -19,9 +19,11 @@ This is the root blueprint for the Roux rewrite. It records the decisions made s
 | D7 | **Self-hosted Docker, one container** | Same deployment model as today: app plus SQLite file in a named volume. Postgres stays possible later through `DATABASE_URL`, but it is not a goal. |
 | D8 | **Blueprint process** | One sub-blueprint per concern. Each one is reviewed and approved before the next is written. New domains/features are listed early in `99-feature-backlog.md` so the schema accounts for them, then designed in detail inside the relevant section. |
 | D9 | **Three role tiers** | **Admin**: full control and access. **Manager**: login; runs daily operations (start/finalize day, take inventory, assign tasks) and most of the app. **Employee**: no login; can be assigned tasks and can start/finish them; used for labor tracking. The old `user` role and the `is_admin`/`is_user` flags are removed. |
-| D10 | **Multi-arch images via buildx** | One multi-arch manifest on GHCR for `linux/amd64`, `linux/arm64` (Pi 3 B, 64-bit OS), and `linux/arm/v7` (32-bit ARM). `docker pull` picks the right image automatically. Linux only. |
+| D10 | **Multi-arch images via buildx** | One multi-arch manifest on GHCR covering `linux/amd64` (64-bit PC), `linux/386` (32-bit PC), `linux/arm64` (64-bit ARM, including the Pi 3 B), and `linux/arm/v7` (32-bit ARM). `docker pull` picks the right image automatically. Linux only. |
 | D11 | **Iroh-ready networking** | Remote access will come later through iroh. The app must work unchanged behind any tunnel or proxy (see section 5). |
 | D12 | **TypeScript + Tailwind** | Neither choice affects iroh; picked for maintainability. |
+| D13 | **Shared-device task flow** | A Manager or Admin signs in on a kitchen device. Employees (no login) tap tasks assigned to them to start and stop them. Hardening is deferred: a likely approach is a PIN-locked "task station" view that asks for a Manager/Admin PIN before you can leave the page. The data model leaves room for a per-user PIN hash so this can be added after the rewrite. |
+| D14 | **Keep the CI/versioning system** | GHCR at `ghcr.io/xaque8787/roux`. `.dockerversion` holds the version. A push to `main` builds the image and tags it `latest` plus that version. Manual dispatch stays available. Details in 11. |
 
 ---
 
@@ -183,6 +185,10 @@ The built frontend is static files and uses no server memory beyond serving them
 
 ## 9. Open questions for review
 
-1. **How does a no-login Employee start or finish a task?** Proposal: a Manager signs in on a shared kitchen device; employees tap their name on the task (optionally confirmed with a short PIN). To be settled in 02/08.
-2. **32-bit x86 (`linux/386`)?** Not included by default. Add it only if you have hardware that needs it.
-3. **Image registry:** keep publishing to GHCR at `xaque8787/roux`?
+_None outstanding for 00. Ready for approval._
+
+### Notes carried into 11-deployment
+- The current workflow has no QEMU setup step, and its final "Image digest" step refers to a build step ID that doesn't exist, so it prints nothing. Both will be fixed.
+- The workflow's `paths:` filter will be updated for the new `backend/` and `frontend/` folders.
+- The frontend build stage will run on the build machine's native architecture (its output is plain static files). Node does not publish 32-bit x86 images, so building it per-architecture would fail for `linux/386`.
+- Some Python packages (for example `pydantic-core` and `bcrypt`) may not ship ready-made builds for `386` or `arm/v7`. The builder stage may need a compiler toolchain for those architectures, which makes CI builds slower. It does not affect the runtime image.
