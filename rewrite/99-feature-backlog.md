@@ -24,6 +24,11 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 - Stock is kept as a **ledger of movements** (received, used by batch, waste, count adjustment) rather than a single number that gets overwritten. The current level is the sum of the movements. This gives a history and makes mistakes easy to fix.
 - Inventory counts become "count adjustment" movements, which ties the current Inventory domain into stock.
 - Taking stock out on task completion works like this: task, then batch, then recipe ingredients times the scale factor, then a stock movement for each ingredient. This **depends on F2**, because every quantity has to convert into the ingredient's stock unit.
+- **Automatic removal rules (decided):**
+  - **Global setting** "Remove stock automatically when tasks are finished". **On** by default. When it is off, finishing a task creates no stock movements, and the manager keeps stock accurate with manual counts before ordering.
+  - **Per-task override:** each task can be set to *Use global setting* (default), *Always remove*, or *Never remove*.
+  - **Only tasks linked to a batch or recipe can affect stock.** Janitorial and general tasks have nothing to remove, and the stock options are hidden for them.
+  - If a finished task is edited (for example, a different scale) or deleted, its stock movements are adjusted or reversed to match.
 - This needs a **vendor item** concept: what a vendor sells (SKU, pack size, case price), linked to an ingredient. F5 needs the same thing, so it is designed once in 01.
 - Possible later addition: orders/purchase orders (placed, then received), so that receiving an order adds stock automatically.
 
@@ -99,4 +104,4 @@ Features and domains that are NOT in the current code. Each one gets a short ent
 
 ## Open questions
 
-1. F1: should stock come off **automatically** when a task finishes, or should the manager **confirm** first?
+_None for now._

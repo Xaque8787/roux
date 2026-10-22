@@ -136,7 +136,8 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 
 - **URLs and API paths use meaningful identifiers and never sequential database IDs.**
   - Named things are addressed by slug: `/ingredients/carrots`, `/recipes/blue-cheese-dressing`, `/api/vendors/sysco`.
-  - Date-based things are addressed by date: `/inventory/days/2026-10-22`, with **one inventory day per calendar date** enforced by a unique constraint.
+  - Date-based things are addressed by date: `/inventory/days/2026-10-22`, with **one inventory day per calendar date** at launch.
+  - **Future expansion: departments.** Later on, each department (Prep, Line, Bar...) may get its own inventory day for the same date. The uniqueness rule will then become "one day per date per department", and URLs will become `/inventory/prep/days/2026-10-22`. Departments are not built at launch, but the inventory day design must not block them.
   - Child rows are addressed under their parent by the child's natural key: `/api/recipes/blue-cheese-dressing/ingredients/blue-cheese`.
   - Things that have no name or date (task sessions, stock movements, sync runs) use a **short random ID** (for example `k3f9x2qa`). It is never sequential or guessable.
 - Integer primary keys still exist for foreign keys and joins, but they **never leave the server**. API responses identify records by slug, date, or random ID.
@@ -147,9 +148,11 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 
 ### 5.2 CRUD and cross-domain dependencies
 
-- **Everything users enter can be created, viewed, edited, renamed, archived, restored, and deleted.** There are no write-only records. Read-only exceptions are system-generated history (finalized inventory days, completed task sessions, stock movements, sync/backup runs). These can only be corrected through an explicit adjustment, which is itself recorded.
+- **Everything users enter can be created, viewed, edited, renamed, archived, restored, and deleted.** There are no write-only records. Finished records (finalized inventory days, completed task sessions, stock movements) can be edited by a Manager or Admin, and how those edits are recorded is open question 1 in section 10. Purely automatic logs (schedule/sync/backup runs) are read-only.
 - **Live references.** Batches, dishes, inventory items, stock, and tasks link to the current recipe/ingredient rather than to a copy. Editing a recipe updates every batch, dish, and cost that uses it.
-- **History is frozen.** Finalized or completed records store a snapshot of the values they used (cost, quantity, unit, name). Editing a recipe today does not rewrite last month's reports.
+- **Undoing side effects.** If an action created stock movements (finishing a task, finalizing a day) and it is later edited, deleted, or reopened, those movements are reversed or recalculated automatically.
+- **History is frozen by default.** Finalized or completed records store a snapshot of the values they used (cost, quantity, unit, name). Editing a recipe today does not rewrite last month's reports.
+- **Finalized inventory days can be reopened** by a Manager or Admin. This is new; today a closed day is permanent. Reopening undoes the stock adjustments the day created. Finalizing again re-applies them from the corrected counts. The original price snapshots are kept unless the user chooses to refresh them. Details in 07.
 - **Dependency check before a destructive change.** Before an archive or delete, the server returns an **impact list** of everything affected, grouped by domain. For example: deleting "Blue Cheese Dressing" affects 1 batch (Blue Cheese Batch), 1 inventory item, 2 dishes, and 3 prep tasks.
 - **The user chooses what happens:**
   1. **Archive (recommended, the default)**: hidden from pickers and lists, existing links keep working with an "archived" badge, and it can be restored at any time.
@@ -231,8 +234,10 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 
 ## 10. Open questions for review
 
-1. **Edits to frozen history:** confirm that finalized inventory days and completed task sessions can only be corrected by an adjustment that is recorded, never edited directly. Or should Admins be able to edit them directly?
-2. **Inventory days:** confirm it is exactly one per calendar date (no second count on the same date).
+1. **Editing finished records (audit trail).** Options:
+   - **A. Simple:** the edit replaces the old values, and the record shows an "Edited by Jane, Oct 22 3:14 PM" badge. The previous values are not kept.
+   - **B. Audit trail (recommended for finished records):** same as A, but the badge can be opened to show each change (field, before, after, who, when). Stored in one shared change-log table, so it costs little to build.
+   - Recommendation: use B for finalized inventory days, completed task sessions, and stock movements, because they feed labor cost, ordering, and reports, and disputes come up. Use A (just an "updated at" time) for everyday records like recipes and ingredients.
 
 ### Notes carried into 11-deployment
 - The current workflow has no QEMU setup step, and its final "Image digest" step refers to a build step ID that doesn't exist, so it prints nothing. Both will be fixed.
