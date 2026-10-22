@@ -138,6 +138,7 @@ The rule is that **routers stay thin, services hold the logic, and models hold o
 - The cookie `Secure` flag is configurable, because a tunnel may present plain `http://localhost` to the browser.
 - SSE sends heartbeats and disables proxy buffering (`X-Accel-Buffering: no`), and the client reconnects automatically. This lets streams survive tunnel hiccups.
 - No feature depends on the client's IP address or on LAN-only discovery.
+- The browser-based iroh client (backlog F3) may run from a different origin (GitHub Pages). To support it: all frontend network calls go through one API client with a swappable transport, SSE is read with a fetch-stream reader rather than `EventSource`, and auth accepts either a cookie or a bearer token. Details in 02/04/13.
 
 ---
 
@@ -179,6 +180,9 @@ The built frontend is static files and uses no server memory beyond serving them
 | 09-admin-utilities.md | Admin, backup/restore, vendors, categories, utilities, docs, email | Pending |
 | 10-realtime-sse.md | Broadcaster, rooms, events, client reconnect | Pending |
 | 11-deployment.md | Dockerfile, compose, entrypoint, WAL, multi-arch CI | Pending |
+| 12-stock-ordering.md | Stock ledger, pars, order guide (F1) | Pending |
+| 13-remote-access.md | Iroh connectivity, WASM client (F3) | Pending |
+| 14-vendor-price-sync.md | Headless price pulls, step builder (F5) | Pending |
 | 99-feature-backlog.md | New domains/features not in the current code | Collecting |
 
 ---
