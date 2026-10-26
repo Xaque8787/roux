@@ -62,7 +62,11 @@ Most tables include one or more of these groups instead of repeating them:
 | `display_name`, `plural_name` | TEXT | |
 
 - The old **baking measurements** (3/4 cup, 1/3 cup and so on) stop being separate units. A user enters `3/4` with `cup`, and the amount is stored exactly. The display engine (05) turns stored amounts back into kitchen fractions.
-- The old **weight-per-cup** conversion becomes an ingredient's **density** (section 3.3), which allows conversion between any weight and volume unit, not only cups.
+- The old **Baking Measurements Conversion** stays as the user sees it today: **one reference measurement per ingredient**, for example "1 tbsp of dried basil weighs 2.1 g" or "1 cup of honey weighs 12 oz". It can be entered in either direction, using any volume unit and any weight unit. From that single measurement the app works out every other size (tsp, cup, qt, fl oz to g, oz, lb, kg). It does three jobs:
+  1. **Costing:** an item sold by weight (a 1.5 lb tub) but used by volume (tbsp) gets a real cost per tbsp.
+  2. **Metric view:** volume recipes can be shown fully in weights.
+  3. **Stock:** usage in cups comes off a stock level kept in pounds.
+- Internally the measurement is turned into a density (section 3.3), but the user only ever sees and edits the measurement they typed.
 
 ### 2.2 How a quantity is stored
 
@@ -76,9 +80,11 @@ The US/Metric toggle only changes how the canonical amount is **displayed**. The
 ### 2.3 Conversion rules (enforced by the service layer)
 
 - Same dimension: always convertible.
-- Weight to volume or back: only if the ingredient (or batch) has a density.
+- Weight to volume or back: only if the ingredient (or batch) has a reference measurement.
+- **Ounces are never ambiguous.** `oz` (weight) and `fl_oz` (volume) are separate units, and every unit picker labels them "oz (weight)" and "fl oz (volume)". Old data that says just "oz" is listed for review during the data move (13), not guessed.
+- **No automatic water assumption.** The conversion popup offers a "Fill in as water (1 cup = 8.35 oz weight)" shortcut for thin liquids. It saves an ordinary measurement the user can see and change, so nothing is assumed silently.
 - Count to weight/volume: only through a custom unit such as "1 each = 50 g".
-- **No silent fallbacks.** Today an impossible conversion quietly counts as 1:1, which gives wrong costs. In the rewrite the line is marked "can't be costed: add a density for Flour", and totals show a warning.
+- **No silent fallbacks.** Today an impossible conversion quietly counts as 1:1, which gives wrong costs. In the rewrite the line is marked "Can't price: no conversion for Dried Basil" with two actions: **Add conversion** (opens a popup to enter the measurement, which applies to every recipe that uses the ingredient) or **Leave out of cost** (sets the line's `exclude_from_cost`). Totals show a warning while any line is unpriced or excluded.
 
 ---
 
@@ -112,11 +118,15 @@ The pack labels a vendor sells in: Case, Bag, Sack, Box, Tub... Replaces the fre
 |--------|------|-------|
 | `category_id` | -> categories | Detach on delete |
 | `dimension` | enum mass/volume/count | How it is measured and costed. Replaces `usage_type` and `use_item_count_pricing` |
-| `density_g_per_ml` | REAL, null | Enables weight/volume conversion. Replaces the baking conversion fields |
+| `conv_volume_amount`, `conv_volume_unit` | TEXT, TEXT, null | The reference measurement as typed: "1" + `tbsp` |
+| `conv_weight_amount`, `conv_weight_unit` | TEXT, TEXT, null | "2.1" + `g`. All four are set together or all empty (CHECK) |
+| `density_g_per_ml` | REAL, null | Calculated from the four fields above on save. Never edited directly. Replaces the old baking conversion fields |
 | `preferred_vendor_item_id` | -> vendor_items, null | The pack price used for costing. Detach on delete |
 | `stock_tracked` | bool | F1: include in stock and the order guide |
-| `stock_par_qty` | qty, null | F1: target level on hand |
-| `stock_reorder_qty` | qty, null | F1: optional "order when below this" point. Defaults to par |
+| `stock_par_qty` | qty, null | F1: how much should ideally be on hand |
+| `stock_near_par_percent` | INTEGER, null | F1: how close to par counts as "near par" for the order guide. Empty means use the global setting |
+| `order_override` | enum auto/force/skip | F1: like the daily inventory override. `force` puts an above-par item on the order guide, and `skip` keeps a below-par item off it |
+| `order_override_at`, `order_override_by_id` | ts, -> users, null | Who set the override. Cleared automatically when an order containing this ingredient is placed |
 | `notes` | TEXT | |
 
 **Cost per base unit** is calculated, never stored: the preferred vendor item's price divided by its pack amount.
@@ -150,7 +160,7 @@ What a vendor actually sells, linked to an ingredient. One ingredient can have s
 | `price_source` | enum manual/sync/import | |
 
 ### `price_history` [PUB]
-One row each time a vendor item's price changes, so trends can be shown.
+One row each time a vendor item's price changes, so trends can be shown. The price history view filters by **last month, quarter, year, or all time**. An Admin-only **Purge price history** action deletes rows older than a chosen date after a typed confirmation, and records the purge in `change_log`. This is the one deliberate exception to "history is never erased". It never touches a vendor item's current price.
 | Column | Type | Notes |
 |--------|------|-------|
 | `vendor_item_id` | -> vendor_items | Cascade |
@@ -181,6 +191,7 @@ The same ingredient may appear on more than one line (for example cooked into th
 | `ingredient_id` | -> ingredients | Block |
 | `qty`, `entered_amount`, `entered_unit` | see 2.2 | |
 | `prep_note` | TEXT | "diced", "for finishing". Shown so duplicate lines can be told apart |
+| `exclude_from_cost` | bool | Set by "Leave out of cost" (2.3). The line still shows on the recipe |
 | `position` | INTEGER | Line order |
 
 ### `recipe_sub_batches` [STD]
@@ -196,7 +207,7 @@ A recipe that uses part of another batch (old `recipe_batch_portions`).
 | | | `UNIQUE(recipe_id, batch_id)`. **No cycles**: checked on save |
 
 ### `batches` [STD] [ARCH]
-A batch is a recipe made at a set yield, with labor and scale options. Each recipe has **at most one batch**, and that batch covers every size through its scales (`batch_scales`). The batch takes its name and slug from the recipe and follows it on rename, so [NAMED] does not apply: `name`/`slug` are not stored on the batch. The slug alias for old batch URLs comes from the recipe's alias.
+A batch is a recipe made at a set yield, with labor and scale options. Each recipe has **at most one batch**, and that batch covers every size through the scale slider (below). The batch takes its name and slug from the recipe and follows it on rename, so [NAMED] does not apply: `name`/`slug` are not stored on the batch. The slug alias for old batch URLs comes from the recipe's alias.
 | Column | Type | Notes |
 |--------|------|-------|
 | `recipe_id` | -> recipes, **unique** | Block. If the current data has two batches on one recipe, the data migration (13) lists them for you to merge or keep as a scale |
@@ -208,16 +219,17 @@ A batch is a recipe made at a set yield, with labor and scale options. Each reci
 | `labor_minutes_estimate` | INTEGER | |
 | `labor_rate` | money, null | Per hour. Empty means use the global default (settings). The old hard-coded `16.75` default moves to settings |
 | `stock_deduct_mode` | enum inherit/always/never | Default for tasks that make this batch (F1) |
+| `scalable` | bool | Old `can_be_scaled`. Off means the batch is always made at 1x |
+| `scale_min_num`, `scale_min_den` | factor | Lowest size allowed. Default 1/16 |
+| `scale_max_num`, `scale_max_den` | factor | Highest size allowed. Default 8/1 |
+| | | CHECK: 1/16 <= min <= 1 <= max <= 8 |
 
-### `batch_scales`
-Replaces the nine `scale_*` on/off columns and `can_be_scaled`. Full (1/1) always exists implicitly.
-| Column | Type | Notes |
-|--------|------|-------|
-| `batch_id` | -> batches | Cascade |
-| `factor_num`, `factor_den` | factor | 2/1, 3/4, 2/3, 1/16... Custom factors are allowed |
-| `label` | TEXT, null | Optional override. Generated otherwise ("Double", "2/3") |
-| `slug` | TEXT | `double`, `two-thirds`. Unique per batch |
-| | | `UNIQUE(batch_id, factor_num, factor_den)` |
+**Scale slider** (replaces the nine `scale_*` on/off columns; there is no scales table):
+- Range 1/16x to 8x, limited per batch by min/max.
+- Snaps to: 1/16, 1/8, 1/4, 1/3, 1/2, 2/3, 3/4, 1, 1.5, 2, 3, 4, 5, 6, 7, 8.
+- Between snap points it moves in steps of 1/16 below 1x and 1/4 above 1x.
+- These lists live in code, not in the database. The chosen size is stored on the task as an exact fraction.
+- Scaled amounts are shown in kitchen terms (05): US volumes as fractions (1 1/2 cups, 3/4 tsp), with **1/4 tsp as the smallest step** (anything smaller shows as "less than 1/4 tsp" with the exact weight beside it). Decimal amounts (weights, metric) are rounded to one decimal place.
 
 ### `dishes` [STD] [NAMED] [ARCH]
 | Column | Type | Notes |
@@ -230,7 +242,7 @@ Replaces the nine `scale_*` on/off columns and `can_be_scaled`. Full (1/1) alway
 Old `dish_batch_portions`. Same columns and rules as `recipe_sub_batches`, with `dish_id` (cascade) instead of `recipe_id`. `UNIQUE(dish_id, batch_id)`.
 
 ### `dish_ingredients` [STD] [PUB]
-Old `dish_ingredient_portions`. `dish_id` (cascade), `ingredient_id` (block), `qty`/`entered_*`, `prep_note`, `position`. Like recipe lines, the same ingredient may appear twice.
+Old `dish_ingredient_portions`. `dish_id` (cascade), `ingredient_id` (block), `qty`/`entered_*`, `prep_note`, `exclude_from_cost`, `position`. Like recipe lines, the same ingredient may appear twice.
 
 > Costing fix: today a dish ignores the cost of a batch's own sub-batches, while a recipe includes it. In the rewrite one costing service is used everywhere (06).
 
@@ -340,7 +352,7 @@ URL: `/inventory/days/2026-10-22/tasks/k3f9x2qa7m`. Today task slugs are built f
 | `status` | enum not_started/in_progress/paused/completed | Stored so it can be filtered quickly. Kept consistent with sessions by the service |
 | `started_at`, `finished_at` | ts, null | First start and completion |
 | `notes` | TEXT | |
-| `scale_num`, `scale_den`, `scale_label` | factor, TEXT | Copied from the chosen `batch_scales` row so a later edit to the batch doesn't change the task |
+| `scale_num`, `scale_den` | factor | The size picked on the slider, stored exactly (for example 5/4 for 1.25x) |
 | `made_qty`, `made_entered_amount`, `made_entered_unit` | | For variable yields and manual restocks |
 | `gen_counted`, `gen_par_level`, `gen_override` | | Old `snapshot_*`: the inventory values the auto task was generated from, used to detect changes |
 | `stock_deduct_mode` | enum inherit/always/never | Per-task override (F1). Defaults from the batch |
@@ -418,7 +430,10 @@ The ledger. Every change to stock on hand is one row.
 | `packs_received` | qty, null | |
 | `price_snapshot` | money | Pack price when the order was placed |
 
-The **order guide** itself is not stored. It is calculated live from current stock, par, reorder points, and preferred vendor items. "Create order from guide" saves it as a draft `purchase_order` (12).
+The **order guide** itself is not stored. It works like the daily inventory par system and is calculated live:
+- An ingredient appears when its stock is **at or below par, or within the near-par margin** (per-ingredient percent, otherwise the global `order_near_par_percent`, default 10%).
+- `order_override = force` adds an item that is above par, and `skip` removes one that is below par.
+- The suggested amount is enough to get back to par, rounded up to whole packs of the preferred vendor item (or single items when the pack is breakable). It is grouped by vendor. "Create order from guide" saves it as a draft `purchase_order` (12).
 
 ---
 
@@ -431,7 +446,7 @@ The **order guide** itself is not stored. It is calculated live from current sto
 | `value` | json | |
 | `updated_at`, `updated_by_id` | | |
 
-Launch keys: `business_name`, `default_unit_system`, `default_labor_rate`, `stock_auto_deduct` (default true). Each key has a typed definition in code with a default. Unknown keys are rejected.
+Launch keys: `business_name`, `default_unit_system`, `default_labor_rate`, `stock_auto_deduct` (default true), `order_near_par_percent` (default 10). Each key has a typed definition in code with a default. Unknown keys are rejected.
 
 ### 7.2 `slug_aliases`
 | Column | Type | Notes |
@@ -484,7 +499,7 @@ Every relationship uses one of four rules. Section 00 5.2 describes what the use
 
 | Rule | Meaning | "Delete this only" | "Delete with dependents" |
 |------|---------|--------------------|--------------------------|
-| **Cascade** | Child rows are part of the parent (recipe lines, batch scales, sessions) | Deleted with the parent. Shown as a count, not listed | Same |
+| **Cascade** | Child rows are part of the parent (recipe lines, custom units, sessions) | Deleted with the parent. Shown as a count, not listed | Same |
 | **Block** | Something live depends on it (a batch uses a recipe) | Not allowed, and the blockers are listed | The dependents are deleted too, in one transaction, after a typed confirmation |
 | **Detach** | Optional label (category, preferred vendor item) | Link cleared | Link cleared |
 | **History detach** | Finished history (completed tasks, finalized counts, stock ledger, order lines, staff lists) | Link cleared, and the snapshot columns keep the name and values | Same. **History is never deleted by a cascade** |
@@ -506,7 +521,6 @@ Every relationship uses one of four rules. Section 00 5.2 describes what the use
 | recipe | batches | Block |
 | recipe | recipe_ingredients, recipe_sub_batches (as parent) | Cascade |
 | batch | recipe_sub_batches, dish_batches, inventory_items, open tasks | Block |
-| batch | batch_scales | Cascade |
 | batch | finished tasks | History detach |
 | dish | dish_batches, dish_ingredients | Cascade |
 | inventory_item | open tasks | Block |
@@ -538,11 +552,11 @@ The foreign keys use `ON DELETE CASCADE`, `RESTRICT`, or `SET NULL` to match, so
 | `vendors` | `vendors` | `contact_info` split into fields |
 | `vendor_units` | (retired) | Unused. Covered by vendor item per-unit pricing. `purchase_unit_name` becomes `purchase_units` |
 | `par_unit_names` | `count_units` | Renamed, slug, archive |
-| `ingredients` | `ingredients`, `ingredient_units`, `vendor_items`, `price_history` | Purchase/pack/price fields move to vendor items. Baking conversion becomes density. Item-count pricing becomes `dimension = count` |
+| `ingredients` | `ingredients`, `ingredient_units`, `vendor_items`, `price_history` | Purchase/pack/price fields move to vendor items. Baking conversion becomes one reference measurement per ingredient. Item-count pricing becomes `dimension = count` |
 | `recipes` | `recipes` | `deleted` becomes `archived_at` |
 | `recipe_ingredients` | `recipe_ingredients` | Canonical qty plus entered amount/unit, position, prep note. Duplicates allowed |
 | `recipe_batch_portions` | `recipe_sub_batches` | Mode enum, exact fraction, cycle check |
-| `batches` | `batches`, `batch_scales` | One per recipe, named by the recipe. Nine scale switches become rows. Labor rate default moves to settings. Stock deduct mode |
+| `batches` | `batches` | One per recipe, named by the recipe. Nine scale switches become a 1/16x-8x slider with per-batch limits. Labor rate default moves to settings. Stock deduct mode |
 | `dishes` | `dishes` | Price as money |
 | `dish_batch_portions` | `dish_batches` | Same as recipe sub-batches. Costing fixed |
 | `dish_ingredient_portions` | `dish_ingredients` | Canonical qty |
@@ -581,7 +595,16 @@ Things the current app keeps outside the database stay outside it: backups (file
 3. **Vendor units:** retired. Vendor items priced per pound or gallon cover that case.
 4. **Utilities:** monthly total stored, daily breakdown shown using the actual days in each month.
 5. **Stock from inventory:** confirmed. Ingredient-linked counts post stock counts, and completed batch tasks (direct or through an inventory item) use up the recipe's ingredients.
-6. **Batches:** one batch per recipe, named by the recipe. All sizes come from its scales.
+6. **Batches:** one batch per recipe, named by the recipe. All sizes come from its scale slider.
 7. **Chores:** confirmed as the new name for janitorial tasks.
+
+## 12. Review decisions (round 2)
+
+- **Conversions:** one reference measurement per ingredient, entered either direction, used for costing, the metric view, and stock. Weight oz and fluid oz are always separate. "Fill in as water" is an optional shortcut, never an assumption.
+- **Missing conversion:** the line offers "Add conversion" (popup) or "Leave out of cost".
+- **Scaling:** slider from 1/16x to 8x with snap points, fine steps between them, and per-batch limits. Kitchen-friendly display with 1/4 tsp as the smallest step.
+- **Price history:** filter by month, quarter, year, or all time. Admin purge with typed confirmation.
+- **Order guide:** par-based like daily inventory. Near or below par is listed, and you can force-add or skip items.
+- Accepted as suggested: tiny-fraction money, several vendor options per ingredient, employees without sign-in, inactive vs archived, history never erased, order guide calculated live.
 
 _No open questions remain for 01._
