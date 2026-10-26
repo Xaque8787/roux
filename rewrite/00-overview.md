@@ -51,7 +51,7 @@ This is the root blueprint for the Roux rewrite. It records the decisions made s
 - Utilities (monthly costs, prorated)
 - Administration (backup and restore), How-To docs viewer, email reports
 
-**Data model:** 23 tables, listed in 01.
+**Data model:** 22 tables, mapped one by one in 01 section 9.
 
 ### Problems found that the rewrite must fix
 
@@ -172,7 +172,7 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 - All JSON routes live under `/api/...`. Every other path returns the SPA's `index.html`.
 - Errors use one consistent JSON shape, and the frontend shows them in a standard way.
 - All timestamps are stored in UTC and converted to the configured `TZ` only for display and for "business day" logic.
-- Money is stored as integer cents, or Decimal. This is decided in 01. Floats are not used for money.
+- Money is stored as integer micro-dollars and quantities as integer thousandths of a base unit (decided in 01). Floats are not used for money or stock.
 - Secrets have no defaults. The app refuses to start without `SECRET_KEY`.
 - Logs are at INFO for lifecycle events and DEBUG for per-event detail, written to stdout only.
 
@@ -216,7 +216,7 @@ These rules apply to every domain. Each sub-blueprint must show how it satisfies
 | File | Concern | Status |
 |------|---------|--------|
 | 00-overview.md | Architecture, stack, layout | Approved |
-| 01-database-schema.md | Tables, relationships, indexes, money/time types | Pending |
+| 01-database-schema.md | Tables, relationships, indexes, money/time types | Draft |
 | 02-authentication.md | Setup wizard, login, sessions, roles | Pending |
 | 03-api-design.md | Conventions, endpoint map, errors | Pending |
 | 04-frontend-architecture.md | React structure, routing, data fetching | Pending |
