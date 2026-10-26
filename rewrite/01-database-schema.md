@@ -1,6 +1,6 @@
 # 01 - Database Schema
 
-Status: DRAFT - pending review
+Status: REVISED - review round 1 incorporated, pending approval
 
 This blueprint defines every table in the rewrite. It covers the whole current app (all 22 tables in `models.py`) plus the launch additions (F1 stock/ordering, F2 units), and reserves room for post-launch work (Schedules, F5, F4). Behavior and screens live in 05-09 and 12. This document covers only the data and the rules that protect it.
 
@@ -102,7 +102,7 @@ The US/Metric toggle only changes how the canonical amount is **displayed**. The
 | `order_days` | TEXT | Optional, for example "Mon, Thu" (shown on the order guide) |
 
 ### `purchase_units` [STD] [NAMED] [ARCH]
-The vendor's selling unit labels: Case, Bag, Sack, Box, Tub... Replaces both the old `vendor_units` table and the free-text `purchase_unit_name` (open question 3).
+The pack labels a vendor sells in: Case, Bag, Sack, Box, Tub... Replaces the free-text `purchase_unit_name`. The old `vendor_units` table (a vendor selling by the gallon or pound when the kitchen tracks something else) is retired. Its job is now done by a vendor item's `pricing_mode = per_unit` + `price_unit`, with conversion through the units engine.
 | Column | Type | Notes |
 |--------|------|-------|
 | `description` | TEXT | |
@@ -173,15 +173,15 @@ One row each time a vendor item's price changes, so trends can be shown.
 
 `deleted` (the old soft delete) becomes `archived_at`.
 
-### `recipe_ingredients` [STD]
+### `recipe_ingredients` [STD] [PUB]
+The same ingredient may appear on more than one line (for example cooked into the base, then added fresh to finish). Lines are addressed by `public_id`, not by the ingredient.
 | Column | Type | Notes |
 |--------|------|-------|
 | `recipe_id` | -> recipes | Cascade |
 | `ingredient_id` | -> ingredients | Block |
 | `qty`, `entered_amount`, `entered_unit` | see 2.2 | |
-| `prep_note` | TEXT | "diced", "divided" |
+| `prep_note` | TEXT | "diced", "for finishing". Shown so duplicate lines can be told apart |
 | `position` | INTEGER | Line order |
-| | | `UNIQUE(recipe_id, ingredient_id)` (open question 2) |
 
 ### `recipe_sub_batches` [STD]
 A recipe that uses part of another batch (old `recipe_batch_portions`).
@@ -195,11 +195,11 @@ A recipe that uses part of another batch (old `recipe_batch_portions`).
 | `position` | INTEGER | |
 | | | `UNIQUE(recipe_id, batch_id)`. **No cycles**: checked on save |
 
-### `batches` [STD] [NAMED] [ARCH]
-A batch is a recipe made at a set yield, with labor and scale options. Today batches have no name of their own. They get one in the rewrite, defaulting to the recipe's name, so one recipe can have more than one batch setup (open question 6).
+### `batches` [STD] [ARCH]
+A batch is a recipe made at a set yield, with labor and scale options. Each recipe has **at most one batch**, and that batch covers every size through its scales (`batch_scales`). The batch takes its name and slug from the recipe and follows it on rename, so [NAMED] does not apply: `name`/`slug` are not stored on the batch. The slug alias for old batch URLs comes from the recipe's alias.
 | Column | Type | Notes |
 |--------|------|-------|
-| `recipe_id` | -> recipes | Block |
+| `recipe_id` | -> recipes, **unique** | Block. If the current data has two batches on one recipe, the data migration (13) lists them for you to merge or keep as a scale |
 | `category_id` | -> categories | Detach |
 | `yield_mode` | enum fixed/variable | Replaces `variable_yield` |
 | `yield_dimension` | enum mass/volume/count | |
@@ -229,8 +229,8 @@ Replaces the nine `scale_*` on/off columns and `can_be_scaled`. Full (1/1) alway
 ### `dish_batches` [STD]
 Old `dish_batch_portions`. Same columns and rules as `recipe_sub_batches`, with `dish_id` (cascade) instead of `recipe_id`. `UNIQUE(dish_id, batch_id)`.
 
-### `dish_ingredients` [STD]
-Old `dish_ingredient_portions`. `dish_id` (cascade), `ingredient_id` (block), `qty`/`entered_*`, `position`. `UNIQUE(dish_id, ingredient_id)`.
+### `dish_ingredients` [STD] [PUB]
+Old `dish_ingredient_portions`. `dish_id` (cascade), `ingredient_id` (block), `qty`/`entered_*`, `prep_note`, `position`. Like recipe lines, the same ingredient may appear twice.
 
 > Costing fix: today a dish ignores the cost of a batch's own sub-batches, while a recipe includes it. In the rewrite one costing service is used everywhere (06).
 
@@ -309,7 +309,7 @@ Old `inventory_day_items`.
 | | | `UNIQUE(day_id, inventory_item_id)` |
 
 ### `chores` [STD] [NAMED] [ARCH]
-Old `janitorial_tasks`. "Chore" is the working name (open question 7).
+Old `janitorial_tasks`, renamed **Chores** everywhere in the app.
 | Column | Type | Notes |
 |--------|------|-------|
 | `instructions` | TEXT | |
@@ -358,7 +358,7 @@ Replaces `assigned_to_id` + the comma-separated `assigned_employee_ids`.
 | `wage_snapshot` | money | Hourly wage frozen when the task completes |
 | | | `UNIQUE(task_id, user_id)` |
 
-> Labor cost today is meant to use the highest wage among the assignees, but it only reads the first assignee. Open question 1 decides the rule.
+**Labor cost rule:** task minutes x the **highest** `wage_snapshot` among the assignees. Today the app intends this but only reads the first assignee. The rewrite applies it properly.
 
 ### `task_sessions` [PUB]
 Pausing ends a session and resuming starts a new one. This removes the duplicate pause bookkeeping (`is_paused`, `paused_at`, `total_pause_time` on tasks and `pause_duration` on sessions).
@@ -391,6 +391,11 @@ The ledger. Every change to stock on hand is one row.
 | `created_at`, `created_by_id`, `edited_at`, `edited_by_id` | | |
 
 **How the current level is calculated:** start from the most recent `count` for that ingredient, then add every other movement that happened after it. Fixing an old count, or editing a task from last week, then gives the right answer without rewriting later rows.
+
+**What moves stock automatically** (when `stock_auto_deduct` is on and the task's mode allows it):
+- **Completing a prep task** that makes a batch (directly, or through an inventory item linked to a batch) posts one `usage` movement per ingredient in that batch's recipe, scaled by the task's scale or made amount. Sub-batches are followed down to their raw ingredients.
+- **Finalizing an inventory day** posts a `count` movement for every counted inventory item linked to an ingredient.
+- **Receiving an order line** posts a `receive` movement.
 
 **Owned movements:** movements created by a task, a count, or a receipt belong to that record. When the record is edited, reopened, or deleted, its movements are recalculated or removed in the same transaction. Hand-entered movements (waste, adjust, manual receive) stand on their own.
 
@@ -426,7 +431,7 @@ The **order guide** itself is not stored. It is calculated live from current sto
 | `value` | json | |
 | `updated_at`, `updated_by_id` | | |
 
-Launch keys: `business_name`, `default_unit_system`, `default_labor_rate`, `stock_auto_deduct` (default true), `utility_proration` (open question 4). Each key has a typed definition in code with a default. Unknown keys are rejected.
+Launch keys: `business_name`, `default_unit_system`, `default_labor_rate`, `stock_auto_deduct` (default true). Each key has a typed definition in code with a default. Unknown keys are rejected.
 
 ### 7.2 `slug_aliases`
 | Column | Type | Notes |
@@ -458,7 +463,7 @@ Written for finished records: finalized inventory days and their counts, complet
 |--------|------|-------|
 | `monthly_cost` | money | |
 
-Today the daily cost is `monthly / 30`. Open question 4.
+Only the monthly total is stored. The Utilities page shows both the monthly total and a **daily breakdown**, calculated as the monthly cost divided by the actual number of days in that month (so February days cost more than July days). Today's flat `/ 30` is replaced. Reports that cover a date range add up the daily amounts for those exact days.
 
 ### Post-launch tables (designed now, created by later migrations)
 
@@ -531,24 +536,24 @@ The foreign keys use `ON DELETE CASCADE`, `RESTRICT`, or `SET NULL` to match, so
 | `users` | `users`, `user_work_days` | `role` + `is_admin` + `is_user` become one `role`. Schedule becomes rows. Username/password optional for employees. Wage as money |
 | `categories` | `categories` | Unique per kind, slug, position, archive |
 | `vendors` | `vendors` | `contact_info` split into fields |
-| `vendor_units` | `purchase_units` | Merged with `purchase_unit_name` (open question 3) |
+| `vendor_units` | (retired) | Unused. Covered by vendor item per-unit pricing. `purchase_unit_name` becomes `purchase_units` |
 | `par_unit_names` | `count_units` | Renamed, slug, archive |
 | `ingredients` | `ingredients`, `ingredient_units`, `vendor_items`, `price_history` | Purchase/pack/price fields move to vendor items. Baking conversion becomes density. Item-count pricing becomes `dimension = count` |
 | `recipes` | `recipes` | `deleted` becomes `archived_at` |
-| `recipe_ingredients` | `recipe_ingredients` | Canonical qty plus entered amount/unit, position, prep note, unique per recipe |
+| `recipe_ingredients` | `recipe_ingredients` | Canonical qty plus entered amount/unit, position, prep note. Duplicates allowed |
 | `recipe_batch_portions` | `recipe_sub_batches` | Mode enum, exact fraction, cycle check |
-| `batches` | `batches`, `batch_scales` | Own name. Nine scale switches become rows. Labor rate default moves to settings. Stock deduct mode |
+| `batches` | `batches`, `batch_scales` | One per recipe, named by the recipe. Nine scale switches become rows. Labor rate default moves to settings. Stock deduct mode |
 | `dishes` | `dishes` | Price as money |
 | `dish_batch_portions` | `dish_batches` | Same as recipe sub-batches. Costing fixed |
 | `dish_ingredient_portions` | `dish_ingredients` | Canonical qty |
 | `inventory_items` | `inventory_items` | Optional ingredient link (F1). Clearer count-unit modes |
 | `inventory_days` | `inventory_days`, `inventory_day_staff` | Status, reopen tracking, staff as rows |
 | `inventory_day_items` | `inventory_counts` | One override enum. Finalize snapshots. Unique per day |
-| `janitorial_tasks` | `chores` | Renamed, slug, archive |
+| `janitorial_tasks` | `chores` | Renamed Chores, slug, archive |
 | `janitorial_task_days` | `inventory_day_chores` | Unique per day |
 | `tasks` | `tasks`, `task_assignees` | Random public ID. Kind and status enums. Assignees as rows with wage snapshots. Frozen labor. Stock deduct override |
 | `task_sessions` | `task_sessions` | Pause = end of session. Pause columns removed |
-| `utility_costs` | `utility_costs` | Money, slug, archive |
+| `utility_costs` | `utility_costs` | Money, slug, archive. Daily breakdown by actual days in the month |
 | `migrations_applied` | (removed) | Alembic |
 | (new) | `units`, `purchase_orders`, `order_lines`, `stock_movements`, `settings`, `slug_aliases`, `change_log` | Launch |
 | (new) | `scheduled_jobs`, `job_runs`, `secrets`, `price_sync_definitions` | Post-launch |
@@ -569,12 +574,14 @@ Things the current app keeps outside the database stay outside it: backups (file
 
 ---
 
-## 11. Open questions for review
+## 11. Review decisions (round 1)
 
-1. **Labor cost with several people on one task.** Today it is meant to use the highest wage among the assignees (but actually reads only the first). Options: (a) the **sum** of everyone's wages times the task time, which treats everyone as working the whole time (recommended: it reflects real cost), or (b) the highest wage times the time.
-2. **Same ingredient twice in a recipe** (for example butter for the roux and butter to finish). Proposal: one line per ingredient, with the split described in the prep note. This keeps recipe-line addresses clean. Or should duplicates be allowed?
-3. **Vendor units.** What did "Vendor Units" mean in your setup? The proposal merges them with the purchase unit name (Case, Bag, Sack) into one list.
-4. **Utilities.** Spread monthly costs as monthly / 30 (today), or by the actual number of days in each month?
-5. **Raw ingredients on inventory day.** OK for inventory items to link to an ingredient so the daily count also updates stock?
-6. **Batch names.** OK for batches to get their own name (defaulting to the recipe's name), so one recipe can have several batch setups (for example "Ranch - 1 gal" and "Ranch - 5 gal")?
-7. **"Chores" as the new name** for janitorial tasks, since that list can include any recurring non-prep task. Keep "Janitorial" if you prefer.
+1. **Labor with several assignees:** task minutes x the highest assigned wage (section 5, `task_assignees`).
+2. **Duplicate ingredients:** allowed on recipe and dish lines. Lines are addressed by their own code, and the prep note tells them apart.
+3. **Vendor units:** retired. Vendor items priced per pound or gallon cover that case.
+4. **Utilities:** monthly total stored, daily breakdown shown using the actual days in each month.
+5. **Stock from inventory:** confirmed. Ingredient-linked counts post stock counts, and completed batch tasks (direct or through an inventory item) use up the recipe's ingredients.
+6. **Batches:** one batch per recipe, named by the recipe. All sizes come from its scales.
+7. **Chores:** confirmed as the new name for janitorial tasks.
+
+_No open questions remain for 01._
